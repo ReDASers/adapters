@@ -473,6 +473,9 @@ class LoRAConfig(AdapterConfig):
     composition_mode: str = "add"
     init_weights: str = "lora"
     use_gating: bool = False
+    is_dora: bool = False
+    #scaling: Union[float, str] = "learnable"
+    non_linearity: Union[str, None] = "relu"
 
 
 @dataclass(eq=False)
