@@ -79,9 +79,9 @@ class LoRA(nn.Module):
 
         if self.is_dora:
             if self.lora_A.shape[1] == self.lora_B.shape[0]:
-                self.scaling = nn.Parameter(torch.tensor(float(self.lora_alpha / math.sqrt(self.r)), dtype=torch.float16, requires_grad=True    ))
+                self.scaling = nn.Parameter(torch.tensor(float(self.lora_alpha / math.sqrt(self.r)), dtype=torch.float32, requires_grad=True    ))
             else:
-                self.scaling = nn.Parameter(torch.tensor(float(self.lora_alpha), dtype=torch.float16, requires_grad=True))
+                self.scaling = nn.Parameter(torch.tensor(float(1.0), dtype=torch.float32, requires_grad=True))
         else:
             self.scaling = self.lora_alpha / self.r
 
