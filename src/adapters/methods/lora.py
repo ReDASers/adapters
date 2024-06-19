@@ -125,16 +125,26 @@ class LoRA(nn.Module):
         '''
     @property
     def delta_w(self) -> torch.Tensor:
-        return self.lora_B @ self.lora_A
+        if self.is_dora:
+            if self.lora_A.shape[1] == self.lora_B.shape[0]:
+                return (self.lora_B @ self.lora_A) / (self.lora_B @ self.lora_A).norm(p=2, dim=1, keepdim=True)
+            else:
+                return self.lora_C
+        else:
+            return self.lora_B @ self.lora_A
 
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights."""
         if scaling is None:
             scaling = self.scaling
+        if self.is_dora and self.lora_A.shape[1] != self.lora_B.shape[0]:
+            return weights * (added * scaling)
         return weights + added * scaling
 
     def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
         """Inverts the composition operation between existing and injected weights."""
+        if self.is_dora and self.lora_A.shape[1] != self.lora_B.shape[0]:
+            return weights / (added * self.scaling)
         return weights - added * self.scaling
 
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
@@ -155,7 +165,8 @@ class LoRA(nn.Module):
                 scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
                 if hidden_states is None:
                     hidden_states = scaling_vector
-                hidden_states = hidden_states * scaling_vector
+                else:
+                    hidden_states = hidden_states * scaling_vector
             #result = result * gate
             
         else:
