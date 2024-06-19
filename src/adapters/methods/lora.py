@@ -42,7 +42,7 @@ class LoRA(nn.Module):
         super().__init__()
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
         self.r = config.r
-        self.lora_alpha = config.alpha
+        self.lora_alpha = float(config.alpha)
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
@@ -79,9 +79,9 @@ class LoRA(nn.Module):
 
         if self.is_dora:
             if self.lora_A.shape[1] == self.lora_B.shape[0]:
-                self.scaling = nn.Parameter(torch.tensor(self.lora_alpha / math.sqrt(self.r)))
+                self.scaling = nn.Parameter(torch.tensor(float(self.lora_alpha / math.sqrt(self.r)), dtype=torch.float16, requires_grad=True    ))
             else:
-                self.scaling = nn.Parameter(torch.tensor(self.lora_alpha))
+                self.scaling = nn.Parameter(torch.tensor(float(self.lora_alpha), dtype=torch.float16, requires_grad=True))
         else:
             self.scaling = self.lora_alpha / self.r
 
