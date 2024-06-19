@@ -17,6 +17,7 @@ from transformers.pytorch_utils import Conv1D
 from ..composition import AdapterCompositionBlock, Average, BatchSplit, Parallel, Stack
 from ..configuration import LoRAConfig, ModelAdaptersConfig
 from .adapter_layer_base import AdapterLayerBase, ComposableAdapterLayerBase
+from .modeling import Activation_Function_Class
 from .utils import dequantize_bnb_weight
 
 
@@ -57,14 +58,20 @@ class LoRA(nn.Module):
         if self.lora_alpha is None or self.lora_alpha <= 0:
             self.lora_alpha = 1.0
 
-        self.f = nn.Sequential(
-                nn.Linear(lora_A_shape[-1], self.r),
-                Activation_Function_Class(config.non_linearity.lower()),
-                nn.Linear(self.r, self.r),
-                Activation_Function_Class(config.non_linearity.lower()),
-                nn.Linear(self.r, lora_A_shape[-1]),
-            )
-        
+        if self.is_dora:
+            if config.non_linearity is not None:
+                self.f = nn.Sequential(
+                        nn.Linear(lora_A_shape[-1], self.r),
+                        Activation_Function_Class(config.non_linearity.lower()),
+                        nn.Linear(self.r, self.r),
+                        Activation_Function_Class(config.non_linearity.lower()),
+                        nn.Linear(self.r, lora_A_shape[-1]),
+                    )
+            else:
+                self.f = nn.Sequential(
+                        nn.Linear(lora_A_shape[-1], lora_A_shape[-1]),
+                        nn.Linear(lora_A_shape[-1], lora_A_shape[-1]),
+                )
         self.lora_A = nn.Parameter(torch.randn(lora_A_shape) * std_dev)
         self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
         self.lora_C = nn.Parameter(torch.ones((lora_B_shape[0], 1)))
@@ -131,23 +138,29 @@ class LoRA(nn.Module):
         return weights - added * self.scaling
 
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
-        scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
-        if hidden_states is None:
-            hidden_states = layer_input
+        
+
         if self.is_dora:
             
             # result = result * mult
             if self.lora_A.shape[1] == self.lora_B.shape[0]:
+                if hidden_states is None:
+                    hidden_states = layer_input
                 fx = self.f(self.lora_dropout(hidden_states))
                 #print(x.shape, fx.shape, lora.lora_A.shape, lora.lora_B.shape, mult.shape)
                 delta_w = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
                 hidden_states = delta_w/ (delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9)
                 # result = (result * mult + dora * lora.m*gate)*lora.scaling
             else:
+                scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
+                if hidden_states is None:
+                    hidden_states = scaling_vector
                 hidden_states = hidden_states * scaling_vector
             #result = result * gate
             
         else:
+            if hidden_states is None:
+                hidden_states = layer_input
             hidden_states = self.lora_dropout(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
         if self.use_gating:
             gate = torch.sigmoid(self.gate(layer_input))
