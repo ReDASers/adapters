@@ -47,6 +47,7 @@ class LoRA(nn.Module):
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
         self.is_dora = config.is_dora
+        self.bottleneck_size = config.bottleneck_size
         # Optional dropout
         if config.dropout > 0.0:
             self.lora_dropout = nn.Dropout(p=config.dropout)
@@ -61,11 +62,11 @@ class LoRA(nn.Module):
         if self.is_dora:
             if config.non_linearity is not None:
                 self.f = nn.Sequential(
-                        nn.Linear(lora_A_shape[-1], self.r),
+                        nn.Linear(lora_A_shape[-1], self.bottleneck_size),
                         Activation_Function_Class(config.non_linearity.lower()),
-                        nn.Linear(self.r, self.r),
+                        nn.Linear(self.bottleneck_size, self.bottleneck_size),
                         Activation_Function_Class(config.non_linearity.lower()),
-                        nn.Linear(self.r, lora_A_shape[-1]),
+                        nn.Linear(self.bottleneck_size, lora_A_shape[-1]),
                     )
             else:
                 self.f = nn.Sequential(

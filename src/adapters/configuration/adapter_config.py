@@ -474,6 +474,7 @@ class LoRAConfig(AdapterConfig):
     init_weights: str = "lora"
     use_gating: bool = False
     is_dora: bool = False
+    bottleneck_size: int = 64
     #scaling: Union[float, str] = "learnable"
     non_linearity: Union[str, None] = "relu"
 
