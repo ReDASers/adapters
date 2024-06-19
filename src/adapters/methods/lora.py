@@ -80,9 +80,17 @@ class LoRA(nn.Module):
 
         if self.is_dora:
             if self.lora_A.shape[1] == self.lora_B.shape[0]:
-                self.scaling = nn.Parameter(torch.tensor(float(self.lora_alpha / math.sqrt(self.r)), dtype=torch.float32, requires_grad=True    ))
+                if config.scaling is None or isinstance(config.scaling, float):
+                    self.scaling = float(self.lora_alpha / math.sqrt(self.r))
+                elif  config.scaling == "learnable":
+                    self.scaling = nn.Parameter(torch.tensor(float(self.lora_alpha / math.sqrt(self.r)), dtype=torch.float32, requires_grad=True))
             else:
-                self.scaling = nn.Parameter(torch.tensor(float(1.0), dtype=torch.float32, requires_grad=True))
+                if config.scaling is None:
+                    self.scaling = 1.0
+                elif isinstance(config.scaling, float):
+                    self.scaling = torch.tensor(max(config.scaling, 1.0))
+                elif  config.scaling == "learnable":
+                    self.scaling = nn.Parameter(torch.tensor(float(1.0), dtype=torch.float32, requires_grad=True))
         else:
             self.scaling = self.lora_alpha / self.r
 
@@ -149,10 +157,7 @@ class LoRA(nn.Module):
         return weights - added * self.scaling
 
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
-        
-
         if self.is_dora:
-            
             # result = result * mult
             if self.lora_A.shape[1] == self.lora_B.shape[0]:
                 if hidden_states is None:
