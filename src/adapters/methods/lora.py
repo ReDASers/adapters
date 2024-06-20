@@ -75,7 +75,7 @@ class LoRA(nn.Module):
                 )
             for layer in self.f:
                 if isinstance(layer, nn.Linear):
-                    nn.init.xavier_uniform_(layer.weight)
+                    nn.init.kaiming_uniform_(layer.weight, a=math.sqrt(5))
                     if layer.bias is not None:
                         nn.init.zeros_(layer.bias)
         self.lora_A = nn.Parameter(torch.randn(lora_A_shape) * std_dev)
@@ -180,7 +180,7 @@ class LoRA(nn.Module):
                 if hidden_states is None:
                     hidden_states = scaling_vector
                 else:
-                    hidden_states = torch.nan_to_num(hidden_states, nan=0.0)
+                    hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
                     hidden_states = hidden_states * scaling_vector
             #result = result * gate
             
