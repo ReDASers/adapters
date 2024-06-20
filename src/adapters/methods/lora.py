@@ -73,6 +73,11 @@ class LoRA(nn.Module):
                         nn.Linear(lora_A_shape[-1], lora_A_shape[-1]),
                         nn.Linear(lora_A_shape[-1], lora_A_shape[-1]),
                 )
+            for layer in self.f:
+                if isinstance(layer, nn.Linear):
+                    nn.init.xavier_uniform_(layer.weight)
+                    if layer.bias is not None:
+                        nn.init.zeros_(layer.bias)
         self.lora_A = nn.Parameter(torch.randn(lora_A_shape) * std_dev)
         self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
         self.lora_C = nn.Parameter(torch.ones((lora_B_shape[0], 1)))
@@ -135,6 +140,7 @@ class LoRA(nn.Module):
     @property
     def delta_w(self) -> torch.Tensor:
         if self.is_dora:
+            raise NotImplementedError("Delta_w is not available for new lora yet.")
             if self.lora_A.shape[1] == self.lora_B.shape[0]:
                 return self.lora_B @ self.lora_A
             else:
@@ -162,6 +168,7 @@ class LoRA(nn.Module):
             if self.lora_A.shape[1] == self.lora_B.shape[0]:
                 if hidden_states is None:
                     hidden_states = layer_input
+                hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
                 fx = self.f(hidden_states)
                 fx = torch.nan_to_num(fx)
                 #print(x.shape, fx.shape, lora.lora_A.shape, lora.lora_B.shape, mult.shape)
@@ -173,6 +180,7 @@ class LoRA(nn.Module):
                 if hidden_states is None:
                     hidden_states = scaling_vector
                 else:
+                    hidden_states = torch.nan_to_num(hidden_states, nan=0.0)
                     hidden_states = hidden_states * scaling_vector
             #result = result * gate
             
