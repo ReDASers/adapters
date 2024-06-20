@@ -83,11 +83,11 @@ class LoRA(nn.Module):
                 if config.scaling is None or isinstance(config.scaling, float):
                     self.scaling = float(self.lora_alpha / math.sqrt(self.r))
                 elif  config.scaling == "learnable":
-                    self.scaling = nn.Parameter(torch.tensor(float(self.lora_alpha / math.sqrt(self.r)), dtype=torch.float32, requires_grad=True))
+                    self.scaling = nn.Parameter(torch.tensor(float(self.lora_alpha) / math.sqrt(float(self.r))), dtype=torch.float32, requires_grad=True)
             else:
                 if config.scaling is None:
                     self.scaling = 1.0
-                elif isinstance(config.scaling, float):
+                elif isinstance(config.scaling, float) or isinstance(config.scaling, int):
                     self.scaling = torch.tensor(max(config.scaling, 1.0))
                 elif  config.scaling == "learnable":
                     self.scaling = nn.Parameter(torch.tensor(float(1.0), dtype=torch.float32, requires_grad=True))
@@ -136,7 +136,7 @@ class LoRA(nn.Module):
     def delta_w(self) -> torch.Tensor:
         if self.is_dora:
             if self.lora_A.shape[1] == self.lora_B.shape[0]:
-                return (self.lora_B @ self.lora_A) / (self.lora_B @ self.lora_A).norm(p=2, dim=1, keepdim=True)
+                return self.lora_B @ self.lora_A
             else:
                 return self.lora_C
         else:
@@ -162,7 +162,8 @@ class LoRA(nn.Module):
             if self.lora_A.shape[1] == self.lora_B.shape[0]:
                 if hidden_states is None:
                     hidden_states = layer_input
-                fx = self.f(self.lora_dropout(hidden_states))
+                fx = self.f(hidden_states)
+                fx = torch.nan_to_num(fx)
                 #print(x.shape, fx.shape, lora.lora_A.shape, lora.lora_B.shape, mult.shape)
                 delta_w = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
                 hidden_states = delta_w/ (delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9)
