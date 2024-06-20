@@ -103,7 +103,7 @@ class LoRA(nn.Module):
         self.m = nn.Parameter(torch.ones(1, lora_B_shape[0])) 
             #nn.init.ones_(self.m)
         nn.init.normal_(self.m, mean=1.0, std=0.02)
-
+        self.dbg = 0
         # For compatibility with (IA)^3, allow all init_weights types here.
         # Usually should be "lora".
         if config.init_weights == "lora":
@@ -153,7 +153,8 @@ class LoRA(nn.Module):
         """Performs the composition operation between existing and injected weights."""
         if scaling is None:
             scaling = self.scaling
-            print(scaling)
+            if self.dbg % 100 == 0:
+                print(scaling)
         if self.is_dora and self.lora_A.shape[1] != self.lora_B.shape[0]:
             return weights * (added * scaling)
         return weights + added * scaling
