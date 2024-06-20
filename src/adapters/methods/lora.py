@@ -48,6 +48,7 @@ class LoRA(nn.Module):
         self.use_gating = config.use_gating
         self.is_dora = config.is_dora
         self.bottleneck_size = config.bottleneck_size
+        self.non_linearity = config.non_linearity
         # Optional dropout
         if config.dropout > 0.0:
             self.lora_dropout = nn.Dropout(p=config.dropout)
@@ -60,7 +61,7 @@ class LoRA(nn.Module):
             self.lora_alpha = 1.0
 
         if self.is_dora:
-            if config.non_linearity is not None:
+            if self.non_linearity is not None:
                 self.f = nn.Sequential(
                         nn.Linear(lora_A_shape[-1], self.bottleneck_size),
                         Activation_Function_Class(config.non_linearity.lower()),
@@ -152,6 +153,7 @@ class LoRA(nn.Module):
         """Performs the composition operation between existing and injected weights."""
         if scaling is None:
             scaling = self.scaling
+            print(scaling)
         if self.is_dora and self.lora_A.shape[1] != self.lora_B.shape[0]:
             return weights * (added * scaling)
         return weights + added * scaling
@@ -164,13 +166,14 @@ class LoRA(nn.Module):
 
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         if self.is_dora:
-            # result = result * mult
             if self.lora_A.shape[1] == self.lora_B.shape[0]:
                 if hidden_states is None:
                     hidden_states = layer_input
                 hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
-                fx = self.f(hidden_states)
-                fx = torch.nan_to_num(fx)
+                if self.non_linearity is None:
+                    hidden_states = self.lora_dropout(hidden_states)
+                fx = torch.nan_to_num(self.f(hidden_states))
+                
                 #print(x.shape, fx.shape, lora.lora_A.shape, lora.lora_B.shape, mult.shape)
                 delta_w = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
                 hidden_states = delta_w/ (delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9)
