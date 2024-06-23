@@ -65,9 +65,9 @@ class LoRA(nn.Module):
                 self.f = nn.Sequential(
                         nn.Linear(lora_A_shape[-1], self.bottleneck_size),
                         Activation_Function_Class(config.non_linearity.lower()),
-                        nn.Linear(self.bottleneck_size, self.bottleneck_size / 2),
+                        nn.Linear(self.bottleneck_size, int(self.bottleneck_size / 2)),
                         Activation_Function_Class(config.non_linearity.lower()),
-                        nn.Linear(self.bottleneck_size / 2, self.bottleneck_size),
+                        nn.Linear(int(self.bottleneck_size / 2), self.bottleneck_size),
                         Activation_Function_Class(config.non_linearity.lower()),
                         nn.Linear(self.bottleneck_size, lora_A_shape[-1]),
                     )
