@@ -65,7 +65,9 @@ class LoRA(nn.Module):
                 self.f = nn.Sequential(
                         nn.Linear(lora_A_shape[-1], self.bottleneck_size),
                         Activation_Function_Class(config.non_linearity.lower()),
-                        nn.Linear(self.bottleneck_size, self.bottleneck_size),
+                        nn.Linear(self.bottleneck_size, self.bottleneck_size / 2),
+                        Activation_Function_Class(config.non_linearity.lower()),
+                        nn.Linear(self.bottleneck_size / 2, self.bottleneck_size),
                         Activation_Function_Class(config.non_linearity.lower()),
                         nn.Linear(self.bottleneck_size, lora_A_shape[-1]),
                     )
@@ -153,8 +155,9 @@ class LoRA(nn.Module):
         """Performs the composition operation between existing and injected weights."""
         if scaling is None:
             scaling = self.scaling
-            if self.dbg % 100 == 0:
-                print(scaling)
+        if self.dbg % 100 == 0:
+            print("Scaling: ", scaling)
+        self.dbg += 1
         if self.is_dora and self.lora_A.shape[1] != self.lora_B.shape[0]:
             return weights * (added * scaling)
         return weights + added * scaling
