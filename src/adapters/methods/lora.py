@@ -158,9 +158,10 @@ class LoRA(nn.Module):
         """Performs the composition operation between existing and injected weights."""
         if scaling is None:
             scaling = self.scaling
-            print("grad: ", self.scaling.grad if isinstance(self.scaling, torch.Tensor) else "not a tensor")
         if self.dbg % 100 == 0:
-            print("Scaling: ", scaling.item() if isinstance(scaling, torch.Tensor) else scaling)
+            print("Scaling: ", scaling.item() if isinstance(scaling, torch.Tensor) else scaling,
+                  "self.scaling ", self.scaling.item() if isinstance(self.scaling, torch.Tensor) else self.scaling,
+                  "grad: ", self.scaling.grad if isinstance(self.scaling, torch.Tensor) else "not a tensor")
         self.dbg += 1
         if self.is_dora and self.lora_A.shape[1] != self.lora_B.shape[0]:
             return weights * (added * scaling)
