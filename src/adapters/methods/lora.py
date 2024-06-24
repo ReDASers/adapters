@@ -165,7 +165,7 @@ class LoRA(nn.Module):
         self.dbg += 1
         if self.is_dora and self.lora_A.shape[1] != self.lora_B.shape[0]:
             return weights * (added * scaling)
-        if scaling == 1.0 and self.is_dora and self.scaling != scaling:
+        if scaling == 1.0 and self.is_dora:
             scaling = self.scaling
         return weights + added * scaling
 
