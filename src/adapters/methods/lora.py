@@ -94,7 +94,7 @@ class LoRA(nn.Module):
                 if config.scaling is None or isinstance(config.scaling, float):
                     self.scaling = float(self.lora_alpha / math.sqrt(self.r))
                 elif  config.scaling == "learnable":
-                    self.scaling = nn.Parameter(torch.tensor(float(self.lora_alpha) / math.sqrt(float(self.r)), dtype=torch.float32, requires_grad=True))
+                    self.scaling = nn.Parameter(torch.tensor(float(self.lora_alpha) / float(self.r), dtype=torch.float32, requires_grad=True))
             else:
                 if config.scaling is None:
                     self.scaling = torch.ones(1, dtype=torch.float32, requires_grad=False)
