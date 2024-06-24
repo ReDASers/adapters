@@ -91,17 +91,16 @@ class LoRA(nn.Module):
 
         if self.is_dora:
             if self.lora_A.shape[1] == self.lora_B.shape[0]:
-                if config.scaling is None or isinstance(config.scaling, float):
+                if config.scaling is None: 
                     self.scaling = float(self.lora_alpha / math.sqrt(self.r))
+                elif isinstance(config.scaling, float) or isinstance(config.scaling, int):
+                    self.scaling = float(config.scaling)
                 elif  config.scaling == "learnable":
                     self.scaling = nn.Parameter(torch.tensor(float(self.lora_alpha) / float(self.r), dtype=torch.float32, requires_grad=True))
+                else:
+                    raise ValueError(f"Unknown scaling type: {config.scaling}")
             else:
-                if config.scaling is None:
-                    self.scaling = torch.ones(1, dtype=torch.float32, requires_grad=False)
-                elif isinstance(config.scaling, float) or isinstance(config.scaling, int):
-                    self.scaling = torch.tensor(max(config.scaling, 1.0), dtype=torch.float32, requires_grad=False)
-                elif  config.scaling == "learnable":
-                    self.scaling = nn.Parameter(torch.tensor(1.0, dtype=torch.float32, requires_grad=True))
+                self.scaling = 1.0
         else:
             self.scaling = self.lora_alpha / self.r
 
@@ -158,15 +157,15 @@ class LoRA(nn.Module):
         """Performs the composition operation between existing and injected weights."""
         if scaling is None:
             scaling = self.scaling
-        if self.dbg % 100 == 0:
+        elif scaling == 1.0 and self.is_dora:
+            scaling = self.scaling
+        if self.dbg % 1000 == 0:
             print("Scaling: ", scaling.item() if isinstance(scaling, torch.Tensor) else scaling,
                   "self.scaling ", self.scaling.item() if isinstance(self.scaling, torch.Tensor) else self.scaling,
                   "grad: ", self.scaling.grad if isinstance(self.scaling, torch.Tensor) else "not a tensor")
         self.dbg += 1
         if self.is_dora and self.lora_A.shape[1] != self.lora_B.shape[0]:
             return weights * (added * scaling)
-        if scaling == 1.0 and self.is_dora:
-            scaling = self.scaling
         return weights + added * scaling
 
     def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
