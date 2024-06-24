@@ -180,13 +180,13 @@ class LoRA(nn.Module):
                 hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
                 if self.non_linearity is None:
                     hidden_states = self.lora_dropout(hidden_states)
-                residuals = hidden_states
+                #residuals = hidden_states
                 fx = torch.nan_to_num(self.f(hidden_states))
                 
                 #print(x.shape, fx.shape, lora.lora_A.shape, lora.lora_B.shape, mult.shape)
                 delta_w = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
                 hidden_states = delta_w/ (delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9)
-                hidden_states += residuals
+                #hidden_states += residuals
                 # result = (result * mult + dora * lora.m*gate)*lora.scaling
             else:
                 scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
