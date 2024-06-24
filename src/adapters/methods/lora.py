@@ -64,10 +64,13 @@ class LoRA(nn.Module):
             if self.non_linearity is not None:
                 self.f = nn.Sequential(
                         nn.Linear(lora_A_shape[-1], self.bottleneck_size),
+                        nn.LayerNorm(self.bottleneck_size),
                         Activation_Function_Class(config.non_linearity.lower()),
                         nn.Linear(self.bottleneck_size, int(self.bottleneck_size / 2)),
+                        nn.LayerNorm(int(self.bottleneck_size / 2)),
                         Activation_Function_Class(config.non_linearity.lower()),
                         nn.Linear(int(self.bottleneck_size / 2), self.bottleneck_size),
+                        nn.LayerNorm(self.bottleneck_size),
                         Activation_Function_Class(config.non_linearity.lower()),
                         nn.Linear(self.bottleneck_size, lora_A_shape[-1]),
                     )
@@ -155,8 +158,10 @@ class LoRA(nn.Module):
         """Performs the composition operation between existing and injected weights."""
         if scaling is None:
             scaling = self.scaling
+            if self.dbg % 10 == 0:
+                print("grad: ", self.scaling.grad if isinstance(self.scaling, torch.Tensor) else "not a tensor")
         if self.dbg % 100 == 0:
-            print("Scaling: ", scaling)
+            print("Scaling: ", scaling.item() if isinstance(scaling, torch.Tensor) else scaling)
         self.dbg += 1
         if self.is_dora and self.lora_A.shape[1] != self.lora_B.shape[0]:
             return weights * (added * scaling)
