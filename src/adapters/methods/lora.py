@@ -62,17 +62,28 @@ class LoRA(nn.Module):
 
         if self.is_dora:
             if self.non_linearity is not None:
-                self.f = nn.Sequential(
-                        nn.Linear(lora_A_shape[-1], self.bottleneck_size),
-                        nn.LayerNorm(self.bottleneck_size),
-                        Activation_Function_Class(config.non_linearity.lower()),
-                        nn.Linear(self.bottleneck_size, int(self.bottleneck_size / 2)),
-                        nn.LayerNorm(int(self.bottleneck_size / 2)),
-                        Activation_Function_Class(config.non_linearity.lower()),
-                        nn.Linear(int(self.bottleneck_size / 2), self.bottleneck_size),
-                        nn.LayerNorm(self.bottleneck_size),
-                        Activation_Function_Class(config.non_linearity.lower()),
-                        nn.Linear(self.bottleneck_size, lora_A_shape[-1]),
+                if config.layer_norm:
+                    self.f = nn.Sequential(
+                            nn.Linear(lora_A_shape[-1], self.bottleneck_size),
+                            nn.LayerNorm(self.bottleneck_size),
+                            Activation_Function_Class(config.non_linearity.lower()),
+                            nn.Linear(self.bottleneck_size, int(self.bottleneck_size / 2)),
+                            nn.LayerNorm(int(self.bottleneck_size / 2)),
+                            Activation_Function_Class(config.non_linearity.lower()),
+                            nn.Linear(int(self.bottleneck_size / 2), self.bottleneck_size),
+                            nn.LayerNorm(self.bottleneck_size),
+                            Activation_Function_Class(config.non_linearity.lower()),
+                            nn.Linear(self.bottleneck_size, lora_A_shape[-1]),
+                        )
+                else:
+                    self.f = nn.Sequential(
+                            nn.Linear(lora_A_shape[-1], self.bottleneck_size),
+                            Activation_Function_Class(config.non_linearity.lower()),
+                            nn.Linear(self.bottleneck_size, int(self.bottleneck_size / 2)),
+                            Activation_Function_Class(config.non_linearity.lower()),
+                            nn.Linear(int(self.bottleneck_size / 2), self.bottleneck_size),
+                            Activation_Function_Class(config.non_linearity.lower()),
+                            nn.Linear(self.bottleneck_size, lora_A_shape[-1]),
                     )
             else:
                 self.f = nn.Sequential(
