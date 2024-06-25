@@ -63,15 +63,14 @@ class LoRA(nn.Module):
 
         if self.is_dora:
             if self.non_linearity is not None:
-                if self.layer_norm == False:
-                    self.f = nn.Sequential(
-                            nn.Linear(lora_A_shape[-1], self.r),
-                            Activation_Function_Class(config.non_linearity.lower()),
-                            nn.Linear(self.r, int(self.bottleneck_size)),
-                            nn.Linear(int(self.bottleneck_size), self.r),
-                            Activation_Function_Class(config.non_linearity.lower()),
-                            nn.Linear(self.r, lora_A_shape[-1]),
-                    )
+                self.f = nn.Sequential(
+                        nn.Linear(lora_A_shape[-1], self.r),
+                        Activation_Function_Class(config.non_linearity.lower()),
+                        nn.Linear(self.r, int(self.bottleneck_size)),
+                        nn.Linear(int(self.bottleneck_size), self.r),
+                        Activation_Function_Class(config.non_linearity.lower()),
+                        nn.Linear(self.r, lora_A_shape[-1]),
+                )
             else:
                 self.f = nn.Sequential(
                         nn.Linear(lora_A_shape[-1], self.r),
