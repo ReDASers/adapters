@@ -76,9 +76,7 @@ class LoRA(nn.Module):
                 self.f = nn.Sequential(
                         nn.Linear(lora_A_shape[-1], self.r),
                         Activation_Function_Class("swish"),
-                        nn.Linear(self.r, self.r),
-                        Activation_Function_Class("swish"),
-                        nn.Linear(self.r, lora_A_shape[-1]),
+                        nn.Linear(self.r, lora_B_shape[0]),
                     )
             for layer in self.f:
                 if isinstance(layer, nn.Linear):
@@ -109,7 +107,7 @@ class LoRA(nn.Module):
         
             #nn.init.ones_(self.m)
         nn.init.normal_(self.m, mean=1.0, std=0.02)
-        self.dbg = 0
+        
         # For compatibility with (IA)^3, allow all init_weights types here.
         # Usually should be "lora".
         if config.init_weights == "lora":
@@ -117,10 +115,6 @@ class LoRA(nn.Module):
             nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
             nn.init.zeros_(self.lora_B)
             nn.init.ones_(self.lora_C)
-        elif config.init_weights == "bert":
-            nn.init.normal_(self.lora_A, std=0.02)
-            nn.init.normal_(self.lora_B, std=0.02)
-            nn.init.normal_(self.lora_C, std=0.02)
         elif config.init_weights == "ia3":
             nn.init.ones_(self.lora_A)
             nn.init.ones_(self.lora_B)
@@ -135,15 +129,7 @@ class LoRA(nn.Module):
         if self.use_gating:
             self.gate = nn.Linear(lora_A_shape[-1], gating_heads)
             nn.init.normal_(self.gate.weight, std=0.02)
-        '''
-        # Initialize scaling based on config type
-        if config.scaling is None:  # Changed from config["scaling"]
-            self.scaling = 1.0
-        elif isinstance(config.scaling, float):  # Changed from config["scaling"]
-            self.scaling = nn.Parameter(torch.tensor(max(config.scaling, 1.0)) )
-        else:
-            raise ValueError(f"Unknown scaling type: {config.scaling}")  # Changed from config["scaling"]
-        '''
+        
     @property
     def delta_w(self) -> torch.Tensor:
         if self.is_dora:
