@@ -49,7 +49,8 @@ class LoRA(nn.Module):
         self.is_dora = config.is_dora
         self.bottleneck_size = int(self.r / 2) if config.bottleneck_size is None else config.bottleneck_size
         self.non_linearity = config.non_linearity
-        
+        self.magnitude = config.magnitude
+
         # Optional dropout
         if config.dropout > 0.0:
             self.lora_dropout = nn.Dropout(p=config.dropout)
@@ -105,6 +106,7 @@ class LoRA(nn.Module):
             self.scaling = self.lora_alpha / self.r
 
         self.m = nn.Parameter(torch.ones(1, lora_B_shape[0])) 
+        
             #nn.init.ones_(self.m)
         nn.init.normal_(self.m, mean=1.0, std=0.02)
         self.dbg = 0
@@ -156,7 +158,7 @@ class LoRA(nn.Module):
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights."""
         if scaling is None:
-            scaling = 1.0
+            scaling = self.scaling
         
         if self.is_dora and self.lora_A.shape[1] != self.lora_B.shape[0]:
             return weights * (added * scaling)
@@ -180,10 +182,11 @@ class LoRA(nn.Module):
                 fx = torch.nan_to_num(self.f(hidden_states))
                 
                 #print(x.shape, fx.shape, lora.lora_A.shape, lora.lora_B.shape, mult.shape)
-                delta_w = self.scaling * (fx @ torch.t(self.lora_A) @ torch.t(self.lora_B))
+                delta_w = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
                 
                 hidden_states = delta_w/ (delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9)
-
+                if self.magniatude:
+                    hidden_states = self.m * hidden_states
                 #hidden_states += residuals
                 # result = (result * mult + dora * lora.m*gate)*lora.scaling
             else:
