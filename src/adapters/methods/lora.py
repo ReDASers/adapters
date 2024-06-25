@@ -85,7 +85,7 @@ class LoRA(nn.Module):
                         nn.init.zeros_(layer.bias)
         self.lora_A = nn.Parameter(torch.randn(lora_A_shape) * std_dev)
         self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
-        self.lora_C = nn.Parameter(torch.ones((lora_B_shape[0], 1)))
+        self.lora_C = nn.Parameter(torch.ones(lora_B_shape[0]))
         # Actual trainable parameters
 
         if self.is_dora:
@@ -162,19 +162,12 @@ class LoRA(nn.Module):
                 if hidden_states is None:
                     hidden_states = layer_input
                 hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
-                if self.non_linearity is None:
-                    hidden_states = self.lora_dropout(hidden_states)
-                #residuals = hidden_states
-                fx = torch.nan_to_num(self.f(hidden_states))
                 
-                #print(x.shape, fx.shape, lora.lora_A.shape, lora.lora_B.shape, mult.shape)
-                delta_w = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
-                
+                delta_w = torch.nan_to_num(self.f(hidden_states))
+                if self.non_linearity is not None:
+                    delta_w = delta_w @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+                    
                 hidden_states = delta_w/ (delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9)
-                if self.magnitude:
-                    hidden_states = self.m * hidden_states
-                #hidden_states += residuals
-                # result = (result * mult + dora * lora.m*gate)*lora.scaling
             else:
                 scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
                 if hidden_states is None:
