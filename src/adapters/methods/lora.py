@@ -156,14 +156,8 @@ class LoRA(nn.Module):
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights."""
         if scaling is None:
-            scaling = self.scaling
-        elif scaling == 1.0 and self.is_dora:
-            scaling = self.scaling
-        if self.dbg % 1000 == 0:
-            print("Scaling: ", scaling.item() if isinstance(scaling, torch.Tensor) else scaling,
-                  "self.scaling ", self.scaling.item() if isinstance(self.scaling, torch.Tensor) else self.scaling,
-                  "grad: ", self.scaling.grad if isinstance(self.scaling, torch.Tensor) else "not a tensor")
-        self.dbg += 1
+            scaling = 1.0
+        
         if self.is_dora and self.lora_A.shape[1] != self.lora_B.shape[0]:
             return weights * (added * scaling)
         return weights + added * scaling
@@ -186,7 +180,7 @@ class LoRA(nn.Module):
                 fx = torch.nan_to_num(self.f(hidden_states))
                 
                 #print(x.shape, fx.shape, lora.lora_A.shape, lora.lora_B.shape, mult.shape)
-                delta_w = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+                delta_w = self.scaling * (fx @ torch.t(self.lora_A) @ torch.t(self.lora_B))
                 
                 hidden_states = delta_w/ (delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9)
 
