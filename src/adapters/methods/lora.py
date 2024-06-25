@@ -49,7 +49,7 @@ class LoRA(nn.Module):
         self.is_dora = config.is_dora
         self.bottleneck_size = int(self.r / 2) if config.bottleneck_size is None else config.bottleneck_size
         self.non_linearity = config.non_linearity
-        self.magnitude = config.magnitude
+        self.legacy = config.legacy
 
         # Optional dropout
         if config.dropout > 0.0:
@@ -64,20 +64,39 @@ class LoRA(nn.Module):
 
         if self.is_dora:
             if self.non_linearity is not None:
-                self.f = nn.Sequential(
-                        nn.Linear(lora_A_shape[-1], self.r),
-                        Activation_Function_Class(config.non_linearity.lower()),
-                        nn.Linear(self.r, int(self.bottleneck_size)),
-                        nn.Linear(int(self.bottleneck_size), self.r),
-                        Activation_Function_Class(config.non_linearity.lower()),
-                        nn.Linear(self.r, lora_A_shape[-1]),
-                )
-            else:
-                self.f = nn.Sequential(
-                        nn.Linear(lora_A_shape[-1], self.r),
-                        Activation_Function_Class("swish"),
-                        nn.Linear(self.r, lora_B_shape[0]),
+                if self.legacy:
+                    self.f = nn.Sequential(
+                            nn.Linear(lora_A_shape[-1], self.r),
+                            Activation_Function_Class(config.non_linearity.lower()),
+                            nn.Linear(self.r, int(self.bottleneck_size)),
+                            nn.Linear(int(self.bottleneck_size), self.r),
+                            Activation_Function_Class(config.non_linearity.lower()),
+                            nn.Linear(self.r, lora_A_shape[-1]),
                     )
+                else:
+                    self.f = nn.Sequential(
+                            nn.Linear(lora_A_shape[-1], self.r),
+                            Activation_Function_Class(config.non_linearity.lower()),
+                            nn.Linear(self.r, int(self.bottleneck_size)),
+                            nn.Linear(int(self.bottleneck_size), self.r),
+                            Activation_Function_Class(config.non_linearity.lower()),
+                            nn.Linear(self.r, lora_B_shape[0]),
+                    )
+            else:
+                if self.legacy:
+                    self.f = nn.Sequential(
+                            nn.Linear(lora_A_shape[-1], self.r),
+                            Activation_Function_Class("swish"),
+                            nn.Linear(self.r, self.r),
+                            Activation_Function_Class("swish"),
+                            nn.Linear(self.r, lora_A_shape[-1]),
+                        )
+                else:
+                    self.f = nn.Sequential(
+                            nn.Linear(lora_A_shape[-1], self.r),
+                            Activation_Function_Class("swish"),
+                            nn.Linear(self.r, lora_B_shape[0]),
+                        )
             for layer in self.f:
                 if isinstance(layer, nn.Linear):
                     nn.init.kaiming_uniform_(layer.weight, a=math.sqrt(5))
@@ -162,9 +181,9 @@ class LoRA(nn.Module):
                 if hidden_states is None:
                     hidden_states = layer_input
                 hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
-                
                 delta_w = torch.nan_to_num(self.f(hidden_states))
-                if self.non_linearity is not None:
+                
+                if self.legacy:
                     delta_w = delta_w @ torch.t(self.lora_A) @ torch.t(self.lora_B)
                     
                 hidden_states = delta_w/ (delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9)
@@ -175,7 +194,6 @@ class LoRA(nn.Module):
                 else:
                     hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
                     hidden_states = hidden_states * scaling_vector
-            #result = result * gate
             
         else:
             if hidden_states is None:
