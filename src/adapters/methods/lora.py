@@ -185,7 +185,7 @@ class LoRA(nn.Module):
                 delta_w = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
                 
                 hidden_states = delta_w/ (delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9)
-                if self.magniatude:
+                if self.magnitude:
                     hidden_states = self.m * hidden_states
                 #hidden_states += residuals
                 # result = (result * mult + dora * lora.m*gate)*lora.scaling
