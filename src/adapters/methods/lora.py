@@ -49,6 +49,7 @@ class LoRA(nn.Module):
         self.is_dora = config.is_dora
         self.bottleneck_size = int(self.r / 2) if config.bottleneck_size is None else config.bottleneck_size
         self.non_linearity = config.non_linearity
+        self.layer_norm = config.layer_norm
         # Optional dropout
         if config.dropout > 0.0:
             self.lora_dropout = nn.Dropout(p=config.dropout)
@@ -62,18 +63,7 @@ class LoRA(nn.Module):
 
         if self.is_dora:
             if self.non_linearity is not None:
-                if config.layer_norm:
-                    self.f = nn.Sequential(
-                            nn.Linear(lora_A_shape[-1], self.r),
-                            nn.LayerNorm(self.r),
-                            Activation_Function_Class(config.non_linearity.lower()),
-                            nn.Linear(self.r, int(self.bottleneck_size)),
-                            nn.Linear(int(self.bottleneck_size), self.r),
-                            nn.LayerNorm(self.r),
-                            Activation_Function_Class(config.non_linearity.lower()),
-                            nn.Linear(self.r, lora_A_shape[-1]),
-                        )
-                else:
+                if self.layer_norm == False:
                     self.f = nn.Sequential(
                             nn.Linear(lora_A_shape[-1], self.r),
                             Activation_Function_Class(config.non_linearity.lower()),
@@ -83,21 +73,13 @@ class LoRA(nn.Module):
                             nn.Linear(self.r, lora_A_shape[-1]),
                     )
             else:
-                if config.layer_norm:
-                    self.f = nn.Sequential(
-                            nn.Linear(lora_A_shape[-1], self.r),
-                            nn.LayerNorm(self.r),
-                            Activation_Function_Class("swish"),
-                            nn.Linear(self.r, lora_A_shape[-1]),
-                        )
-                else:
-                    self.f = nn.Sequential(
-                            nn.Linear(lora_A_shape[-1], self.r),
-                            Activation_Function_Class("swish"),
-                            nn.Linear(self.r, self.r),
-                            Activation_Function_Class("swish"),
-                            nn.Linear(self.r, lora_A_shape[-1]),
-                        )
+                self.f = nn.Sequential(
+                        nn.Linear(lora_A_shape[-1], self.r),
+                        Activation_Function_Class("swish"),
+                        nn.Linear(self.r, self.r),
+                        Activation_Function_Class("swish"),
+                        nn.Linear(self.r, lora_A_shape[-1]),
+                    )
             for layer in self.f:
                 if isinstance(layer, nn.Linear):
                     nn.init.kaiming_uniform_(layer.weight, a=math.sqrt(5))
@@ -206,7 +188,10 @@ class LoRA(nn.Module):
                 
                 #print(x.shape, fx.shape, lora.lora_A.shape, lora.lora_B.shape, mult.shape)
                 delta_w = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
-                hidden_states = delta_w/ (delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9)
+                if self.layer_norm:
+                    hidden_states = delta_w/ (delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9)
+                else:
+                    hidden_states = delta_w
                 #hidden_states += residuals
                 # result = (result * mult + dora * lora.m*gate)*lora.scaling
             else:
