@@ -68,8 +68,6 @@ class LoRA(nn.Module):
                             nn.LayerNorm(self.r),
                             Activation_Function_Class(config.non_linearity.lower()),
                             nn.Linear(self.r, int(self.bottleneck_size)),
-                            nn.LayerNorm(int(self.bottleneck_size)),
-                            Activation_Function_Class(config.non_linearity.lower()),
                             nn.Linear(int(self.bottleneck_size), self.r),
                             nn.LayerNorm(self.r),
                             Activation_Function_Class(config.non_linearity.lower()),
@@ -80,7 +78,6 @@ class LoRA(nn.Module):
                             nn.Linear(lora_A_shape[-1], self.r),
                             Activation_Function_Class(config.non_linearity.lower()),
                             nn.Linear(self.r, int(self.bottleneck_size)),
-                            Activation_Function_Class(config.non_linearity.lower()),
                             nn.Linear(int(self.bottleneck_size), self.r),
                             Activation_Function_Class(config.non_linearity.lower()),
                             nn.Linear(self.r, lora_A_shape[-1]),
@@ -88,21 +85,18 @@ class LoRA(nn.Module):
             else:
                 if config.layer_norm:
                     self.f = nn.Sequential(
-                            nn.Linear(lora_A_shape[-1], self.bottleneck_size),
-                            nn.LayerNorm(self.bottleneck_size),
+                            nn.Linear(lora_A_shape[-1], self.r),
+                            nn.LayerNorm(self.r),
                             Activation_Function_Class("swish"),
-                            nn.Linear(self.bottleneck_size, self.bottleneck_size),
-                            nn.LayerNorm(self.bottleneck_size),
-                            Activation_Function_Class("swish"),
-                            nn.Linear(self.bottleneck_size, lora_A_shape[-1]),
+                            nn.Linear(self.r, lora_A_shape[-1]),
                         )
                 else:
                     self.f = nn.Sequential(
-                            nn.Linear(lora_A_shape[-1], self.bottleneck_size),
+                            nn.Linear(lora_A_shape[-1], self.r),
                             Activation_Function_Class("swish"),
-                            nn.Linear(self.bottleneck_size, self.bottleneck_size),
+                            nn.Linear(self.r, self.r),
                             Activation_Function_Class("swish"),
-                            nn.Linear(self.bottleneck_size, lora_A_shape[-1]),
+                            nn.Linear(self.r, lora_A_shape[-1]),
                         )
             for layer in self.f:
                 if isinstance(layer, nn.Linear):
