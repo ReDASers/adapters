@@ -49,7 +49,7 @@ class LoRA(nn.Module):
         self.is_dora = config.is_dora
         self.bottleneck_size = int(self.r / 2) if config.bottleneck_size is None else config.bottleneck_size
         self.non_linearity = config.non_linearity
-        self.layer_norm = config.layer_norm
+        
         # Optional dropout
         if config.dropout > 0.0:
             self.lora_dropout = nn.Dropout(p=config.dropout)

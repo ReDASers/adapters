@@ -477,7 +477,6 @@ class LoRAConfig(AdapterConfig):
     bottleneck_size: Union[int, None] = None
     scaling: Union[float, str, None] = "learnable"
     non_linearity: Union[str, None] = "swish"
-    layer_norm: bool = True
 
 
 @dataclass(eq=False)
