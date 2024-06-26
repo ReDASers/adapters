@@ -478,6 +478,7 @@ class LoRAConfig(AdapterConfig):
     scaling: Union[float, str, None] = "learnable"
     non_linearity: Union[str, None] = "swish"
     legacy: bool = False
+    bn_activation: bool = False
 
 
 @dataclass(eq=False)

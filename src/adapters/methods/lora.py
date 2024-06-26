@@ -50,6 +50,9 @@ class LoRA(nn.Module):
         self.bottleneck_size = int(self.r / 2) if config.bottleneck_size is None else config.bottleneck_size
         self.non_linearity = config.non_linearity
         self.legacy = config.legacy
+        self.bn_activation = config.bn_activation
+        self.hidden_size_in = lora_A_shape[-1]
+        self.num_weights_out = lora_A_shape[-1] if self.legacy else lora_B_shape[0]
 
         # Optional dropout
         if config.dropout > 0.0:
@@ -64,41 +67,42 @@ class LoRA(nn.Module):
 
         if self.is_dora:
             if self.non_linearity is not None:
-                if self.legacy:
+                if config.bn_activation:
 
                     self.f = nn.Sequential(
-                            nn.Linear(lora_A_shape[-1], self.r),
+                            nn.Linear(self.hidden_size_in, self.r),
                             Activation_Function_Class(config.non_linearity.lower()),
                             nn.Linear(self.r, int(self.bottleneck_size)),
+                            Activation_Function_Class(config.non_linearity.lower()),
                             nn.Linear(int(self.bottleneck_size), self.r),
                             Activation_Function_Class(config.non_linearity.lower()),
-                            nn.Linear(self.r, lora_B_shape[0]),
+                            nn.Linear(self.r, self.num_weights_out),
                     )
                 else:
                     self.f = nn.Sequential(
-                            nn.Linear(lora_A_shape[-1], self.r),
+                            nn.Linear(self.hidden_size_in, self.r),
                             Activation_Function_Class(config.non_linearity.lower()),
                             nn.Linear(self.r, int(self.bottleneck_size)),
-                            Activation_Function_Class(config.non_linearity.lower()),
                             nn.Linear(int(self.bottleneck_size), self.r),
                             Activation_Function_Class(config.non_linearity.lower()),
-                            nn.Linear(self.r, lora_B_shape[0]),
+                            nn.Linear(self.r, self.num_weights_out),
                     )
             else:
-                if self.legacy:
+                if config.bn_activation:
                     self.f = nn.Sequential(
-                            nn.Linear(lora_A_shape[-1], self.r),
+                            nn.Linear(self.hidden_size_in, self.r),
+                            Activation_Function_Class("swish"),
+                            nn.Linear(self.r, self.num_weights_out),
+                        )
+                else:
+                    self.f = nn.Sequential(
+                            nn.Linear(self.hidden_size_in, self.r),
                             Activation_Function_Class("swish"),
                             nn.Linear(self.r, self.r),
                             Activation_Function_Class("swish"),
-                            nn.Linear(self.r, lora_A_shape[-1]),
+                            nn.Linear(self.r, self.num_weights_out),
                         )
-                else:
-                    self.f = nn.Sequential(
-                            nn.Linear(lora_A_shape[-1], self.r),
-                            Activation_Function_Class("swish"),
-                            nn.Linear(self.r, lora_B_shape[0]),
-                        )
+
             for layer in self.f:
                 if isinstance(layer, nn.Linear):
                     nn.init.kaiming_uniform_(layer.weight, a=math.sqrt(5))
