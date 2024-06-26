@@ -65,15 +65,7 @@ class LoRA(nn.Module):
         if self.is_dora:
             if self.non_linearity is not None:
                 if self.legacy:
-                    self.f = nn.Sequential(
-                            nn.Linear(lora_A_shape[-1], self.r),
-                            Activation_Function_Class(config.non_linearity.lower()),
-                            nn.Linear(self.r, int(self.bottleneck_size)),
-                            nn.Linear(int(self.bottleneck_size), self.r),
-                            Activation_Function_Class(config.non_linearity.lower()),
-                            nn.Linear(self.r, lora_A_shape[-1]),
-                    )
-                elif self.non_linearity == "silu":
+
                     self.f = nn.Sequential(
                             nn.Linear(lora_A_shape[-1], self.r),
                             Activation_Function_Class(config.non_linearity.lower()),
@@ -131,11 +123,6 @@ class LoRA(nn.Module):
                 self.scaling = 1.0
         else:
             self.scaling = self.lora_alpha / self.r
-
-        self.m = nn.Parameter(torch.ones(1, lora_B_shape[0])) 
-        
-            #nn.init.ones_(self.m)
-        nn.init.normal_(self.m, mean=1.0, std=0.02)
         
         # For compatibility with (IA)^3, allow all init_weights types here.
         # Usually should be "lora".
@@ -191,7 +178,7 @@ class LoRA(nn.Module):
                 if hidden_states is None:
                     hidden_states = layer_input
                 hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
-                delta_w = torch.nan_to_num(self.f(hidden_states))
+                delta_w = torch.nan_to_num(self.f(self.lora_dropout(hidden_states)))
                 
                 if self.legacy:
                     delta_w = delta_w @ torch.t(self.lora_A) @ torch.t(self.lora_B)
