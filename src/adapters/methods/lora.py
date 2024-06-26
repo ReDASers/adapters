@@ -71,7 +71,16 @@ class LoRA(nn.Module):
                             nn.Linear(self.r, int(self.bottleneck_size)),
                             nn.Linear(int(self.bottleneck_size), self.r),
                             Activation_Function_Class(config.non_linearity.lower()),
-                            nn.Linear(self.r, lora_B_shape[-1]),
+                            nn.Linear(self.r, lora_A_shape[-1]),
+                    )
+                elif self.non_linearity == "silu":
+                    self.f = nn.Sequential(
+                            nn.Linear(lora_A_shape[-1], self.r),
+                            Activation_Function_Class(config.non_linearity.lower()),
+                            nn.Linear(self.r, int(self.bottleneck_size)),
+                            nn.Linear(int(self.bottleneck_size), self.r),
+                            Activation_Function_Class(config.non_linearity.lower()),
+                            nn.Linear(self.r, lora_B_shape[0]),
                     )
                 else:
                     self.f = nn.Sequential(
