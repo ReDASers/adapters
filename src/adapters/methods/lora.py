@@ -110,7 +110,7 @@ class LoRA(nn.Module):
                         nn.init.zeros_(layer.bias)
         self.lora_A = nn.Parameter(torch.randn(lora_A_shape) * std_dev)
         self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
-        self.lora_C = nn.Parameter(torch.ones(lora_B_shape[0]))
+        self.lora_C = nn.Parameter(torch.zeros(lora_B_shape[0], 1))
         # Actual trainable parameters
 
         if self.is_dora:
