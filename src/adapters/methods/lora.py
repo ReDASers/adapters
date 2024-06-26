@@ -53,7 +53,9 @@ class LoRA(nn.Module):
         self.bn_activation = config.bn_activation
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_A_shape[-1] if self.legacy else lora_B_shape[0]
-
+        for name, param in self.named_parameters():
+            print(name)
+            break
         # Optional dropout
         if config.dropout > 0.0:
             self.lora_dropout = nn.Dropout(p=config.dropout)
