@@ -185,7 +185,7 @@ class LoRA(nn.Module):
                 delta_w = torch.nan_to_num(self.f(self.lora_dropout(hidden_states)))
                 
                 if self.legacy:
-                    delta_w = delta_w @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+                    delta_w = self.scaling * (delta_w @ torch.t(self.lora_A) @ torch.t(self.lora_B))
                     
                 hidden_states = delta_w/ (delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9)
             else:
