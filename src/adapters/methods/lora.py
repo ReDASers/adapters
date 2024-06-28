@@ -56,7 +56,7 @@ class LoRA(nn.Module):
         self.location_key = location_key if location_key is not None else "lora"
         self.alternative_impl = config.alternative_impl
 
-        if self.lora_A.shape[1] == self.lora_B.shape[0]:
+        if lora_A_shape[-1] == lora_B_shape[0]:
             self.in_equals_out = True
         else:
             self.in_equals_out = False
