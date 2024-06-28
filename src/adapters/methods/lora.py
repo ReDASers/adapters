@@ -53,8 +53,9 @@ class LoRA(nn.Module):
         self.bn_activation = config.bn_activation
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_A_shape[-1] if self.legacy else lora_B_shape[0]
-
-            
+        self.location_key = config.location_key
+        
+        print("location key: ", self.location_key)
         # Optional dropout
         if config.dropout > 0.0:
             self.lora_dropout = nn.Dropout(p=config.dropout)
@@ -146,13 +147,6 @@ class LoRA(nn.Module):
             nn.init.ones_(self.lora_C)
         else:
             raise ValueError("Unknown init_weights type: {}".format(config.init_weights))
-        
-        i = 0
-        for name, param in self.named_parameters():
-            i += 1
-            print("param: ", name)
-            if i == 3:
-                break
 
         if self.use_gating:
             self.gate = nn.Linear(lora_A_shape[-1], gating_heads)
@@ -323,6 +317,7 @@ class LoRALayer(AdapterLayerBase):
         if lora_config is not None and self._check_lora_location(lora_config):
             if lora_config.composition_mode == "add":
                 lora_cls = LoRA
+                lora_config["location_key"] = self.location_key
             elif lora_config.composition_mode == "scale":
                 lora_cls = IA3
             else:
