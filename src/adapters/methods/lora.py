@@ -38,6 +38,7 @@ class LoRA(nn.Module):
         lora_B_shape,
         config: LoRAConfig,
         gating_heads: int = 1,
+        location_key: str = None,
     ):
         super().__init__()
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
@@ -53,7 +54,7 @@ class LoRA(nn.Module):
         self.bn_activation = config.bn_activation
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_A_shape[-1] if self.legacy else lora_B_shape[0]
-        self.location_key = config.location_key
+        self.location_key = location_key if location_key is not None else "lora"
         
         print("location key: ", self.location_key)
         # Optional dropout
@@ -219,6 +220,7 @@ class IA3(nn.Module):
         lora_B_shape,
         config: LoRAConfig,
         gating_heads: int = 1,
+        location_key: str = None,
     ):
         super().__init__()
         assert config.composition_mode == "scale", "IA3 module only supports composition_mode='scale'."
@@ -294,7 +296,6 @@ class LoRALayer(AdapterLayerBase):
         self.model_config = model_config
         self.adapters_config = adapters_config
         self.loras = nn.ModuleDict(dict())
-
         self.merged = False
 
     def get_n_heads(self, lora: Union[LoRA, IA3, LoRAConfig]):
@@ -317,7 +318,6 @@ class LoRALayer(AdapterLayerBase):
         if lora_config is not None and self._check_lora_location(lora_config):
             if lora_config.composition_mode == "add":
                 lora_cls = LoRA
-                lora_config["location_key"] = self.location_key
             elif lora_config.composition_mode == "scale":
                 lora_cls = IA3
             else:
@@ -326,6 +326,7 @@ class LoRALayer(AdapterLayerBase):
                 *self._get_lora_shapes(lora_config),
                 lora_config,
                 gating_heads=self.get_n_heads(lora_config),
+                location_key=self.location_key,
             )
             lora.train(self.training)
             lora = lora.to(self.weight.device)
