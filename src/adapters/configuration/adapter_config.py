@@ -464,6 +464,7 @@ class LoRAConfig(AdapterConfig):
     selfattn_lora: bool = True
     intermediate_lora: bool = True
     output_lora: bool = True
+    alternative_impl: List[str] = field(default_factory=lambda: ["intermediate_lora"])
     leave_out: List[int] = field(default_factory=list)
 
     r: int = 64
@@ -473,7 +474,6 @@ class LoRAConfig(AdapterConfig):
     composition_mode: str = "add"
     init_weights: str = "lora"
     use_gating: bool = False
-    is_dora: bool = True
     bottleneck_size: Union[int, None] = None
     scaling: Union[float, str, None] = "learnable"
     non_linearity: Union[str, None] = "swish"
