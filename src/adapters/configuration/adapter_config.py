@@ -429,56 +429,50 @@ class PromptTuningConfig(AdapterConfig):
 @dataclass(eq=False)
 class LoRAConfig(AdapterConfig):
     """
-    The Low-Rank Adaptation (LoRA) architecture proposed by Hu et al. (2021). See https://arxiv.org/pdf/2106.09685.pdf.
-    LoRA adapts a model by reparametrizing the weights of a layer matrix. You can merge the additional weights with the
-    original layer weights using ``model.merge_adapter("lora_name")``.
+    Configuration class for the Low-Rank Adaptation (LoRA) architecture proposed by Hu et al. (2021).
+    LoRA adapts a model by reparametrizing the weights of a layer matrix. You can merge the additional weights
+    with the original layer weights using `model.merge_adapter("lora_name")`.
 
     Args:
-        selfattn_lora (bool, optional): If True, add LoRA to the self-attention weights of a model.
-            Defaults to True.
-        intermediate_lora (bool, optional): If True, add LoRA to the intermediate MLP weights of a model.
-            Defaults to False.
-        output_lora (bool, optional): If True, add LoRA to the output MLP weights of a model.
-            Defaults to False.
-        leave_out (:obj:`List[int]`, optional):
-            The IDs of the layers (starting at 0) where NO adapter modules should be added.
-        r (int, optional): The rank of the LoRA layer. Defaults to 8.
-        alpha (int, optional): The hyperparameter used for scaling the LoRA reparametrization. Defaults to 8.
-        dropout (float, optional): The dropout rate used in the LoRA layer. Defaults to 0.0.
-        attn_matrices (List[str], optional): Determines which matrices of the self-attention module to adapt.
-            A list that may contain the strings "q" (query), "k" (key), "v" (value). Defaults to ["q", "v"].
-        composition_mode (str, optional):
-            Defines how the injected weights are composed with the original model weights. Can be either "add"
-            (addition of decomposed matrix, as in LoRA) or "scale" (element-wise multiplication of vector, as in
-            (IA)^3). "scale" can only be used together with r=1. Defaults to "add".
-        init_weights (:obj:`str`, optional): Initialization method for the weights of the LoRA modules.
-            Currently, this can be either "lora" (default) or "bert".
-        use_gating (:obj:`bool`, optional):
-            Place a trainable gating module besides the added parameter module to control module activation. This is
-            e.g. used for UniPELT. Defaults to False. Note that modules with use_gating=True cannot be merged using
-            `merge_adapter()`.
+        selfattn_lora (bool, optional): If True, adds LoRA to the self-attention weights of a model. Defaults to True.
+        intermediate_lora (bool, optional): If True, adds LoRA to the intermediate MLP weights of a model. Defaults to False.
+        output_lora (bool, optional): If True, adds LoRA to the output MLP weights of a model. Defaults to False.
+        leave_out (List[int], optional): List of layer IDs (starting at 0) where no adapter modules should be added.
+        r (int, optional): Rank of the LoRA layer. Defaults to 64.
+        alpha (Union[float, str, None], optional): Hyperparameter for scaling the LoRA reparametrization. Can be a float,
+            an integer, or "learnable" to make it a trainable parameter. Defaults to 1.0.
+        dropout (float, optional): Dropout rate used in the LoRA layer. Defaults to 0.0.
+        attn_matrices (List[str], optional): Matrices of the self-attention module to adapt. Can contain "q" (query),
+            "k" (key), and "v" (value). Defaults to ["v", "k"].
+        composition_mode (str, optional): Defines how the injected weights are composed with the original model weights.
+            Can be "add" for addition or "scale" for element-wise multiplication (only with r=1). Defaults to "add".
+        init_weights (str, optional): Initialization method for the weights of the LoRA modules. Can be "lora" or "bert".
+        use_gating (bool, optional): If True, includes a trainable gating module to control module activation. Defaults to False.
+            Note: Modules with use_gating=True cannot be merged using `merge_adapter()`.
+        autoencoder_arch (str, optional): Architecture of the autoencoder. Options are "NLN", "NLLN", "NLNLN", or "LL".
+            Defaults to "NLLN".
+        bottleneck_size (Union[int, None], optional): Size of the bottleneck layer. If None, defaults to 2 * r.
+        non_linearity (Union[str, None], optional): Non-linearity to use. Defaults to "swish".
+        biases (bool, optional): If True, includes biases in the LoRA layers, trading speed for model capacity.
+            Possibly increases accuracy/score when True. Defaults to False.
     """
 
     architecture: Optional[str] = "lora"
-
     selfattn_lora: bool = True
-    intermediate_lora: bool = True
-    output_lora: bool = True
-    alternative_impl: List[str] = field(default_factory=lambda: ["intermediate_lora"])
+    intermediate_lora: bool = False
+    output_lora: bool = False
+    alt_location: List[str] = field(default_factory=lambda: ["intermediate_lora"])
     leave_out: List[int] = field(default_factory=list)
-
     r: int = 64
-    alpha: Union[int, float] = 64
+    alpha: Union[float, str, None] = 1.0
     dropout: float = 0.0
-    attn_matrices: List[str] = field(default_factory=lambda: ["q", "v", "k"])
+    attn_matrices: List[str] = field(default_factory=lambda: ["v", "k"])
     composition_mode: str = "add"
-    init_weights: str = "lora"
     use_gating: bool = False
+    autoencoder_arch: str = "NLLN"
     bottleneck_size: Union[int, None] = None
-    scaling: Union[float, str, None] = "learnable"
     non_linearity: Union[str, None] = "swish"
-    legacy: bool = False
-    bn_activation: bool = False
+    biases: bool = False
 
 
 @dataclass(eq=False)
