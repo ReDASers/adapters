@@ -449,8 +449,8 @@ class LoRAConfig(AdapterConfig):
         init_weights (str, optional): Initialization method for the weights of the LoRA modules. Can be "lora" or "bert".
         use_gating (bool, optional): If True, includes a trainable gating module to control module activation. Defaults to False.
             Note: Modules with use_gating=True cannot be merged using `merge_adapter()`.
-        autoencoder_arch (str, optional): Architecture of the autoencoder. Options are "NLN", "NLLN", "NLNLN", or "LL".
-            Defaults to "NLLN".
+        autoencoder_arch (str, optional): Architecture of the autoencoder. Options are "NLN", "NLbN", "NLbLN", "NLbNLN", or "LbL".
+            Defaults to "NLbLN".
         bottleneck_size (Union[int, None], optional): Size of the bottleneck layer. If None, defaults to 2 * r.
         non_linearity (Union[str, None], optional): Non-linearity to use. Defaults to "swish".
         biases (bool, optional): If True, includes biases in the LoRA layers, trading speed for model capacity.
@@ -459,8 +459,8 @@ class LoRAConfig(AdapterConfig):
 
     architecture: Optional[str] = "lora"
     selfattn_lora: bool = True
-    intermediate_lora: bool = False
-    output_lora: bool = False
+    intermediate_lora: bool = True
+    output_lora: bool = True
     alt_location: List[str] = field(default_factory=lambda: ["intermediate_lora"])
     leave_out: List[int] = field(default_factory=list)
     r: int = 64
@@ -469,7 +469,7 @@ class LoRAConfig(AdapterConfig):
     attn_matrices: List[str] = field(default_factory=lambda: ["v", "k"])
     composition_mode: str = "add"
     use_gating: bool = False
-    autoencoder_arch: str = "NLLN"
+    autoencoder_arch: str = "NLbLN"
     bottleneck_size: Union[int, None] = None
     non_linearity: Union[str, None] = "swish"
     biases: bool = False

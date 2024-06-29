@@ -60,7 +60,6 @@ class LoRA(nn.Module):
         self.use_gating = config.use_gating
         self.bottleneck_size = int(self.r * 2) if config.bottleneck_size is None else int(config.bottleneck_size)
         self.non_linearity = config.non_linearity if config.non_linearity is not None else "swish"
-        self.scaling = config.alpha
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]  # Must equal to in for autoencoder
         self.location_key = location_key if location_key is not None else "lora"
@@ -84,7 +83,7 @@ class LoRA(nn.Module):
                 self.lora_dropout = lambda x: x
 
             # Define different autoencoder architectures
-            if self.autoencoder_arch == "NLNLN":
+            if self.autoencoder_arch == "NLbNLN":
                 self.f = nn.Sequential(
                     nn.Linear(self.hidden_size_in, self.r, bias=self.biases),
                     Activation_Function_Class(config.non_linearity.lower()),
@@ -94,7 +93,7 @@ class LoRA(nn.Module):
                     Activation_Function_Class(config.non_linearity.lower()),
                     nn.Linear(self.r, self.num_weights_out, bias=self.biases),
                 )
-            elif self.autoencoder_arch == "NLLN":
+            elif self.autoencoder_arch == "NLbLN":
                 self.f = nn.Sequential(
                     nn.Linear(self.hidden_size_in, self.r, bias=self.biases),
                     Activation_Function_Class(config.non_linearity.lower()),
@@ -111,7 +110,15 @@ class LoRA(nn.Module):
                     Activation_Function_Class(config.non_linearity.lower()),
                     nn.Linear(self.r, self.num_weights_out, bias=self.biases),
                 )
-            elif self.autoencoder_arch == "LL":
+            elif self.autoencoder_arch == "NLbN":
+                self.f = nn.Sequential(
+                    nn.Linear(self.hidden_size_in, self.r, bias=self.biases),
+                    Activation_Function_Class(config.non_linearity.lower()),
+                    nn.Linear(self.r, self.bottleneck_size, bias=self.biases),
+                    Activation_Function_Class(config.non_linearity.lower()),
+                    nn.Linear(self.bottleneck_size, self.num_weights_out, bias=self.biases),
+                )
+            elif self.autoencoder_arch == "LbL":
                 self.f = nn.Sequential(
                     nn.Linear(self.hidden_size_in, self.r, bias=self.biases),
                     nn.Linear(self.r, self.bottleneck_size, bias=self.biases),
@@ -128,18 +135,16 @@ class LoRA(nn.Module):
                     if layer.bias is not None:
                         nn.init.zeros_(layer.bias)
 
-            # Initialize LoRA parameters
-            std_dev = 1 / torch.sqrt(torch.tensor(self.r).float())
-            self.lora_A = nn.Parameter(torch.randn(lora_A_shape) * std_dev)
+            self.lora_A = nn.Parameter(torch.randn(lora_A_shape))
             self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
             nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
             nn.init.zeros_(self.lora_B)
 
             # Scaling configuration
-            if self.scaling is None or self.scaling <= 0:
+            if config.alpha is None:
                 self.scaling = 1.0
             elif isinstance(config.alpha, float) or isinstance(config.alpha, int):
-                self.scaling = float(config.alpha)
+                self.scaling = float(config.alpha) if config.alpha > 0 else 1.0
             elif config.alpha == "learnable":
                 self.scaling = nn.Parameter(torch.ones(1, dtype=torch.float32, requires_grad=True))
             else:
@@ -206,36 +211,33 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-
-        def lora(x):
-            return self.scaling * (x @ torch.t(self.lora_A) @ torch.t(self.lora_B))
-
-        def l2_normed(x):
-            return x / (x.norm(p=2, dim=1, keepdim=True) + 1e-9)
-
-        if self.full_calculation:
-            if hidden_states is None:
-                hidden_states = layer_input
-            hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
-            delta_w = torch.nan_to_num(self.f(self.lora_dropout(hidden_states)))
-            delta_w = lora(delta_w)
-            hidden_states = l2_normed(delta_w)
-        else:
-            scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
-            if hidden_states is None:
-                hidden_states = scaling_vector
+        with torch.cuda.amp.autocast():
+            # this may be a bit hard to follow because of optimizations
+            if self.full_calculation:
+                if hidden_states is None:
+                    hidden_states = layer_input
+                torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0, out=hidden_states)
+                torch.nan_to_num(self.f(self.lora_dropout(hidden_states)), out=hidden_states)
+                hidden_states = hidden_states @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+                hidden_states.mul_(self.scaling)
+                norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
+                hidden_states.div_(norm)
             else:
-                hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
-                hidden_states = hidden_states * scaling_vector
+                scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
+                if hidden_states is None:
+                    hidden_states = scaling_vector
+                else:
+                    torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0, out=hidden_states)
+                    hidden_states.mul_(scaling_vector)
 
-        if self.use_gating:
-            gate = torch.sigmoid(self.gate(layer_input))
-            gate = torch.mean(gate, dim=1).unsqueeze(-1)
-            hidden_states = hidden_states * gate
-        else:
-            gate = None
+            if self.use_gating:
+                gate = torch.sigmoid(self.gate(layer_input))
+                gate = torch.mean(gate, dim=1).unsqueeze(-1)
+                hidden_states.mul_(gate)
+            else:
+                gate = None
 
-        return hidden_states, gate
+            return hidden_states, gate
 
 
 class IA3(nn.Module):
