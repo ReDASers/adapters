@@ -215,8 +215,7 @@ class LoRA(nn.Module):
         if self.full_calculation:
             if hidden_states is None:
                 hidden_states = layer_input
-            hidden_states = torch.nan_to_num(hidden_states)
-            delta_w = torch.nan_to_num(self.f(self.lora_dropout(hidden_states)))
+            delta_w = self.f(self.lora_dropout(torch.nan_to_num(hidden_states)))
             delta_w = self.scaling * (delta_w @ torch.t(self.lora_A) @ torch.t(self.lora_B))
             norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
             hidden_states = delta_w / norm
