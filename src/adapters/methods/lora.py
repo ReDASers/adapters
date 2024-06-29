@@ -211,33 +211,31 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-        with torch.cuda.amp.autocast():
-            # this may be a bit hard to follow because of optimizations
-            if self.full_calculation:
-                if hidden_states is None:
-                    hidden_states = layer_input
-                hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
-                hidden_states = self.f(self.lora_dropout(hidden_states))
-                hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
-                delta_w = self.scaling * (hidden_states @ torch.t(self.lora_A) @ torch.t(self.lora_B))
-                norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
-                hidden_states = delta_w / norm
+        # this may be a bit hard to follow because of optimizations
+        if self.full_calculation:
+            if hidden_states is None:
+                hidden_states = layer_input
+            x = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
+            delta_w = torch.nan_to_num(self.f(self.lora_dropout(x)), nan=0.0, posinf=1.0, neginf=-1.0)
+            delta_w = self.scaling * (delta_w @ torch.t(self.lora_A) @ torch.t(self.lora_B))
+            norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
+            hidden_states = delta_w / norm
+        else:
+            scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
+            if hidden_states is None:
+                hidden_states = scaling_vector
             else:
-                scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
-                if hidden_states is None:
-                    hidden_states = scaling_vector
-                else:
-                    torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0, out=hidden_states)
-                    hidden_states = hidden_states * scaling_vector
+                x = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
+                hidden_states = x * scaling_vector
 
-            if self.use_gating:
-                gate = torch.sigmoid(self.gate(layer_input))
-                gate = torch.mean(gate, dim=1).unsqueeze(-1)
-                hidden_states = hidden_states * gate
-            else:
-                gate = None
+        if self.use_gating:
+            gate = torch.sigmoid(self.gate(layer_input))
+            gate = torch.mean(gate, dim=1).unsqueeze(-1)
+            hidden_states = hidden_states * gate
+        else:
+            gate = None
 
-            return hidden_states, gate
+        return hidden_states, gate
 
 
 class IA3(nn.Module):
