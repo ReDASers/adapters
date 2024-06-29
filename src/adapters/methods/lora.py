@@ -219,22 +219,21 @@ class LoRA(nn.Module):
                 hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
                 hidden_states = self.f(self.lora_dropout(hidden_states))
                 hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
-                hidden_states = hidden_states @ torch.t(self.lora_A) @ torch.t(self.lora_B)
-                hidden_states.mul_(self.scaling)
-                norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
-                hidden_states.div_(norm)
+                delta_w = self.scaling * (hidden_states @ torch.t(self.lora_A) @ torch.t(self.lora_B))
+                norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
+                hidden_states = delta_w / norm
             else:
                 scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
                 if hidden_states is None:
                     hidden_states = scaling_vector
                 else:
                     torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0, out=hidden_states)
-                    hidden_states.mul_(scaling_vector)
+                    hidden_states = hidden_states * scaling_vector
 
             if self.use_gating:
                 gate = torch.sigmoid(self.gate(layer_input))
                 gate = torch.mean(gate, dim=1).unsqueeze(-1)
-                hidden_states.mul_(gate)
+                hidden_states = hidden_states * gate
             else:
                 gate = None
 
