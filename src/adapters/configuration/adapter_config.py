@@ -472,7 +472,7 @@ class LoRAConfig(AdapterConfig):
     autoencoder_arch: str = "NLbLN"
     bottleneck_size: Union[int, None] = None
     non_linearity: Union[str, None] = "swish"
-    biases: bool = False
+    biases: bool = True
 
 
 @dataclass(eq=False)
