@@ -218,7 +218,7 @@ class LoRA(nn.Module):
                     hidden_states = layer_input
                 torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0, out=hidden_states)
                 hidden_states = self.f(self.lora_dropout(hidden_states))
-                torch.nan_to_num(hidden_states, out=hidden_states)
+                hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
                 hidden_states = hidden_states @ torch.t(self.lora_A) @ torch.t(self.lora_B)
                 hidden_states.mul_(self.scaling)
                 norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
