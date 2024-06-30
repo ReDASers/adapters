@@ -213,42 +213,68 @@ class LoRA(nn.Module):
 
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         """Forward pass of the LoRA module.
-
+    
         Args:
             hidden_states (Optional[torch.Tensor]): Input tensor for hidden states.
             layer_input (torch.Tensor): Input tensor for the current layer.
-
+    
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-        # this may be a bit hard to follow because of optimizations
+        # This may be a bit hard to follow because of optimizations
+    
+        # Check if full calculation mode is enabled
         if self.full_calculation:
+            # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
+            
+            # Apply function f and handle NaNs in hidden_states
             delta_w = self.f(torch.nan_to_num(hidden_states))
+            
+            # Perform matrix multiplications with lora_A and lora_B
             delta_w = delta_w @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+            
+            # Normalize delta_w by its L2 norm
             norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
             hidden_states = delta_w / norm
+        
+        # Alternative calculation mode
         elif self.alt_calculation:
+            # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
+            
+            # If hidden_states is None, use scaling_vector instead
             if hidden_states is None:
                 hidden_states = scaling_vector
             else:
+                # Handle NaNs in hidden_states
                 delta_w = torch.nan_to_num(hidden_states)
+                
+                # If L2 scaling is enabled, normalize delta_w by its L2 norm
                 if self.l2_scaling:
                     norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
                     delta_w = delta_w / norm
                 
+                # Multiply delta_w by scaling_vector
                 hidden_states = delta_w * scaling_vector
-
+    
+        # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
+            # Compute gate values using a sigmoid function applied to the layer input
             gate = torch.sigmoid(self.gate(layer_input))
+            
+            # Average gate values across the second dimension and add a new dimension at the end
             gate = torch.mean(gate, dim=1).unsqueeze(-1)
+            
+            # Multiply hidden_states by the gate values
             hidden_states = hidden_states * gate
         else:
             gate = None
-
+    
+        # Return the processed hidden_states and gate
         return hidden_states, gate
+    
 
 
 class IA3(nn.Module):

@@ -425,7 +425,6 @@ class PromptTuningConfig(AdapterConfig):
     random_uniform_scale = 0.5
     combine: str = "prefix"
 
-
 @dataclass(eq=False)
 class LoRAConfig(AdapterConfig):
     """
@@ -439,8 +438,8 @@ class LoRAConfig(AdapterConfig):
         output_lora (bool, optional): If True, adds LoRA to the output MLP weights of a model. Defaults to False.
         leave_out (List[int], optional): List of layer IDs (starting at 0) where no adapter modules should be added.
         r (int, optional): Rank of the LoRA layer. Defaults to 64.
-        alpha (Union[float, str, None], optional): Hyperparameter for scaling the LoRA reparametrization. Can be a float,
-            an integer, or "learnable" to make it a trainable parameter. Defaults to 1.0.
+        alpha (Union[float, None], optional): Hyperparameter for scaling the LoRA reparametrization. Our implementation
+            does not use alpha, it is the equivalent of setting alpha=r in the original paper. Defaults to None.
         dropout (float, optional): Dropout rate used in the LoRA layer. Defaults to 0.0.
         attn_matrices (List[str], optional): Matrices of the self-attention module to adapt. Can contain "q" (query),
             "k" (key), and "v" (value). Defaults to ["v", "k"].
@@ -451,32 +450,65 @@ class LoRAConfig(AdapterConfig):
             Note: Modules with use_gating=True cannot be merged using `merge_adapter()`.
         autoencoder_arch (str, optional): Architecture of the autoencoder. Options are "NLN", "NLbN", "NLbLN", "NLbNLN", or "LbL".
             Defaults to "NLbLN". This describes the number and configuration of the layers in the autoencoder. A and B are omitted,
-            since they are ubiquous in all configurations. N stands for a nonlinear activation, L for a linear layer, Lb for a linear
+            since they are ubiquitous in all configurations. N stands for a nonlinear activation, L for a linear layer, Lb for a linear
             layer with a bottleneck relative to the other layers. Bottleneck layers have a size of `bottleneck_size`. Bottleneck is not 
-            meant literally, but in the autoencoder sense of the word; therefore, it can have less inputs and outputs than the layers 
-            before and after,  but it can also have more. It is only not a bottleneck if bottlenck_size == r, same as the layers arount it.
+            meant literally, but in the autoencoder sense of the word; therefore, it can have fewer inputs and outputs than the layers 
+            before and after, but it can also have more. It is only not a bottleneck if bottleneck_size == r, same as the layers around it.
         bottleneck_size (Union[int, None], optional): Size of the bottleneck layer. If None, bottleneck layer has r inputs and r outputs,
-            effectively meaning there is no bottleneck, since the number of inputs and outputs equalts to the layers before and after.
-        non_linearity (Union[str, None], optional): Non-linearity to use. Defaults to "swish".
-        biases (bool, optional): If True, includes biases in the LoRA layers, trading speed for model capacity.
-            Possibly increases accuracy/score when True. Defaults to False.
+            effectively meaning there is no bottleneck, since the number of inputs and outputs equals to the layers before and after.
+        non_linearity (Union[str, None], optional): Non-linearity to use. Defaults to "leakyrelu".
+        l2_scaling (bool, optional): If True, applies L2 scaling to the hidden weights during alternative computation. This is followed
+            by multiplying (possibly l2 normed, if l2_scaling=True) hidden weights by the learned scaling vector. Defaults to True.
     """
 
+    # this implementation does not use alpha, it is the equivalent of setting alpha=r in the original paper
+    alpha: Optional[float] = None
+
+    # Default architecture type for the LoRA configuration
     architecture: Optional[str] = "lora"
+    
+    # Flag to determine if LoRA should be applied to self-attention weights
     selfattn_lora: bool = True
+    
+    # Flag to determine if LoRA should be applied to intermediate MLP weights
     intermediate_lora: bool = True
+    
+    # Flag to determine if LoRA should be applied to output MLP weights
     output_lora: bool = True
+    
+    # List of locations where alternative LoRA configurations are applied
     alt_location: List[str] = field(default_factory=lambda: ["intermediate_lora", "output_lora"])
+    
+    # List of layer IDs where no adapter modules should be added
     leave_out: List[int] = field(default_factory=list)
+    
+    # Rank of the LoRA layer
     r: int = 8
+    
+    # Dropout rate for the LoRA layer
     dropout: float = 0.0
+    
+    # Matrices of the self-attention module to adapt
     attn_matrices: List[str] = field(default_factory=lambda: ["v", "k"])
+    
+    # Mode of composition for the injected weights with the original model weights
     composition_mode: str = "add"
+    
+    # Flag to determine if a trainable gating module should be included
     use_gating: bool = False
+    
+    # Architecture of the autoencoder
     autoencoder_arch: str = "NLbNLN"
+    
+    # Size of the bottleneck layer
     bottleneck_size: Union[int, None] = 128
-    non_linearity: str = "leakyrelu" # gelu_pytorch_tanh - speed, swish - better results, silu - both
+    
+    # Type of non-linearity to use
+    non_linearity: str = "leakyrelu"  
+
+    # Flag for enabling L2 scaling
     l2_scaling: bool = True
+
 
 
 @dataclass(eq=False)
