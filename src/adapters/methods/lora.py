@@ -58,8 +58,8 @@ class LoRA(nn.Module):
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
-        self.bottleneck_size = int(self.r * 2) if config.bottleneck_size is None else int(config.bottleneck_size)
-        self.non_linearity = config.non_linearity if config.non_linearity is not None else "swish"
+        self.bottleneck_size = int(self.r) if config.bottleneck_size is None else int(config.bottleneck_size)
+        self.non_linearity = config.non_linearity 
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]  # Must equal to in for autoencoder
         self.location_key = location_key if location_key is not None else "lora"
@@ -131,9 +131,10 @@ class LoRA(nn.Module):
             # Initialize weights and biases for the linear layers
             for layer in self.f:
                 if isinstance(layer, nn.Linear):
-                    nn.init.kaiming_uniform_(layer.weight, a=math.sqrt(5))
+                    nn.init.kaiming_normal_(layer.weight, a=math.sqrt(5))
                     if layer.bias is not None:
                         nn.init.zeros_(layer.bias)
+                        
 
             self.lora_A = nn.Parameter(torch.randn(lora_A_shape))
             self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))

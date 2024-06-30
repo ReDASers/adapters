@@ -450,8 +450,13 @@ class LoRAConfig(AdapterConfig):
         use_gating (bool, optional): If True, includes a trainable gating module to control module activation. Defaults to False.
             Note: Modules with use_gating=True cannot be merged using `merge_adapter()`.
         autoencoder_arch (str, optional): Architecture of the autoencoder. Options are "NLN", "NLbN", "NLbLN", "NLbNLN", or "LbL".
-            Defaults to "NLbLN".
-        bottleneck_size (Union[int, None], optional): Size of the bottleneck layer. If None, defaults to 2 * r.
+            Defaults to "NLbLN". This describes the number and configuration of the layers in the autoencoder. A and B are omitted,
+            since they are ubiquous in all configurations. N stands for a nonlinear activation, L for a linear layer, Lb for a linear
+            layer with a bottleneck relative to the other layers. Bottleneck layers have a size of `bottleneck_size`. Bottleneck is not 
+            meant literally, but in the autoencoder sense of the word; therefore, it can have less inputs and outputs than the layers 
+            before and after,  but it can also have more. It is only not a bottleneck if bottlenck_size == r, same as the layers arount it.
+        bottleneck_size (Union[int, None], optional): Size of the bottleneck layer. If None, bottleneck layer has r inputs and r outputs,
+            effectively meaning there is no bottleneck, since the number of inputs and outputs equalts to the layers before and after.
         non_linearity (Union[str, None], optional): Non-linearity to use. Defaults to "swish".
         biases (bool, optional): If True, includes biases in the LoRA layers, trading speed for model capacity.
             Possibly increases accuracy/score when True. Defaults to False.
