@@ -9,17 +9,81 @@ from ..configuration import AdapterFusionConfig, BnConfig
 from ..context import ForwardContext
 
 
+class Swish_func(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, i):
+        result = i * torch.sigmoid(i)
+        ctx.save_for_backward(i)
+        return result
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        i = ctx.saved_variables[0]
+        sigmoid_i = torch.sigmoid(i)
+        return grad_output * (sigmoid_i * (1 + i * (1 - sigmoid_i)))
+    
+
+class FastSwish(nn.Module):
+    def __init__(self, **kwargs):
+        super().__init__()
+        pass
+
+    def forward(self, input_tensor):
+        return Swish_func.apply(input_tensor)
+
+class APTx(nn.Module):
+    def __init__(self, alpha:float = 1.0, beta:float = 0.5, gamma:float = 0.5):
+        super(APTx, self).__init__()
+        self.alpha = alpha
+        self.beta = beta
+        self.gamma = gamma
+
+    def forward(self, x):
+        tanh_beta_x = torch.tanh(self.beta * x)
+        phi_x = (self.alpha + tanh_beta_x) * self.gamma * x
+        return phi_x
+
+    def extra_repr(self):
+        return 'alpha={}, beta={}, gamma={}'.format(self.alpha, self.beta, self.gamma)
+
+
+class APTxp(nn.Module):
+    def __init__(self, alpha=1.0, beta=1.0, gamma=0.5, dtype=torch.float32):
+        super(APTxp, self).__init__()
+        self.alpha = alpha
+        self.gamma = gamma
+        self.beta = nn.Parameter(torch.tensor([beta], dtype=dtype))
+        
+    def forward(self, x):
+        tanh_beta_x = torch.tanh(self.beta / 2.0 * x)
+        phi_x = (self.alpha + tanh_beta_x) * self.gamma * x
+        return phi_x
+
+    def extra_repr(self):
+        return 'alpha={}, beta={}, gamma={}'.format(self.alpha.item(), self.beta.item(), self.gamma.item())
+
+
+
 class Activation_Function_Class(nn.Module):
     """
     Implementation of various activation function.
     """
 
-    def __init__(self, hidden_act):
+    def __init__(self, hidden_act: str):
         super().__init__()
-        if hidden_act.lower() == "leakyrelu":
+        act = hidden_act.lower()
+        if act == "leakyrelu":
             self.f = nn.functional.leaky_relu
+        elif act == "hardswish":
+            self.f = nn.functional.hardswish
+        elif act == "fastswish":
+            self.f = FastSwish()
+        elif act == "aptx":
+            self.f = APTx()
+        elif act == "aptxp":
+            self.f = APTxp()
         else:
-            self.f = get_activation(hidden_act.lower())
+            self.f = get_activation(act)
 
     def forward(self, x):
         return self.f(x)
