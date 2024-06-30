@@ -117,13 +117,16 @@ class LoRA(nn.Module):
         self.gate = nn.Linear(self.hidden_size_in, gating_heads) 
         nn.init.normal_(self.gate.weight, std=0.02)
 
-    def _setup_full_calculation(self, dropout: float = 0.0):
-        assert self.hidden_size_in == self.num_weights_out, "Input and output sizes must match for full calculation."
+    def _setup_dropout(self, dropout: float = 0.0):
         self.lora_dropout = nn.Dropout(p=dropout) if dropout > 0.0 else nn.Identity()
 
+    def _setup_full_calculation(self, dropout: float = 0.0):
+        assert self.hidden_size_in == self.num_weights_out, "Input and output sizes must match for full calculation."
+        self._setup_dropout(dropout)
         self.f = self._get_autoencoder_architecture()
         self._initialize_weights(self.f)
 
+    def _setup_lora_matrices(self):
         self.lora_A = nn.Parameter(torch.randn(self.r, self.hidden_size_in))
         self.lora_B = nn.Parameter(torch.zeros(self.num_weights_out, self.r))
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
@@ -140,7 +143,6 @@ class LoRA(nn.Module):
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.bottleneck_size),
                 Activation_Function_Class(self.non_linearity.lower()),
-                self.lora_dropout,
                 nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.num_weights_out),
@@ -190,15 +192,20 @@ class LoRA(nn.Module):
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
-
     @property
     def delta_w(self) -> torch.Tensor:
-        """Placeholder for delta_w calculation.
+        """Placeholder for delta_w calculation."""
+        return self._delta_w
+    
+    @delta_w.setter
+    def delta_w(self, value: torch.Tensor):
+        """Sets the delta_w value."""
+        self._delta_w = value
 
-        Raises:
-            NotImplementedError: Not available for new LoRA versions.
-        """
-        raise NotImplementedError("Delta_w is not available for new LoRA yet.")
+    @delta_w.deleter
+    def delta_w(self):
+        """Deletes the delta_w value."""
+        del self._delta_w
 
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
@@ -206,21 +213,16 @@ class LoRA(nn.Module):
         Args:
             weights (torch.Tensor): Existing weights.
             added (torch.Tensor): Weights to add.
-            scaling (float, optional): Scaling factor. Defaults to None.
+            scaling (float, optional): Scaling factor -- left for compatibility with the API. 
+                                       Not used in our implementation. Defaults to None. 
 
         Returns:
             torch.Tensor: Composed weights.
         """
-        if scaling is None:
-            scaling = 1.0
-
         if self.full_calculation:
-            return weights + added * scaling
-        elif self.alt_calculation:
-            return weights * (added * scaling)
-        elif self.noop:
-            return weights
-        else: raise ValueError("This type of composition operation is invalid or is not supported.")
+            return weights + added
+        return weights * added
+        
 
     def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
         """Inverts the composition operation between existing and injected weights.
@@ -234,11 +236,8 @@ class LoRA(nn.Module):
         """
         if self.full_calculation:
             return weights - added
-        elif self.alt_calculation:
-            return weights / added
-        elif self.noop:
-            return weights
-        else: raise ValueError("This type of composition operation is invalid or is not supported.")
+        return weights / added
+        
 
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         """Forward pass of the LoRA module.
@@ -251,10 +250,6 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         # This may be a bit hard to follow because of optimizations
-        if self.noop:
-            if hidden_states is None:
-                return layer_input, None
-            return hidden_states, None
         # Check if full calculation mode is enabled
         if self.full_calculation:
             # If hidden_states is None, use layer_input instead
@@ -270,7 +265,6 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
             hidden_states = delta_w / norm
-        
         # Alternative calculation mode
         elif self.alt_calculation:
             # Create scaling vector from lora_C and repeat it across batch size
@@ -290,9 +284,10 @@ class LoRA(nn.Module):
                 
                 # Multiply delta_w by scaling_vector
                 hidden_states = delta_w * scaling_vector
-        else:
+        elif self.noop:
             if hidden_states is None:
                 hidden_states = layer_input
+            
     
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
@@ -307,6 +302,7 @@ class LoRA(nn.Module):
         else:
             gate = None
     
+        self.delta_w = hidden_states
         # Return the processed hidden_states and gate
         return hidden_states, gate
     
