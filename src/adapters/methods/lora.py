@@ -80,11 +80,7 @@ class LoRA(nn.Module):
                 self.alt_location.append(loc)
             else:
                 raise ValueError(f"Unknown location key {loc} in alt_location.")
-            
-        # Gating mechanism setup
-        if self.use_gating:
-            self.gate = nn.Linear(self.hidden_size_in, gating_heads)
-            nn.init.normal_(self.gate.weight, std=0.02)
+
         # Check if full calculation can be performed or do we need to use alternative calculation
         if lora_A_shape[-1] == lora_B_shape[0] and self.location_key not in self.alt_location:
             self.full_calculation = True
@@ -93,8 +89,13 @@ class LoRA(nn.Module):
         else:
             self.noop = True
             self.use_gating = True
-            self.gate = 0.0
+           
+        # Gating mechanism setup
+        if self.use_gating:
+            self.gate = nn.Linear(self.hidden_size_in, gating_heads) if self.noop == False else torch.zeros(self.hidden_size_in, gating_heads, requires_grad=False)
+            nn.init.normal_(self.gate.weight, std=0.02)
 
+        # Setup mechnism for full calculation with autoencoder
         if self.full_calculation:
             # We should not get here if the input and output sizes do not match, so fail if they do not
             assert self.hidden_size_in == self.num_weights_out, "Input and output sizes must match for full calculation."
@@ -162,8 +163,9 @@ class LoRA(nn.Module):
             self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
             nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
             nn.init.zeros_(self.lora_B)
+
+        # Alternative configuration that employs scaling vector and l2 norm
         elif self.alt_calculation:
-            # Alternative configuration
             self.lora_C = nn.Parameter(torch.zeros(lora_B_shape[0], 1))
             nn.init.ones_(self.lora_C)
         else:
