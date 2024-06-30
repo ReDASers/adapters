@@ -29,7 +29,7 @@ except ImportError:
     bitsandbytes_available = False
 
 logger = logging.getLogger(__name__)
-
+logging.basicConfig(level=logging.WARNING)
 
 class LoRA(nn.Module):
     def __init__(
@@ -51,7 +51,6 @@ class LoRA(nn.Module):
             location_key (str, optional): Location key for LoRA. Defaults to None.
         """
         super().__init__()
-        # we should not get here if composition mode is not 'add', fail if it is not
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
         
         self.r = config.r
@@ -61,16 +60,32 @@ class LoRA(nn.Module):
         self.bottleneck_size = int(self.r) if config.bottleneck_size is None else int(config.bottleneck_size)
         self.non_linearity = config.non_linearity 
         self.hidden_size_in = lora_A_shape[-1]
-        self.num_weights_out = lora_B_shape[0]  # Must equal to in for autoencoder
+        self.num_weights_out = lora_B_shape[0]
+
         if location_key is not None: 
             self.location_key = location_key 
-        else: raise ValueError("Location key must be provided.")
+        else: 
+            raise ValueError("Location key must be provided.")
+        
         self.alt_location = []
         self.autoencoder_arch = config.autoencoder_arch
         self.full_calculation = self.alt_calculation = self.noop = False
         self.l2_scaling = config.l2_scaling
 
-        # Check if the location we plan to place alternative calculation is allowed
+        self._setup_alt_locations(config)
+        self._check_calculation_type(lora_A_shape, lora_B_shape)
+
+        if self.use_gating:
+            self._setup_gating(gating_heads)
+        
+        if self.full_calculation:
+            self._setup_full_calculation(dropout=config.dropout)
+        elif self.alt_calculation:
+            self._setup_alt_calculation()
+        else:
+            logging.warning("LoRA module is not configured for full or alternative calculation.")
+
+    def _setup_alt_locations(self, config):
         for loc in config.alt_location:
             if loc == "selfattn_lora" and config.selfattn_lora:
                 self.alt_location.append(loc)
@@ -81,95 +96,90 @@ class LoRA(nn.Module):
             else:
                 raise ValueError(f"Unknown location key {loc} in alt_location.")
 
-        # Check if full calculation can be performed or do we need to use alternative calculation
+    def _check_calculation_type(self, lora_A_shape, lora_B_shape):
         if lora_A_shape[-1] == lora_B_shape[0] and self.location_key not in self.alt_location:
             self.full_calculation = True
         elif self.location_key in self.alt_location:
             self.alt_calculation = True
         else:
             self.noop = True
-            self.use_gating = True
-           
-        # Gating mechanism setup
-        if self.use_gating:
-            self.gate = nn.Linear(self.hidden_size_in, gating_heads) if self.noop == False else torch.zeros(self.hidden_size_in, gating_heads, requires_grad=False)
-            nn.init.normal_(self.gate.weight, std=0.02)
 
-        # Setup mechnism for full calculation with autoencoder
-        if self.full_calculation:
-            # We should not get here if the input and output sizes do not match, so fail if they do not
-            assert self.hidden_size_in == self.num_weights_out, "Input and output sizes must match for full calculation."
-            # Optional dropout
-            self.lora_dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else nn.Identity()
+    def _setup_gating(self, gating_heads):
+        self.gate = nn.Linear(self.hidden_size_in, gating_heads) 
+        nn.init.normal_(self.gate.weight, std=0.02)
 
-            # Define different autoencoder architectures
-            if self.autoencoder_arch == "NLbNLN":
-                self.f = nn.Sequential(
-                    nn.Linear(self.hidden_size_in, self.r),
-                    Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.bottleneck_size),
-                    Activation_Function_Class(config.non_linearity.lower()),
-                    self.lora_dropout,
-                    nn.Linear(self.bottleneck_size, self.r),
-                    Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.num_weights_out),
-                )
-            elif self.autoencoder_arch == "NLbLN":
-                self.f = nn.Sequential(
-                    nn.Linear(self.hidden_size_in, self.r),
-                    Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.bottleneck_size),
-                    self.lora_dropout,
-                    nn.Linear(self.bottleneck_size, self.r),
-                    Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.num_weights_out),
-                )
-            elif self.autoencoder_arch == "NLN":
-                self.f = nn.Sequential(
-                    nn.Linear(self.hidden_size_in, self.r),
-                    Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.r),
-                    Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.num_weights_out),
-                )
-            elif self.autoencoder_arch == "NLbN":
-                self.f = nn.Sequential(
-                    nn.Linear(self.hidden_size_in, self.r),
-                    Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.bottleneck_size),
-                    self.lora_dropout,
-                    Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.bottleneck_size, self.num_weights_out),
-                )
-            elif self.autoencoder_arch == "LbL":
-                self.f = nn.Sequential(
-                    nn.Linear(self.hidden_size_in, self.r),
-                    nn.Linear(self.r, self.bottleneck_size),
-                    self.lora_dropout,
-                    nn.Linear(self.bottleneck_size, self.r),
-                    nn.Linear(self.r, self.num_weights_out),
-                )
-            else:
-                raise ValueError(f"Unknown autoencoder architecture: {self.autoencoder_arch}")
+    def _setup_full_calculation(self, dropout: float = 0.0):
+        assert self.hidden_size_in == self.num_weights_out, "Input and output sizes must match for full calculation."
+        self.lora_dropout = nn.Dropout(p=dropout) if dropout > 0.0 else nn.Identity()
 
-            # Initialize weights and biases for the linear layers
-            for layer in self.f:
-                if isinstance(layer, nn.Linear):
-                    nn.init.kaiming_normal_(layer.weight, a=math.sqrt(5))
-                    if layer.bias is not None:
-                        nn.init.zeros_(layer.bias)
+        self.f = self._get_autoencoder_architecture()
+        self._initialize_weights(self.f)
 
-            self.lora_A = nn.Parameter(torch.randn(lora_A_shape))
-            self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
-            nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
-            nn.init.zeros_(self.lora_B)
+        self.lora_A = nn.Parameter(torch.randn(self.r, self.hidden_size_in))
+        self.lora_B = nn.Parameter(torch.zeros(self.num_weights_out, self.r))
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+        nn.init.zeros_(self.lora_B)
 
-        # Alternative configuration that employs scaling vector and l2 norm
-        elif self.alt_calculation:
-            self.lora_C = nn.Parameter(torch.zeros(lora_B_shape[0], 1))
-            nn.init.ones_(self.lora_C)
-        else:
-            logging.warning("LoRA module is not configured for full or alternative calculation.")
+    def _setup_alt_calculation(self):
+        self.lora_C = nn.Parameter(torch.zeros(self.num_weights_out, 1))
+        nn.init.ones_(self.lora_C)
+
+    def _get_autoencoder_architecture(self):
+        architectures = {
+            "NLbNLN": [
+                nn.Linear(self.hidden_size_in, self.r),
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.r, self.bottleneck_size),
+                Activation_Function_Class(self.non_linearity.lower()),
+                self.lora_dropout,
+                nn.Linear(self.bottleneck_size, self.r),
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.r, self.num_weights_out),
+            ],
+            "NLbLN": [
+                nn.Linear(self.hidden_size_in, self.r),
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.r, self.bottleneck_size),
+                self.lora_dropout,
+                nn.Linear(self.bottleneck_size, self.r),
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.r, self.num_weights_out),
+            ],
+            "NLN": [
+                nn.Linear(self.hidden_size_in, self.r),
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.r, self.r),
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.r, self.num_weights_out),
+            ],
+            "NLbN": [
+                nn.Linear(self.hidden_size_in, self.r),
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.r, self.bottleneck_size),
+                self.lora_dropout,
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.bottleneck_size, self.num_weights_out),
+            ],
+            "LbL": [
+                nn.Linear(self.hidden_size_in, self.r),
+                nn.Linear(self.r, self.bottleneck_size),
+                self.lora_dropout,
+                nn.Linear(self.bottleneck_size, self.r),
+                nn.Linear(self.r, self.num_weights_out),
+            ],
+        }
+
+        try:
+            return nn.Sequential(*architectures[self.autoencoder_arch])
+        except KeyError:
+            raise ValueError(f"Unknown autoencoder architecture: {self.autoencoder_arch}")
+
+    def _initialize_weights(self, layers):
+        for layer in layers:
+            if isinstance(layer, nn.Linear):
+                nn.init.kaiming_normal_(layer.weight, a=math.sqrt(5))
+                if layer.bias is not None:
+                    nn.init.zeros_(layer.bias)
 
 
     @property
@@ -224,7 +234,8 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         # This may be a bit hard to follow because of optimizations
-    
+        if self.noop:
+            return hidden_states, None
         # Check if full calculation mode is enabled
         if self.full_calculation:
             # If hidden_states is None, use layer_input instead
@@ -260,6 +271,9 @@ class LoRA(nn.Module):
                 
                 # Multiply delta_w by scaling_vector
                 hidden_states = delta_w * scaling_vector
+        else:
+            if hidden_states is None:
+                hidden_states = layer_input
     
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
