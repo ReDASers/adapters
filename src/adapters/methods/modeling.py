@@ -9,70 +9,82 @@ from ..configuration import AdapterFusionConfig, BnConfig
 from ..context import ForwardContext
 
 
+# Custom activation functions // this logic should be handled in a separate file
+#######################################################################################################################
+
+
+# Define the SERF activation function class
 class SERF(nn.Module):
     def __init__(self, **kwargs):
         super().__init__()
 
+    # Forward pass for the SERF activation function
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return x * torch.erf(torch.log(1 + x.exp()))
 
+# Define a custom autograd function for Swish
 class Swish_func(torch.autograd.Function):
     @staticmethod
     def forward(ctx, i):
         result = i * torch.sigmoid(i)
-        ctx.save_for_backward(i)
+        ctx.save_for_backward(i)  # Save input for backward pass
         return result
 
     @staticmethod
     def backward(ctx, grad_output):
         i = ctx.saved_variables[0]
         sigmoid_i = torch.sigmoid(i)
+        # Compute gradient of the input using the saved tensor
         return grad_output * (sigmoid_i * (1 + i * (1 - sigmoid_i)))
-    
 
+# Define a module that uses the custom Swish function
 class FastSwish(nn.Module):
     def __init__(self, **kwargs):
         super().__init__()
         pass
 
+    # Forward pass using the custom Swish function
     def forward(self, input_tensor):
         return Swish_func.apply(input_tensor)
 
+# Define APTx activation function class with adjustable parameters
 class APTx(nn.Module):
-    def __init__(self, alpha:float = 1.0, beta:float = 0.5, gamma:float = 0.5):
+    def __init__(self, alpha: float = 1.0, beta: float = 0.5, gamma: float = 0.5):
         super(APTx, self).__init__()
         self.alpha = alpha
         self.beta = beta
         self.gamma = gamma
 
+    # Forward pass for the APTx activation function
     def forward(self, x):
         tanh_beta_x = torch.tanh(self.beta * x)
         phi_x = (self.alpha + tanh_beta_x) * self.gamma * x
         return phi_x
 
+    # Representation string for the APTx class
     def extra_repr(self):
         return 'alpha={}, beta={}, gamma={}'.format(self.alpha, self.beta, self.gamma)
 
 
+# Define APTxp activation function class with learnable beta parameter
 class APTxp(nn.Module):
     def __init__(self, alpha=1.0, beta=1.0, gamma=0.5, dtype=torch.bfloat16):
         super(APTxp, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
-        self.beta = nn.Parameter(torch.tensor([beta], dtype=dtype))
+        self.beta = nn.Parameter(torch.tensor([beta], dtype=dtype))  # Learnable parameter
         
+    # Forward pass for the APTxp activation function
     def forward(self, x):
         tanh_beta_x = torch.tanh(self.beta / 2.0 * x)
         phi_x = (self.alpha + tanh_beta_x) * self.gamma * x
         return phi_x
+    
 
-    def extra_repr(self):
-        return 'alpha={}, beta={}, gamma={}'.format(self.alpha.item(), self.beta.item(), self.gamma.item())
-
-
+# Define a general activation function class that can use various activation functions
 class Activation_Function_Class(nn.Module):
     """
-    Implementation of various activation function.
+    Implementation of various activation functions.
     """
 
     def __init__(self, hidden_act: str):
@@ -92,14 +104,25 @@ class Activation_Function_Class(nn.Module):
             self.f = nn.functional.mish
         elif act == "silu":
             self.f = nn.functional.silu
+        elif act == "selu":
+            self.f = nn.functional.selu
+        elif act == "celu":
+            self.f = nn.functional.celu
+        elif act == "elu":
+            self.f = nn.functional.elu
         elif act == "serf":
             self.f = SERF()
+        elif act == "prelu":
+            self.f = nn.PReLU()
+        elif act == "rrelu":
+            self.f = nn.RReLU()
         else:
-            self.f = get_activation(act)
+            self.f = get_activation(act)  # Assume get_activation is defined elsewhere
 
+    # Forward pass that applies the selected activation function
     def forward(self, x):
         return self.f(x)
-
+    
 
 # Single Adapter
 class Adapter(nn.Module):
