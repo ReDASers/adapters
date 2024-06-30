@@ -116,6 +116,18 @@ class Activation_Function_Class(nn.Module):
             self.f = nn.PReLU()
         elif act == "rrelu":
             self.f = nn.RReLU()
+        elif act == "linear":
+            self.f = nn.Identity()
+        elif act == "relu":
+            self.f = nn.functional.relu
+        elif act == "relu6":
+            self.f = nn.functional.relu6
+        elif act == "gelu":
+            self.f = nn.GELU()
+        elif act == "gelu_torch":
+            self.f = nn.functional.gelu(input, approximate="tanh")
+        elif act == "tanh":
+            self.f = nn.functional.tanh
         else:
             self.f = get_activation(act)  # Assume get_activation is defined elsewhere
 
