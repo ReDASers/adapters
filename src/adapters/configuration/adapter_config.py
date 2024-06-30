@@ -466,18 +466,17 @@ class LoRAConfig(AdapterConfig):
     selfattn_lora: bool = True
     intermediate_lora: bool = True
     output_lora: bool = True
-    alt_location: List[str] = field(default_factory=lambda: ["intermediate_lora"])
+    alt_location: List[str] = field(default_factory=lambda: ["intermediate_lora", "output_lora"])
     leave_out: List[int] = field(default_factory=list)
     r: int = 8
-    alpha: Union[float, str, None] = 1.0
     dropout: float = 0.0
     attn_matrices: List[str] = field(default_factory=lambda: ["v", "k"])
     composition_mode: str = "add"
     use_gating: bool = False
-    autoencoder_arch: str = "NLbLN"
+    autoencoder_arch: str = "NLbNLN"
     bottleneck_size: Union[int, None] = 128
     non_linearity: str = "leakyrelu" # gelu_pytorch_tanh - speed, swish - better results, silu - both
-    biases: bool = True
+    l2_scaling: bool = True
 
 
 @dataclass(eq=False)

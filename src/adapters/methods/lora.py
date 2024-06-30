@@ -63,15 +63,35 @@ class LoRA(nn.Module):
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]  # Must equal to in for autoencoder
         self.location_key = location_key if location_key is not None else "lora"
-        self.alt_location = config.alt_location
+        self.alt_location = []
         self.autoencoder_arch = config.autoencoder_arch
-        self.biases = config.biases # false for speed, true for accuracy
+        self.full_calculation = self.alt_calculation = self.noop = False
+        self.l2_scaling = config.l2_scaling
 
-        # Check if full calculation can be performed
+        # Check if the location we plan to place alternative calculation is allowed
+        for loc in config.alt_location:
+            if loc == "selfattn_lora" and config.selfattn_lora:
+                self.alt_location.append(loc)
+            elif loc == "intermediate_lora" and config.intermediate_lora:
+                self.alt_location.append(loc)
+            elif loc == "output_lora" and config.output_lora:
+                self.alt_location.append(loc)
+            else:
+                raise ValueError(f"Unknown location key {loc} in alt_location.")
+            
+        # Gating mechanism setup
+        if self.use_gating:
+            self.gate = nn.Linear(self.hidden_size_in, gating_heads)
+            nn.init.normal_(self.gate.weight, std=0.02)
+        # Check if full calculation can be performed or do we need to use alternative calculation
         if lora_A_shape[-1] == lora_B_shape[0] and self.location_key not in self.alt_location:
             self.full_calculation = True
+        elif self.location_key in self.alt_location:
+            self.alt_calculation = True
         else:
-            self.full_calculation = False
+            self.noop = True
+            self.use_gating = True
+            self.gate = 0.0
 
         if self.full_calculation:
             # We should not get here if the input and output sizes do not match, so fail if they do not
@@ -85,45 +105,45 @@ class LoRA(nn.Module):
             # Define different autoencoder architectures
             if self.autoencoder_arch == "NLbNLN":
                 self.f = nn.Sequential(
-                    nn.Linear(self.hidden_size_in, self.r, bias=self.biases),
+                    nn.Linear(self.hidden_size_in, self.r),
                     Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.bottleneck_size, bias=self.biases),
+                    nn.Linear(self.r, self.bottleneck_size),
                     Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.bottleneck_size, self.r, bias=self.biases),
+                    nn.Linear(self.bottleneck_size, self.r),
                     Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.num_weights_out, bias=self.biases),
+                    nn.Linear(self.r, self.num_weights_out),
                 )
             elif self.autoencoder_arch == "NLbLN":
                 self.f = nn.Sequential(
-                    nn.Linear(self.hidden_size_in, self.r, bias=self.biases),
+                    nn.Linear(self.hidden_size_in, self.r),
                     Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.bottleneck_size, bias=self.biases),
-                    nn.Linear(self.bottleneck_size, self.r, bias=self.biases),
+                    nn.Linear(self.r, self.bottleneck_size),
+                    nn.Linear(self.bottleneck_size, self.r),
                     Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.num_weights_out, bias=self.biases),
+                    nn.Linear(self.r, self.num_weights_out),
                 )
             elif self.autoencoder_arch == "NLN":
                 self.f = nn.Sequential(
-                    nn.Linear(self.hidden_size_in, self.r, bias=self.biases),
+                    nn.Linear(self.hidden_size_in, self.r),
                     Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.r, bias=self.biases),
+                    nn.Linear(self.r, self.r),
                     Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.num_weights_out, bias=self.biases),
+                    nn.Linear(self.r, self.num_weights_out),
                 )
             elif self.autoencoder_arch == "NLbN":
                 self.f = nn.Sequential(
-                    nn.Linear(self.hidden_size_in, self.r, bias=self.biases),
+                    nn.Linear(self.hidden_size_in, self.r),
                     Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.r, self.bottleneck_size, bias=self.biases),
+                    nn.Linear(self.r, self.bottleneck_size),
                     Activation_Function_Class(config.non_linearity.lower()),
-                    nn.Linear(self.bottleneck_size, self.num_weights_out, bias=self.biases),
+                    nn.Linear(self.bottleneck_size, self.num_weights_out),
                 )
             elif self.autoencoder_arch == "LbL":
                 self.f = nn.Sequential(
-                    nn.Linear(self.hidden_size_in, self.r, bias=self.biases),
-                    nn.Linear(self.r, self.bottleneck_size, bias=self.biases),
-                    nn.Linear(self.bottleneck_size, self.r, bias=self.biases),
-                    nn.Linear(self.r, self.num_weights_out, bias=self.biases),
+                    nn.Linear(self.hidden_size_in, self.r),
+                    nn.Linear(self.r, self.bottleneck_size),
+                    nn.Linear(self.bottleneck_size, self.r),
+                    nn.Linear(self.r, self.num_weights_out),
                 )
             else:
                 raise ValueError(f"Unknown autoencoder architecture: {self.autoencoder_arch}")
@@ -134,32 +154,18 @@ class LoRA(nn.Module):
                     nn.init.kaiming_normal_(layer.weight, a=math.sqrt(5))
                     if layer.bias is not None:
                         nn.init.zeros_(layer.bias)
-                        
 
             self.lora_A = nn.Parameter(torch.randn(lora_A_shape))
             self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
             nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
             nn.init.zeros_(self.lora_B)
-
-            # Scaling configuration
-            if config.alpha is None:
-                self.scaling = 1.0
-            elif isinstance(config.alpha, float) or isinstance(config.alpha, int):
-                self.scaling = float(config.alpha) if config.alpha > 0 else 1.0
-            elif config.alpha == "learnable":
-                self.scaling = nn.Parameter(torch.ones(1, dtype=torch.float32, requires_grad=True))
-            else:
-                raise ValueError(f"Unknown scaling (alpha) type: {config.alpha}")
-        else:
+        elif self.alt_calculation:
             # Alternative configuration
             self.lora_C = nn.Parameter(torch.zeros(lora_B_shape[0], 1))
             nn.init.ones_(self.lora_C)
-            self.scaling = 1.0
+        else:
+            logging.warning("LoRA module is not configured for full or alternative calculation.")
 
-        # Gating mechanism setup
-        if self.use_gating:
-            self.gate = nn.Linear(self.hidden_size_in, gating_heads)
-            nn.init.normal_(self.gate.weight, std=0.02)
 
     @property
     def delta_w(self) -> torch.Tensor:
@@ -182,7 +188,7 @@ class LoRA(nn.Module):
             torch.Tensor: Composed weights.
         """
         if scaling is None:
-            scaling = self.scaling
+            scaling = 1.0
 
         if self.full_calculation:
             return weights + added * scaling
@@ -199,8 +205,8 @@ class LoRA(nn.Module):
             torch.Tensor: Inverted weights.
         """
         if self.full_calculation:
-            return weights - added * self.scaling
-        return weights / (added * self.scaling)
+            return weights - added
+        return weights / added
 
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         """Forward pass of the LoRA module.
@@ -217,17 +223,20 @@ class LoRA(nn.Module):
             if hidden_states is None:
                 hidden_states = layer_input
             delta_w = self.f(self.lora_dropout(torch.nan_to_num(hidden_states)))
-            delta_w = self.scaling * (delta_w @ torch.t(self.lora_A) @ torch.t(self.lora_B))
+            delta_w = delta_w @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
             hidden_states = delta_w / norm
-        else:
+        elif self.alt_calculation:
             scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
             if hidden_states is None:
                 hidden_states = scaling_vector
             else:
                 delta_w = torch.nan_to_num(hidden_states)
-                norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
-                hidden_states = (delta_w / norm) * scaling_vector
+                if self.l2_scaling:
+                    norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
+                    delta_w = delta_w / norm
+                
+                hidden_states = delta_w * scaling_vector
 
         if self.use_gating:
             gate = torch.sigmoid(self.gate(layer_input))
