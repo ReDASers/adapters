@@ -62,7 +62,9 @@ class LoRA(nn.Module):
         self.non_linearity = config.non_linearity 
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]  # Must equal to in for autoencoder
-        self.location_key = location_key if location_key is not None else "lora"
+        if location_key is not None: 
+            self.location_key = location_key 
+        else: raise ValueError("Location key must be provided.")
         self.alt_location = []
         self.autoencoder_arch = config.autoencoder_arch
         self.full_calculation = self.alt_calculation = self.noop = False
@@ -97,10 +99,7 @@ class LoRA(nn.Module):
             # We should not get here if the input and output sizes do not match, so fail if they do not
             assert self.hidden_size_in == self.num_weights_out, "Input and output sizes must match for full calculation."
             # Optional dropout
-            if config.dropout > 0.0:
-                self.lora_dropout = nn.Dropout(p=config.dropout)
-            else:
-                self.lora_dropout = lambda x: x
+            self.lora_dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else nn.Identity()
 
             # Define different autoencoder architectures
             if self.autoencoder_arch == "NLbNLN":
@@ -109,6 +108,7 @@ class LoRA(nn.Module):
                     Activation_Function_Class(config.non_linearity.lower()),
                     nn.Linear(self.r, self.bottleneck_size),
                     Activation_Function_Class(config.non_linearity.lower()),
+                    self.lora_dropout,
                     nn.Linear(self.bottleneck_size, self.r),
                     Activation_Function_Class(config.non_linearity.lower()),
                     nn.Linear(self.r, self.num_weights_out),
@@ -118,6 +118,7 @@ class LoRA(nn.Module):
                     nn.Linear(self.hidden_size_in, self.r),
                     Activation_Function_Class(config.non_linearity.lower()),
                     nn.Linear(self.r, self.bottleneck_size),
+                    self.lora_dropout,
                     nn.Linear(self.bottleneck_size, self.r),
                     Activation_Function_Class(config.non_linearity.lower()),
                     nn.Linear(self.r, self.num_weights_out),
@@ -135,6 +136,7 @@ class LoRA(nn.Module):
                     nn.Linear(self.hidden_size_in, self.r),
                     Activation_Function_Class(config.non_linearity.lower()),
                     nn.Linear(self.r, self.bottleneck_size),
+                    self.lora_dropout,
                     Activation_Function_Class(config.non_linearity.lower()),
                     nn.Linear(self.bottleneck_size, self.num_weights_out),
                 )
@@ -142,6 +144,7 @@ class LoRA(nn.Module):
                 self.f = nn.Sequential(
                     nn.Linear(self.hidden_size_in, self.r),
                     nn.Linear(self.r, self.bottleneck_size),
+                    self.lora_dropout,
                     nn.Linear(self.bottleneck_size, self.r),
                     nn.Linear(self.r, self.num_weights_out),
                 )
