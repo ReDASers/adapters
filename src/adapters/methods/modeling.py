@@ -113,6 +113,8 @@ class Activation_Function_Class(nn.Module):
             self.f = nn.functional.mish
         elif act == "silu":
             self.f = nn.functional.silu
+        elif act == "serf":
+            self.f = SERF()
         else:
             self.f = get_activation(act)
 
