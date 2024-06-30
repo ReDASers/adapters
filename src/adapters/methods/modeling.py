@@ -9,6 +9,7 @@ from ..configuration import AdapterFusionConfig, BnConfig
 from ..context import ForwardContext
 
 
+# Custom Activation Functions
 class Swish_func(torch.autograd.Function):
     @staticmethod
     def forward(ctx, i):
@@ -48,7 +49,7 @@ class APTx(nn.Module):
 
 
 class APTxp(nn.Module):
-    def __init__(self, alpha=1.0, beta=1.0, gamma=0.5, dtype=torch.float32):
+    def __init__(self, alpha=1.0, beta=1.0, gamma=0.5, dtype=torch.bfloat16):
         super(APTxp, self).__init__()
         self.alpha = alpha
         self.gamma = gamma
@@ -61,7 +62,6 @@ class APTxp(nn.Module):
 
     def extra_repr(self):
         return 'alpha={}, beta={}, gamma={}'.format(self.alpha.item(), self.beta.item(), self.gamma.item())
-
 
 
 class Activation_Function_Class(nn.Module):
@@ -82,6 +82,10 @@ class Activation_Function_Class(nn.Module):
             self.f = APTx()
         elif act == "aptxp":
             self.f = APTxp()
+        elif act == "mish":
+            self.f = nn.functional.mish
+        elif act == "silu":
+            self.f = nn.functional.silu
         else:
             self.f = get_activation(act)
 
@@ -90,8 +94,6 @@ class Activation_Function_Class(nn.Module):
 
 
 # Single Adapter
-
-
 class Adapter(nn.Module):
     """
     Implementation of a sequential bottleneck adapter block.
