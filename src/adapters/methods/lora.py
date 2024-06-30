@@ -235,6 +235,8 @@ class LoRA(nn.Module):
         """
         # This may be a bit hard to follow because of optimizations
         if self.noop:
+            if hidden_states is None:
+                return layer_input, None
             return hidden_states, None
         # Check if full calculation mode is enabled
         if self.full_calculation:
