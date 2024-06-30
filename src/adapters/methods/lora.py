@@ -272,7 +272,7 @@ class LoRA(nn.Module):
             
             # If hidden_states is None, use scaling_vector instead
             if hidden_states is None:
-                hidden_states = scaling_vector
+                hidden_states = torch.nan_to_num(scaling_vector)
             else:
                 # Handle NaNs in hidden_states
                 delta_w = torch.nan_to_num(hidden_states)
@@ -286,13 +286,13 @@ class LoRA(nn.Module):
                 hidden_states = delta_w * scaling_vector
         elif self.noop:
             if hidden_states is None:
-                hidden_states = layer_input
+                hidden_states = torch.nan_to_num(layer_input)
             
     
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
             # Compute gate values using a sigmoid function applied to the layer input
-            gate = torch.sigmoid(self.gate(layer_input))
+            gate = torch.relu(self.gate(layer_input))
             
             # Average gate values across the second dimension and add a new dimension at the end
             gate = torch.mean(gate, dim=1).unsqueeze(-1)
