@@ -207,7 +207,11 @@ class LoRA(nn.Module):
 
         if self.full_calculation:
             return weights + added * scaling
-        return weights * (added * scaling)
+        elif self.alt_calculation:
+            return weights * (added * scaling)
+        elif self.noop:
+            return weights
+        else: raise ValueError("This type of composition operation is invalid or is not supported.")
 
     def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
         """Inverts the composition operation between existing and injected weights.
@@ -221,7 +225,11 @@ class LoRA(nn.Module):
         """
         if self.full_calculation:
             return weights - added
-        return weights / added
+        elif self.alt_calculation:
+            return weights / added
+        elif self.noop:
+            return weights
+        else: raise ValueError("This type of composition operation is invalid or is not supported.")
 
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         """Forward pass of the LoRA module.
