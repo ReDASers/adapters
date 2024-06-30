@@ -9,33 +9,12 @@ from ..configuration import AdapterFusionConfig, BnConfig
 from ..context import ForwardContext
 
 
-# Custom Activation Functions
-class SERF_func(torch.autograd.Function):
-    """The SERF activation function."""
-
-    @staticmethod
-    def forward(ctx, x: torch.Tensor) -> torch.Tensor:
-        """Performs a forward pass."""
-
-        result = x * torch.erf(torch.log(1 + x.exp()))
-        ctx.save_for_backward(x, result)
-        return result
-
-    @staticmethod
-    def backward(ctx, grad_output: torch.Tensor) -> torch.Tensor:
-        """Performs a backpropagation."""
-
-        x, result = ctx.saved_tensors
-        p = 2.0 / torch.pi**0.5 * (-(1 + x.exp()).log().square()).exp()
-        grad = p * torch.nn.functional.silu(x) + result / x
-        return grad_output * grad
-
 class SERF(nn.Module):
     def __init__(self, **kwargs):
         super().__init__()
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return SERF_func.apply(x)
+        return x * torch.erf(torch.log(1 + x.exp()))
 
 class Swish_func(torch.autograd.Function):
     @staticmethod
