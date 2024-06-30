@@ -73,7 +73,7 @@ class LoRA(nn.Module):
         self.l2_scaling = config.l2_scaling
 
         self._setup_alt_locations(config)
-        self._check_calculation_type(lora_A_shape, lora_B_shape)
+        self._check_calculation_type(config)
 
         if self.use_gating:
             self._setup_gating(gating_heads)
@@ -82,9 +82,11 @@ class LoRA(nn.Module):
             self._setup_full_calculation(dropout=config.dropout)
         elif self.alt_calculation:
             self._setup_alt_calculation()
-        else:
+        elif self.noop:
             logging.warning("LoRA module is not configured for full or alternative calculation.")
-
+        else:
+            raise ValueError("This type of configuration is invalid or is not supported.")
+        
     def _setup_alt_locations(self, config):
         for loc in config.alt_location:
             if loc == "selfattn_lora" and config.selfattn_lora:
@@ -96,13 +98,20 @@ class LoRA(nn.Module):
             else:
                 raise ValueError(f"Unknown location key {loc} in alt_location.")
 
-    def _check_calculation_type(self, lora_A_shape, lora_B_shape):
-        if lora_A_shape[-1] == lora_B_shape[0] and self.location_key not in self.alt_location:
-            self.full_calculation = True
-        elif self.location_key in self.alt_location:
-            self.alt_calculation = True
-        else:
+    def _check_calculation_type(self, config):
+        if (config.selfattn_lora == False and self.location_key == "selfattn_lora") or \
+           (config.intermediate_lora == False and self.location_key == "intermediate_lora") or \
+           (config.output_lora == False and self.location_key == "output_lora"):
+            logging.warning(f"LoRA module  has location key {self.location_key} but is not enabled in config.")
             self.noop = True
+            return
+        if self.location_key not in self.alt_location:
+            if self.hidden_size_in == self.num_weights_out:
+                self.full_calculation = True
+            else:
+                self.alt_calculation = True
+        else:
+            self.alt_calculation = True
 
     def _setup_gating(self, gating_heads):
         self.gate = nn.Linear(self.hidden_size_in, gating_heads) 
