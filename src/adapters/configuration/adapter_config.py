@@ -471,7 +471,7 @@ class LoRAConfig(AdapterConfig):
     use_gating: bool = False
     autoencoder_arch: str = "NLbLN"
     bottleneck_size: Union[int, None] = None
-    non_linearity: Union[str, None] = "swish"
+    non_linearity: Union[str, None] = "gelu_pytorch_tanh" # gelu_pytorch_tanh - speed, swish - better results, silu - both
     biases: bool = True
 
 
