@@ -143,7 +143,7 @@ class LoRA(nn.Module):
         Returns:
             bool: True if advanced calculation is possible, False otherwise.
         """
-        if self.location_key not in self.alt_location and self.hidden_size_in == self.num_weights_out:
+        if self.location_key not in self.alt_location:
             return True
         return False
             
@@ -359,7 +359,7 @@ class LoRA(nn.Module):
                 
                 # If L2 scaling is enabled, normalize delta_w by its L2 norm
                 if self.l2_scaling:
-                    norm = delta_w.norm(p=1, dim=1, keepdim=True) + 1e-9
+                    norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
                     delta_w = delta_w / norm
                 
                 # Multiply delta_w by scaling_vector
