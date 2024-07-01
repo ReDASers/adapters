@@ -245,10 +245,10 @@ class LoRA(nn.Module):
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.bottleneck_size, self.hidden_size_in),
             ],
-            "LbL": [
+            "LbNL": [
                 nn.Linear(self.hidden_size_in, self.r),
                 nn.Linear(self.r, self.bottleneck_size),
-                self.lora_dropout,
+                Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.bottleneck_size, self.r),
                 nn.Linear(self.r, self.hidden_size_in),
             ],

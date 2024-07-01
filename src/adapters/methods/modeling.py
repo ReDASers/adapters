@@ -116,8 +116,6 @@ class Activation_Function_Class(nn.Module):
             self.f = nn.PReLU()
         elif act == "rrelu":
             self.f = nn.RReLU()
-        elif act == "linear":
-            self.f = nn.Identity()
         elif act == "relu":
             self.f = nn.functional.relu
         elif act == "relu6":
