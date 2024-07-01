@@ -145,10 +145,11 @@ class LoRA(nn.Module):
             bool: True if advanced calculation is possible, False otherwise.
         """
         if self.hidden_size_in == self.num_weights_out:
+            print("advanced ",self.location_key, str(self.hidden_size_in), str(self.num_weights_out))   
             if self.location_key in self.alt_location:
                 logger.warning(f"Advanced calculation performed in location {self.location_key}.")
             return True
-        
+        print("basic ",self.location_key, str(self.hidden_size_in), str(self.num_weights_out))   
         if self.location_key not in self.alt_location:
             logger.warning(f"Basic calculation performed in location {self.location_key}.")
         return False
