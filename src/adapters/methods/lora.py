@@ -5,8 +5,7 @@
 #  ------------------------------------------------------------------------------------------
 import logging
 import math
-from typing import Dict, List, NamedTuple, Optional, Union
-
+from typing import Dict, List, NamedTuple, Optional, Union, Literal
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -31,6 +30,12 @@ except ImportError:
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
 
+import torch
+import torch.nn as nn
+import math
+import logging
+from typing import Optional, Tuple, Literal
+
 class LoRA(nn.Module):
     def __init__(
         self,
@@ -51,8 +56,11 @@ class LoRA(nn.Module):
             location_key (str, optional): Location key for LoRA. Defaults to None.
         """
         super().__init__()
+        
+        # Ensure the composition mode is 'add'
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
         
+        # Initialize configuration parameters
         self.r = config.r
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
@@ -61,30 +69,63 @@ class LoRA(nn.Module):
         self.non_linearity = config.non_linearity 
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]
+        self._delta_w = None  # Placeholder for delta weights
 
+        # Check and set the location key
         if location_key is not None: 
             self.location_key = location_key 
         else: 
             raise ValueError("Location key must be provided.")
         
+        # Initialize additional attributes
         self.alt_location = []
         self.autoencoder_arch = config.autoencoder_arch
-        self.full_calculation = self.alt_calculation = self.noop = False
         self.l2_scaling = config.l2_scaling
+        self.mode: Literal["advanced", "basic"] = "basic"
 
+        # Validate the location key
+        if not self._is_valid_location_key(config):
+            raise ValueError(f"LoRA module has location key {self.location_key} but is not enabled in config.")
+        
+        # Setup alternative locations based on the config
         self._setup_alt_locations(config)
-        self._check_calculation_type(config)
         
-        if self.full_calculation:
+        # Determine calculation mode and setup accordingly
+        if self._check_advanced_calculation_possible():
+            self.mode = "advanced"
             self._setup_full_calculation(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape, dropout=config.dropout)
-        elif self.alt_calculation:
-            self._setup_alt_calculation()
-        elif self.noop:
-            logging.warning("LoRA module is not configured for full or alternative calculation.")
         else:
-            raise ValueError("This type of configuration is invalid or is not supported.")
-        
+            self.mode = "basic"
+            self._setup_basic_calculation()
+
+        # Setup gating mechanism if required
+        self._setup_gating_maybe(gating_heads)
+            
+
+    def _is_valid_location_key(self, config):
+        """
+        Checks if the given location key is valid based on the config.
+
+        Args:
+            config (LoRAConfig): Configuration object for LoRA settings.
+
+        Returns:
+            bool: True if the location key is valid, False otherwise.
+        """
+        if (config.selfattn_lora == False and self.location_key == "selfattn_lora") or \
+           (config.intermediate_lora == False and self.location_key == "intermediate_lora") or \
+           (config.output_lora == False and self.location_key == "output_lora"):
+            logging.warning(f"LoRA module has location key {self.location_key} but is not enabled in config.")
+            return False
+        return True
+     
     def _setup_alt_locations(self, config):
+        """
+        Sets up alternative locations based on the config.
+
+        Args:
+            config (LoRAConfig): Configuration object for LoRA settings.
+        """
         for loc in config.alt_location:
             if loc == "selfattn_lora" and config.selfattn_lora:
                 self.alt_location.append(loc)
@@ -95,47 +136,74 @@ class LoRA(nn.Module):
             else:
                 raise ValueError(f"Unknown location key {loc} in alt_location.")
 
-    def _check_calculation_type(self, config):
-        if (config.selfattn_lora == False and self.location_key == "selfattn_lora") or \
-           (config.intermediate_lora == False and self.location_key == "intermediate_lora") or \
-           (config.output_lora == False and self.location_key == "output_lora"):
-            logging.warning(f"LoRA module  has location key {self.location_key} but is not enabled in config.")
-            self.noop = True
-            return
-        if self.location_key not in self.alt_location:
-            if self.hidden_size_in == self.num_weights_out:
-                self.full_calculation = True
-            else:
-                self.alt_calculation = True
-        else:
-            self.alt_calculation = True
+    def _check_advanced_calculation_possible(self):
+        """
+        Checks if advanced calculation is possible based on the current configuration.
 
-    def _setup_gating(self, gating_heads):
-        self.gate = nn.Linear(self.hidden_size_in, gating_heads) 
-        nn.init.normal_(self.gate.weight, std=0.02)
+        Returns:
+            bool: True if advanced calculation is possible, False otherwise.
+        """
+        if self.location_key not in self.alt_location and self.hidden_size_in == self.num_weights_out:
+            return True
+        return False
+            
+    def _setup_gating_maybe(self, gating_heads):
+        """
+        Sets up the gating mechanism if use_gating is enabled.
 
-    def _setup_dropout(self, dropout: float = 0.0):
-        self.lora_dropout = nn.Dropout(p=dropout) if dropout > 0.0 else nn.Identity()
+        Args:
+            gating_heads (int): Number of gating heads.
+        """
+        if self.use_gating:
+            self.gate = nn.Linear(self.hidden_size_in, gating_heads)
+            nn.init.normal_(self.gate.weight, std=0.02)
+
+    def _setup_basic_calculation(self):
+        """
+        Sets up the basic calculation mode by initializing LoRA parameters.
+        """
+        self.lora_C = nn.Parameter(torch.zeros(self.num_weights_out, 1))
+        nn.init.ones_(self.lora_C)
 
     def _setup_full_calculation(self, lora_A_shape, lora_B_shape, dropout: float = 0.0):
+        """
+        Sets up the full calculation mode by initializing LoRA matrices and other components.
+
+        Args:
+            lora_A_shape (tuple): Shape of the A matrix in LoRA.
+            lora_B_shape (tuple): Shape of the B matrix in LoRA.
+            dropout (float, optional): Dropout rate. Defaults to 0.0.
+        """
         assert self.hidden_size_in == self.num_weights_out, "Input and output sizes must match for full calculation."
         assert lora_A_shape[0] == lora_B_shape[1] and lora_A_shape[1] == lora_B_shape[0], "dimensions of A and B.T must match"
-        self._setup_dropout(dropout)
+        self.lora_dropout = nn.Dropout(p=dropout) if dropout > 0.0 else nn.Identity()
         self.f = self._get_autoencoder_architecture()
         self._initialize_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
 
     def _setup_lora_matrices(self, lora_A_shape, lora_B_shape):
+        """
+        Sets up the LoRA matrices A and B.
+
+        Args:
+            lora_A_shape (tuple): Shape of the A matrix in LoRA.
+            lora_B_shape (tuple): Shape of the B matrix in LoRA.
+        """
         self.lora_A = nn.Parameter(torch.randn(lora_A_shape))
         self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B)
 
-    def _setup_alt_calculation(self):
-        self.lora_C = nn.Parameter(torch.zeros(self.num_weights_out, 1))
-        nn.init.ones_(self.lora_C)
-
     def _get_autoencoder_architecture(self):
+        """
+        Retrieves the autoencoder architecture based on the configuration.
+
+        Returns:
+            nn.Sequential: The autoencoder architecture as a sequential model.
+
+        Raises:
+            ValueError: If the autoencoder architecture is unknown.
+        """
         architectures = {
             "NLbNLN": [
                 nn.Linear(self.hidden_size_in, self.r),
@@ -185,11 +253,18 @@ class LoRA(nn.Module):
             raise ValueError(f"Unknown autoencoder architecture: {self.autoencoder_arch}")
 
     def _initialize_weights(self, layers):
+        """
+        Initializes the weights of the given layers.
+
+        Args:
+            layers (nn.Sequential): Sequential model containing the layers.
+        """
         for layer in layers:
             if isinstance(layer, nn.Linear):
                 nn.init.kaiming_normal_(layer.weight, a=math.sqrt(5))
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
+
 
     @property
     def delta_w(self) -> torch.Tensor:
@@ -218,9 +293,12 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
-        if self.full_calculation:
+        if self.mode == "advanced":
             return weights + added
-        return weights * added
+        elif self.mode == "basic":
+            return weights * added
+        else:
+            raise ValueError(f"Unknown mode: {self.mode}")
         
 
     def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
@@ -233,9 +311,12 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Inverted weights.
         """
-        if self.full_calculation:
+        if self.mode == "advanced":
             return weights - added
-        return weights / added
+        elif self.mode == "basic":
+            return weights / added
+        else:
+            raise ValueError(f"Unknown mode: {self.mode}")
         
 
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
@@ -250,7 +331,7 @@ class LoRA(nn.Module):
         """
         # This may be a bit hard to follow because of optimizations
         # Check if full calculation mode is enabled
-        if self.full_calculation:
+        if self.mode == "advanced":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
@@ -265,29 +346,27 @@ class LoRA(nn.Module):
             norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
             hidden_states = delta_w / norm
         # Alternative calculation mode
-        elif self.alt_calculation:
+        elif self.mode == "basic":
             # Create scaling vector from lora_C and repeat it across batch size
-            scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
+            scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             
             # If hidden_states is None, use scaling_vector instead
             if hidden_states is None:
-                hidden_states = torch.nan_to_num(scaling_vector)
+                hidden_states = scaling_vector
             else:
                 # Handle NaNs in hidden_states
                 delta_w = torch.nan_to_num(hidden_states)
                 
                 # If L2 scaling is enabled, normalize delta_w by its L2 norm
                 if self.l2_scaling:
-                    norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
+                    norm = delta_w.norm(p=1, dim=1, keepdim=True) + 1e-9
                     delta_w = delta_w / norm
                 
                 # Multiply delta_w by scaling_vector
                 hidden_states = delta_w * scaling_vector
-        elif self.noop:
-            if hidden_states is None:
-                hidden_states = torch.nan_to_num(layer_input)
+        # should never happen
+        else: raise ValueError(f"Unknown mode: {self.mode}")
             
-    
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
             # Compute gate values using a sigmoid function applied to the layer input
@@ -300,12 +379,12 @@ class LoRA(nn.Module):
             hidden_states = hidden_states * gate
         else:
             gate = None
-    
+
+        # store in case needs to be retrieved by the API through accessing delta_w property
         self.delta_w = hidden_states
         # Return the processed hidden_states and gate
         return hidden_states, gate
     
-
 
 class IA3(nn.Module):
     def __init__(
