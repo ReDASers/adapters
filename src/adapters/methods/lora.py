@@ -34,7 +34,8 @@ import torch
 import torch.nn as nn
 import math
 import logging
-from typing import Optional, Tuple, Literal
+from typing import Optional, Literal
+
 
 class LoRA(nn.Module):
     def __init__(
@@ -143,8 +144,13 @@ class LoRA(nn.Module):
         Returns:
             bool: True if advanced calculation is possible, False otherwise.
         """
-        if self.location_key not in self.alt_location:
+        if self.hidden_size_in == self.num_weights_out:
+            if self.location_key in self.alt_location:
+                logger.warning(f"Advanced calculation performed in location {self.location_key}.")
             return True
+        
+        if self.location_key not in self.alt_location:
+            logger.warning(f"Basic calculation performed in location {self.location_key}.")
         return False
             
     def _setup_gating_maybe(self, gating_heads):
