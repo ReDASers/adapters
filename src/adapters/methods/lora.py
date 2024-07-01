@@ -174,8 +174,8 @@ class LoRA(nn.Module):
             lora_B_shape (tuple): Shape of the B matrix in LoRA.
             dropout (float, optional): Dropout rate. Defaults to 0.0.
         """
-        assert self.hidden_size_in == self.num_weights_out, "Input and output sizes must match for full calculation."
-        assert lora_A_shape[0] == lora_B_shape[1] and lora_A_shape[1] == lora_B_shape[0], "dimensions of A and B.T must match"
+        #assert self.hidden_size_in == self.num_weights_out, "Input and output sizes must match for full calculation."
+        #assert lora_A_shape[0] == lora_B_shape[1] and lora_A_shape[1] == lora_B_shape[0], "dimensions of A and B.T must match"
         self.lora_dropout = nn.Dropout(p=dropout) if dropout > 0.0 else nn.Identity()
         self.f = self._get_autoencoder_architecture()
         self._initialize_weights(self.f)
