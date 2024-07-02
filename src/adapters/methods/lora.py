@@ -145,13 +145,15 @@ class LoRA(nn.Module):
             bool: True if advanced calculation is possible, False otherwise.
         """
         if self.hidden_size_in == self.num_weights_out:
-            print("advanced ",self.location_key, str(self.hidden_size_in), str(self.num_weights_out))   
+            
             if self.location_key in self.alt_location:
-                logger.warning(f"Advanced calculation performed in location {self.location_key}.")
+                logger.warning(f"Advanced calculation performed in location {self.location_key}, \
+                                but this location key is listed as an alternative location.")
             return True
-        print("basic ",self.location_key, str(self.hidden_size_in), str(self.num_weights_out))   
+           
         if self.location_key not in self.alt_location:
-            logger.warning(f"Basic calculation performed in location {self.location_key}.")
+            logger.warning(f"Basic calculation performed in location {self.location_key},\
+                            but this key is not listed as an alternative location.")
         return False
             
     def _setup_gating_maybe(self, gating_heads):
@@ -268,7 +270,7 @@ class LoRA(nn.Module):
         """
         for layer in layers:
             if isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight, a=math.sqrt(5))
+                nn.init.kaiming_uniform_(layer.weight, a=math.sqrt(5))
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
