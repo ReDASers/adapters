@@ -267,7 +267,7 @@ class LoRA(nn.Module):
     def _initialize_weights(self, layers):
         """
         Initializes the weights of the given layers.
-
+        
         Args:
             layers (nn.Sequential): Sequential model containing the layers.
         """
@@ -349,14 +349,11 @@ class LoRA(nn.Module):
                 hidden_states = layer_input
             
             # Apply function f and handle NaNs in hidden_states
-            delta_w = self.f(torch.nan_to_num(hidden_states))
-            
             # Perform matrix multiplications with lora_A and lora_B
-            delta_w = delta_w @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+            dw = self.f(torch.nan_to_num(hidden_states)) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             
             # Normalize delta_w by its L2 norm
-            norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
-            hidden_states = delta_w / norm
+            hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
             
         # Alternative calculation mode
         elif self.mode == "basic":
@@ -367,16 +364,12 @@ class LoRA(nn.Module):
             if hidden_states is None:
                 hidden_states = scaling_vector
             else:
-                # Handle NaNs in hidden_states
-                delta_w = torch.nan_to_num(hidden_states)
+                hidden_states = torch.nan_to_num(hidden_states) * scaling_vector
                 
                 # If L2 scaling is enabled, normalize delta_w by its L2 norm
-                if self.l2_scaling:
-                    norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
-                    delta_w = delta_w / norm
-                
-                # Multiply delta_w by scaling_vector
-                hidden_states = delta_w * scaling_vector
+                #if self.l2_scaling:
+                #    hidden_states = hidden_states / (hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9)
+
             
         # should never happen
         else: raise ValueError(f"Unknown mode: {self.mode}")
