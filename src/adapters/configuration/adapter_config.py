@@ -476,8 +476,12 @@ class LoRAConfig(AdapterConfig):
     # Flag to determine if LoRA should be applied to output MLP weights
     output_lora: bool = True
     
-    # List of locations where alternative LoRA configurations are applied
-    alt_location: List[str] = field(default_factory=lambda: ["intermediate_lora", "output_lora"])
+    # List of additional locations LoRIA trains in the same way as in selfattn.
+    # Letting alt_location == [] is the equivlent of ["selfattn_lora"]
+    # If alt_location contains "intermediate_lora" or "output_lora", the  
+    # strategy used for self attention is applied to the respective layers, 
+    # overridng the default strategy of using custom configuration for each.
+    alt_location: List[str] = field(default_factory=list)
     
     # List of layer IDs where no adapter modules should be added
     leave_out: List[int] = field(default_factory=list)
@@ -505,9 +509,6 @@ class LoRAConfig(AdapterConfig):
     
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu"  
-
-    # Flag for enabling L2 scaling
-    l2_scaling: bool = False
 
 
 

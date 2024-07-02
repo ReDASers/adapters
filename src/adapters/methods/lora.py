@@ -82,7 +82,7 @@ class LoRA(nn.Module):
         self.alt_location = []
         self.autoencoder_arch = config.autoencoder_arch
         self.l2_scaling = config.l2_scaling
-        self.mode: Literal["advanced", "basic"] = "basic"
+        self.mode: Literal["autoencode", "scale", "decompose", "noop"] = "noop"
 
         # Validate the location key
         if not self._is_valid_location_key(config):
@@ -90,15 +90,18 @@ class LoRA(nn.Module):
         
         # Setup alternative locations based on the config
         self._setup_alt_locations(config)
-        
+        self.mode = self._choose_calculation_strategy()
         # Determine calculation mode and setup accordingly
-        if self._check_advanced_calculation_possible():
-            self.mode = "advanced"
+        if self.mode == "autoencode":
             self._setup_full_calculation(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape, dropout=config.dropout)
+        elif self.mode == "scale":
+            self._setup_intermediate_calculation()
+        elif self.mode == "decompose":
+            self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
+        elif self.mode == "noop":
+            pass
         else:
-            self.mode = "basic"
-            self._setup_basic_calculation()
-
+            raise ValueError(f"Unknown calculation strategy: {self.mode}")
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
             
@@ -116,7 +119,7 @@ class LoRA(nn.Module):
         if (config.selfattn_lora == False and self.location_key == "selfattn_lora") or \
            (config.intermediate_lora == False and self.location_key == "intermediate_lora") or \
            (config.output_lora == False and self.location_key == "output_lora"):
-            logging.warning(f"LoRA module has location key {self.location_key} but is not enabled in config.")
+            logging.warning(f"LoRIA module has location key {self.location_key} but is not enabled in config.")
             return False
         return True
      
@@ -137,19 +140,23 @@ class LoRA(nn.Module):
             else:
                 raise ValueError(f"Unknown location key {loc} in alt_location.")
 
-    def _check_advanced_calculation_possible(self):
+    def _choose_calculation_strategy(self):
         """
         Checks if advanced calculation is possible based on the current configuration.
 
         Returns:
             bool: True if advanced calculation is possible, False otherwise.
         """
-        if self.hidden_size_in == self.num_weights_out:
-            
-            if self.location_key in self.alt_location:
-                logger.warning(f"Advanced calculation performed in location {self.location_key}, \
-                                but this location key is listed as an alternative location.")
-            return True
+        if self.hidden_size_in == self.num_weights_out or self.location_key == "selfattn_lora":
+            return "autoencode"
+        
+        if self.hidden_size_in > self.num_weights_out or self.location_key == "intermediate_lora" :
+            return "scale"
+        
+        if self.hidden_size_in < self.num_weights_out or self.location_key == "output_lora":
+            return "decompose"
+        
+        return "noop"
            
         if self.location_key not in self.alt_location:
             logger.warning(f"Basic calculation performed in location {self.location_key},\
@@ -167,7 +174,7 @@ class LoRA(nn.Module):
             self.gate = nn.Linear(self.hidden_size_in, gating_heads)
             nn.init.normal_(self.gate.weight, std=0.02)
 
-    def _setup_basic_calculation(self):
+    def _setup_intermediate_calculation(self):
         """
         Sets up the basic calculation mode by initializing LoRA parameters.
         """
@@ -305,9 +312,9 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
-        if self.mode == "advanced":
+        if self.mode == "autoencode" or self.mode == "decompose":
             return weights + added
-        elif self.mode == "basic":
+        elif self.mode == "scale":
             return weights * added
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
@@ -323,9 +330,9 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Inverted weights.
         """
-        if self.mode == "advanced":
+        if self.mode == "autoencode" or self.mode == "decompose":
             return weights - added
-        elif self.mode == "basic":
+        elif self.mode == "scale":
             return weights / added
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
@@ -343,7 +350,7 @@ class LoRA(nn.Module):
         """
         # This may be a bit hard to follow because of optimizations
         # Check if full calculation mode is enabled
-        if self.mode == "advanced":
+        if self.mode == "autoencode":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
@@ -356,7 +363,7 @@ class LoRA(nn.Module):
             hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
             
         # Alternative calculation mode
-        elif self.mode == "basic":
+        elif self.mode == "scale":
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             
@@ -365,12 +372,19 @@ class LoRA(nn.Module):
                 hidden_states = scaling_vector
             else:
                 hidden_states = torch.nan_to_num(hidden_states) * scaling_vector
-                
-                # If L2 scaling is enabled, normalize delta_w by its L2 norm
-                #if self.l2_scaling:
-                #    hidden_states = hidden_states / (hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9)
-
+        elif self.mode == "decompose":
+            # If hidden_states is None, use layer_input instead
+            if hidden_states is None:
+                hidden_states = layer_input
             
+            # Perform matrix multiplications with lora_A and lora_B
+            hidden_states = torch.nan_to_num(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+            norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
+            hidden_states = hidden_states / norm
+        elif self.mode == "noop":
+            # If hidden_states is None, use layer_input instead
+            if hidden_states is None:
+                hidden_states = layer_input
         # should never happen
         else: raise ValueError(f"Unknown mode: {self.mode}")
         self.delta_w = hidden_states
