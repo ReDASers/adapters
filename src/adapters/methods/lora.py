@@ -146,6 +146,7 @@ class LoRA(nn.Module):
         Returns:
             bool: True if advanced calculation is possible, False otherwise.
         """
+        print(self.hidden_size_in, self.num_weights_out, self.location_key)
         if self.hidden_size_in == self.num_weights_out or self.location_key == "selfattn_lora":
             return "autoencode"
         
@@ -156,11 +157,6 @@ class LoRA(nn.Module):
             return "decompose"
         
         return "noop"
-           
-        if self.location_key not in self.alt_location:
-            logger.warning(f"Basic calculation performed in location {self.location_key},\
-                            but this key is not listed as an alternative location.")
-        return False
             
     def _setup_gating_maybe(self, gating_heads):
         """
