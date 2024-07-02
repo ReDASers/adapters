@@ -127,7 +127,7 @@ class Activation_Function_Class(nn.Module):
         elif act == "tanh":
             self.f = nn.functional.tanh
         else:
-            self.f = get_activation(act)  # Assume get_activation is defined elsewhere
+            self.f = get_activation(act)  # get_activation is a helper function from the transformers library
 
     # Forward pass that applies the selected activation function
     def forward(self, x):
