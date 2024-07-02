@@ -445,7 +445,6 @@ class LoRAConfig(AdapterConfig):
             "k" (key), and "v" (value). Defaults to ["v", "k"].
         composition_mode (str, optional): Defines how the injected weights are composed with the original model weights.
             Can be "add" for addition or "scale" for element-wise multiplication (only with r=1). Defaults to "add".
-        init_weights (str, optional): Initialization method for the weights of the LoRA modules. Can be "lora" or "bert".
         use_gating (bool, optional): If True, includes a trainable gating module to control module activation. Defaults to False.
             Note: Modules with use_gating=True cannot be merged using `merge_adapter()`.
         autoencoder_arch (str, optional): Architecture of the autoencoder. Options are "NLN", "NLbN", "NLbLN", "NLbNLN", or "LbL".
@@ -457,8 +456,6 @@ class LoRAConfig(AdapterConfig):
         bottleneck_size (Union[int, None], optional): Size of the bottleneck layer. If None, bottleneck layer has r inputs and r outputs,
             effectively meaning there is no bottleneck, since the number of inputs and outputs equals to the layers before and after.
         non_linearity (Union[str, None], optional): Non-linearity to use. Defaults to "leakyrelu".
-        l2_scaling (bool, optional): If True, applies L2 scaling to the hidden weights during alternative computation. This is followed
-            by multiplying (possibly l2 normed, if l2_scaling=True) hidden weights by the learned scaling vector. Defaults to True.
     """
 
     # this implementation does not use alpha, it is the equivalent of setting alpha=r in the original paper
