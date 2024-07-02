@@ -357,7 +357,7 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
             hidden_states = delta_w / norm
-            self.delta_w = hidden_states
+            
         # Alternative calculation mode
         elif self.mode == "basic":
             # Create scaling vector from lora_C and repeat it across batch size
@@ -377,10 +377,10 @@ class LoRA(nn.Module):
                 
                 # Multiply delta_w by scaling_vector
                 hidden_states = delta_w * scaling_vector
-            self.delta_w = self.lora_C.data
+            
         # should never happen
         else: raise ValueError(f"Unknown mode: {self.mode}")
-            
+        self.delta_w = hidden_states
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
             # Compute gate values using a sigmoid function applied to the layer input
