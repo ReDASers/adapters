@@ -81,7 +81,7 @@ class LoRA(nn.Module):
         # Initialize additional attributes
         self.alt_location = []
         self.autoencoder_arch = config.autoencoder_arch
-        self.mode: Literal["autoencode", "scale", "decompose", "noop"] = "noop"
+        self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = "noop"
 
         # Validate the location key
         if not self._is_valid_location_key(config):
@@ -90,18 +90,8 @@ class LoRA(nn.Module):
         # Setup alternative locations based on the config
         self._setup_alt_locations(config)
         self.mode = self._choose_calculation_strategy()
-        print(self.mode)
-        # Determine calculation mode and setup accordingly
-        if self.mode == "autoencode":
-            self._setup_full_calculation(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape, dropout=config.dropout)
-        elif self.mode == "scale":
-            self._setup_intermediate_calculation()
-        elif self.mode == "decompose":
-            self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-        elif self.mode == "noop":
-            pass
-        else:
-            raise ValueError(f"Unknown calculation strategy: {self.mode}")
+        self._setup_strategy(lora_A_shape, lora_B_shape, config)
+       
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
             
@@ -149,15 +139,23 @@ class LoRA(nn.Module):
         """
         print(self.hidden_size_in, self.num_weights_out, self.location_key)
         if self.hidden_size_in == self.num_weights_out or self.location_key == "selfattn_lora":
-            return "autoencode"
-        
+            return "attention"
         if self.hidden_size_in < self.num_weights_out or self.location_key == "intermediate_lora" :
-            return "scale"
-        
+            return "dense_fan_out"
         if self.hidden_size_in > self.num_weights_out or self.location_key == "output_lora":
-            return "decompose"
-        
+            return "dense_fan_in"
         return "noop"
+    
+    def _setup_strategy(self, lora_A_shape, lora_B_shape, config: LoRAConfig):
+         # Determine calculation mode and setup accordingly
+        if self.mode == "attention":
+            self._setup_full_calculation(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape, dropout=config.dropout)
+        elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
+            self._setup_intermediate_calculation()
+        elif self.mode == "noop":
+            pass
+        else:
+            raise ValueError(f"Unknown calculation strategy: {self.mode}")
             
     def _setup_gating_maybe(self, gating_heads):
         """
@@ -308,9 +306,9 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
-        if self.mode == "autoencode" or self.mode == "decompose":
+        if self.mode == "attention":
             return weights + added
-        elif self.mode == "scale":
+        elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             return weights * added
         elif self.mode == "noop":
             return weights
@@ -328,9 +326,9 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Inverted weights.
         """
-        if self.mode == "autoencode" or self.mode == "decompose":
+        if self.mode == "attention":
             return weights - added
-        elif self.mode == "scale":
+        elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             return weights / added
         elif self.mode == "noop":
             return weights
@@ -350,7 +348,7 @@ class LoRA(nn.Module):
         """
         # This may be a bit hard to follow because of optimizations
         # Check if full calculation mode is enabled
-        if self.mode == "autoencode":
+        if self.mode == "attention":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
@@ -363,7 +361,7 @@ class LoRA(nn.Module):
             hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
             
         # Alternative calculation mode
-        elif self.mode == "scale":
+        elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             
@@ -371,16 +369,14 @@ class LoRA(nn.Module):
             if hidden_states is None:
                 hidden_states = scaling_vector
             else:
-                hidden_states = torch.nan_to_num(hidden_states) * scaling_vector
-        elif self.mode == "decompose":
-            # If hidden_states is None, use layer_input instead
-            if hidden_states is None:
-                hidden_states = layer_input
-            
-            # Perform matrix multiplications with lora_A and lora_B
-            hidden_states = torch.nan_to_num(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
-            norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
-            hidden_states = hidden_states / norm
+                hidden_states = torch.nan_to_num(hidden_states)
+
+                if self.mode == "dense_fan_out":
+                    norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
+                    hidden_states = hidden_states / norm
+                    
+                hidden_states = hidden_states * scaling_vector
+        # No operation mode
         elif self.mode == "noop":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
