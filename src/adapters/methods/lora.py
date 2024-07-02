@@ -135,7 +135,6 @@ class LoRA(nn.Module):
         Returns:
             bool: True if advanced calculation is possible, False otherwise.
         """
-        print(self.hidden_size_in, self.num_weights_out, self.location_key)
         if self.hidden_size_in == self.num_weights_out or self.location_key == "selfattn_lora":
             return "attention"
         if self.hidden_size_in < self.num_weights_out or self.location_key == "intermediate_lora" :
