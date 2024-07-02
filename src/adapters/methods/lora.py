@@ -377,7 +377,7 @@ class LoRA(nn.Module):
                 
                 # Multiply delta_w by scaling_vector
                 hidden_states = delta_w * scaling_vector
-            self.delta_w = self.lora_C
+            self.delta_w = self.lora_C.data
         # should never happen
         else: raise ValueError(f"Unknown mode: {self.mode}")
             
