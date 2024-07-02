@@ -151,10 +151,10 @@ class LoRA(nn.Module):
         if self.hidden_size_in == self.num_weights_out or self.location_key == "selfattn_lora":
             return "autoencode"
         
-        if self.hidden_size_in > self.num_weights_out or self.location_key == "intermediate_lora" :
+        if self.hidden_size_in < self.num_weights_out or self.location_key == "intermediate_lora" :
             return "scale"
         
-        if self.hidden_size_in < self.num_weights_out or self.location_key == "output_lora":
+        if self.hidden_size_in > self.num_weights_out or self.location_key == "output_lora":
             return "decompose"
         
         return "noop"
