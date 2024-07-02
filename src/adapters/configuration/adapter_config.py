@@ -507,7 +507,7 @@ class LoRAConfig(AdapterConfig):
     non_linearity: str = "leakyrelu"  
 
     # Flag for enabling L2 scaling
-    l2_scaling: bool = True
+    l2_scaling: bool = False
 
 
 
