@@ -72,21 +72,16 @@ class LoRA(nn.Module):
         self.num_weights_out = lora_B_shape[0]
         self._delta_w = None  # Placeholder for delta weights
 
-        # Check and set the location key
-        if location_key is not None: 
-            self.location_key = location_key 
-        else: 
-            raise ValueError("Location key must be provided.")
-        
         # Initialize additional attributes
         self.alt_location = []
         self.autoencoder_arch = config.autoencoder_arch
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = "noop"
 
-        # Validate the location key
-        if not self._is_valid_location_key(config):
-            raise ValueError(f"LoRA module has location key {self.location_key} but is not enabled in config.")
+        # Validate and set the location key
+        if self._is_valid_location_key(config, location_key) == False:
+            raise ValueError(f"Location key {self.location_key} is not enabled in config or invalid.")
         
+        self.location_key = location_key 
         # Setup alternative locations based on the config
         self._setup_alt_locations(config)
         self.mode = self._choose_calculation_strategy()
@@ -96,7 +91,7 @@ class LoRA(nn.Module):
         self._setup_gating_maybe(gating_heads)
             
 
-    def _is_valid_location_key(self, config):
+    def _is_valid_location_key(self, config, location_key):
         """
         Checks if the given location key is valid based on the config.
 
@@ -106,9 +101,12 @@ class LoRA(nn.Module):
         Returns:
             bool: True if the location key is valid, False otherwise.
         """
-        if (config.selfattn_lora == False and self.location_key == "selfattn_lora") or \
-           (config.intermediate_lora == False and self.location_key == "intermediate_lora") or \
-           (config.output_lora == False and self.location_key == "output_lora"):
+        if location_key is None:
+            logging.warning("Location key must be provided, but is currently None.")
+            return False
+        if (config.selfattn_lora == False and location_key == "selfattn_lora") or \
+           (config.intermediate_lora == False and location_key == "intermediate_lora") or \
+           (config.output_lora == False and location_key == "output_lora"):
             logging.warning(f"LoRIA module has location key {self.location_key} but is not enabled in config.")
             return False
         return True
