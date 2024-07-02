@@ -90,6 +90,7 @@ class LoRA(nn.Module):
         # Setup alternative locations based on the config
         self._setup_alt_locations(config)
         self.mode = self._choose_calculation_strategy()
+        print(self.mode)
         # Determine calculation mode and setup accordingly
         if self.mode == "autoencode":
             self._setup_full_calculation(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape, dropout=config.dropout)
