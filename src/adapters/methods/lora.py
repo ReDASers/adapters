@@ -81,7 +81,6 @@ class LoRA(nn.Module):
         # Initialize additional attributes
         self.alt_location = []
         self.autoencoder_arch = config.autoencoder_arch
-        self.l2_scaling = config.l2_scaling
         self.mode: Literal["autoencode", "scale", "decompose", "noop"] = "noop"
 
         # Validate the location key
