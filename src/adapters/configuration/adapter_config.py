@@ -440,7 +440,6 @@ class LoRAConfig(AdapterConfig):
         r (int, optional): Rank of the LoRA layer. Defaults to 64.
         alpha (Union[float, None], optional): Hyperparameter for scaling the LoRA reparametrization. Our implementation
             does not use alpha, it is the equivalent of setting alpha=r in the original paper. Defaults to None.
-        dropout (float, optional): Dropout rate used in the LoRA layer. Defaults to 0.0.
         attn_matrices (List[str], optional): Matrices of the self-attention module to adapt. Can contain "q" (query),
             "k" (key), and "v" (value). Defaults to ["v", "k"].
         composition_mode (str, optional): Defines how the injected weights are composed with the original model weights.
@@ -485,9 +484,6 @@ class LoRAConfig(AdapterConfig):
     
     # Rank of the LoRA layer
     r: int = 8
-    
-    # Dropout rate for the LoRA layer
-    dropout: float = 0.0
     
     # Matrices of the self-attention module to adapt
     attn_matrices: List[str] = field(default_factory=lambda: ["v", "k"])

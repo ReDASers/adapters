@@ -90,7 +90,7 @@ class LoRA(nn.Module):
         # Setup alternative locations based on the config
         self._setup_alt_locations(config)
         self.mode = self._choose_calculation_strategy()
-        self._setup_strategy(lora_A_shape, lora_B_shape, config)
+        self._setup_strategy(lora_A_shape, lora_B_shape)
        
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
@@ -146,10 +146,10 @@ class LoRA(nn.Module):
             return "dense_fan_in"
         return "noop"
     
-    def _setup_strategy(self, lora_A_shape, lora_B_shape, config: LoRAConfig):
+    def _setup_strategy(self, lora_A_shape, lora_B_shape):
          # Determine calculation mode and setup accordingly
         if self.mode == "attention":
-            self._setup_full_calculation(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape, dropout=config.dropout)
+            self._setup_full_calculation(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             self._setup_intermediate_calculation()
         elif self.mode == "noop":
@@ -175,7 +175,7 @@ class LoRA(nn.Module):
         self.lora_C = nn.Parameter(torch.zeros(self.num_weights_out, 1))
         nn.init.ones_(self.lora_C)
 
-    def _setup_full_calculation(self, lora_A_shape, lora_B_shape, dropout: float = 0.0):
+    def _setup_full_calculation(self, lora_A_shape, lora_B_shape):
         """
         Sets up the full calculation mode by initializing LoRA matrices and other components.
 
@@ -186,7 +186,7 @@ class LoRA(nn.Module):
         """
         #assert self.hidden_size_in == self.num_weights_out, "Input and output sizes must match for full calculation."
         #assert lora_A_shape[0] == lora_B_shape[1] and lora_A_shape[1] == lora_B_shape[0], "dimensions of A and B.T must match"
-        self.lora_dropout = nn.Dropout(p=dropout) if dropout > 0.0 else nn.Identity()
+        #self.lora_dropout = nn.Dropout(p=dropout) if dropout > 0.0 else nn.Identity()
         self.f = self._get_autoencoder_architecture()
         self._initialize_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
@@ -220,7 +220,6 @@ class LoRA(nn.Module):
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.bottleneck_size),
                 Activation_Function_Class(self.non_linearity.lower()),
-                self.lora_dropout,
                 nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.hidden_size_in),
@@ -229,7 +228,6 @@ class LoRA(nn.Module):
                 nn.Linear(self.hidden_size_in, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.bottleneck_size),
-                self.lora_dropout,
                 nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.hidden_size_in),
