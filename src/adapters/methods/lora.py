@@ -315,6 +315,8 @@ class LoRA(nn.Module):
             return weights + added
         elif self.mode == "scale":
             return weights * added
+        elif self.mode == "noop":
+            return weights
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
         
@@ -333,6 +335,8 @@ class LoRA(nn.Module):
             return weights - added
         elif self.mode == "scale":
             return weights / added
+        elif self.mode == "noop":
+            return weights
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
         
