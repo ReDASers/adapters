@@ -227,7 +227,6 @@ class LoRA(nn.Module):
                 nn.Linear(self.hidden_size_in, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.bottleneck_size),
-                self.lora_dropout,
                 nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.hidden_size_in),
@@ -243,7 +242,6 @@ class LoRA(nn.Module):
                 nn.Linear(self.hidden_size_in, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.bottleneck_size),
-                self.lora_dropout,
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.bottleneck_size, self.hidden_size_in),
             ],
@@ -254,6 +252,11 @@ class LoRA(nn.Module):
                 nn.Linear(self.bottleneck_size, self.r),
                 nn.Linear(self.r, self.hidden_size_in),
             ],
+            "N": [
+                nn.Linear(self.hidden_size_in, self.r),
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.r, self.hidden_size_in),
+            ]
         }
 
         try:
@@ -270,7 +273,7 @@ class LoRA(nn.Module):
         """
         for layer in layers:
             if isinstance(layer, nn.Linear):
-                nn.init.kaiming_uniform_(layer.weight, a=math.sqrt(5))
+                nn.init.kaiming_normal_(layer.weight, a=math.sqrt(5))
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
@@ -354,6 +357,7 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             norm = delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9
             hidden_states = delta_w / norm
+            self.delta_w = hidden_states
         # Alternative calculation mode
         elif self.mode == "basic":
             # Create scaling vector from lora_C and repeat it across batch size
@@ -373,6 +377,7 @@ class LoRA(nn.Module):
                 
                 # Multiply delta_w by scaling_vector
                 hidden_states = delta_w * scaling_vector
+            self.delta_w = self.lora_C
         # should never happen
         else: raise ValueError(f"Unknown mode: {self.mode}")
             
@@ -389,8 +394,6 @@ class LoRA(nn.Module):
         else:
             gate = None
 
-        # store in case needs to be retrieved by the API through accessing delta_w property
-        self.delta_w = hidden_states
         # Return the processed hidden_states and gate
         return hidden_states, gate
     
