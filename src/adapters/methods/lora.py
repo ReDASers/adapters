@@ -368,11 +368,12 @@ class LoRA(nn.Module):
             else:
                 hidden_states = torch.nan_to_num(hidden_states)
 
-                if self.mode == "dense_fan_out":
-                    norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
-                    hidden_states = hidden_states / norm
-                    
-                hidden_states = hidden_states * scaling_vector
+                if self.mode == "dense_fan_in":
+                    context = torch.mean(hidden_states, dim=0, keepdim=True)
+                    hidden_states = hidden_states * scaling_vector * context
+                else:
+                    #norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
+                    hidden_states = hidden_states * scaling_vector
         # No operation mode
         elif self.mode == "noop":
             # If hidden_states is None, use layer_input instead

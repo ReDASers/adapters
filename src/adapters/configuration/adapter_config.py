@@ -495,10 +495,10 @@ class LoRAConfig(AdapterConfig):
     use_gating: bool = False
     
     # Architecture of the autoencoder
-    autoencoder_arch: str = "NLbNLN"
+    autoencoder_arch: str = "NLbLN"
     
     # Size of the bottleneck layer
-    bottleneck_size: Union[int, None] = 128
+    bottleneck_size: Union[int, None] = 96
     
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu"  
