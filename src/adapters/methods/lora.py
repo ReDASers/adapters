@@ -343,8 +343,8 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-        print(self.mode)
-        logging.info(f"LoRA mode: {self.mode}")
+        
+        
         # This may be a bit hard to follow because of optimizations
         # Check if full calculation mode is enabled
         if self.mode == "attention":
@@ -368,6 +368,7 @@ class LoRA(nn.Module):
             if hidden_states is None:
                 hidden_states = scaling_vector
             else:
+                print(self.mode)
                 hidden_states = torch.nan_to_num(hidden_states)
 
                 if self.mode == "dense_fan_in":
