@@ -372,9 +372,11 @@ class LoRA(nn.Module):
                     context = torch.mean(hidden_states, dim=0, keepdim=True)
                     norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                     hidden_states = (hidden_states / norm) * scaling_vector
+                    print(self.mode)
                 else:
                     norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
                     hidden_states = (hidden_states / norm) * scaling_vector
+                    print(self.mode)
         # No operation mode
         elif self.mode == "noop":
             # If hidden_states is None, use layer_input instead
