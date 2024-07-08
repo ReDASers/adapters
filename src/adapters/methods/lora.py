@@ -355,26 +355,26 @@ class LoRA(nn.Module):
             # Apply function f and handle NaNs in hidden_states
             # Perform matrix multiplications with lora_A and lora_B
             dw = self.f(torch.nan_to_num(hidden_states)) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
-            
+            l1_norm = dw.norm(p=1, dim=1, keepdim=True) + 1e-9
+            l2_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             # Normalize delta_w by its L2 norm
-            hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
+            hidden_states = dw / l1_norm / l2_norm
             
         # Alternative calculation mode
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             
-            # If hidden_states is None, use scaling_vector instead
+            # If hidden_states is None, use scaling_vector instead - this is the case most of the time
             if hidden_states is None:
                 hidden_states = scaling_vector
-            else:
+            else: # this should not be normally executed
                 hidden_states = torch.nan_to_num(hidden_states)
                 hidden_states = hidden_states * scaling_vector
             if self.mode == "dense_fan_in":
-                l1_norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
                 l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
-                hidden_states = hidden_states / l1_norm / l2_norm
-            else:
+                hidden_states = hidden_states / l2_norm
+            else: # if intermediate layer/fanout -> do elastic net
                 l1_norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
                 l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                 hidden_states = hidden_states / l1_norm / l2_norm
