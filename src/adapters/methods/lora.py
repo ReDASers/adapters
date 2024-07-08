@@ -371,7 +371,7 @@ class LoRA(nn.Module):
                 if self.mode == "dense_fan_in":
                     context = torch.mean(hidden_states, dim=0, keepdim=True)
                     norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
-                    hidden_states = (hidden_states / norm) * scaling_vector * context
+                    hidden_states = (hidden_states / norm) * scaling_vector
                 else:
                     norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
                     hidden_states = (hidden_states / norm) * scaling_vector
