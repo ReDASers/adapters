@@ -343,6 +343,8 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
+        print(self.mode)
+        logging.info(f"LoRA mode: {self.mode}")
         # This may be a bit hard to follow because of optimizations
         # Check if full calculation mode is enabled
         if self.mode == "attention":
@@ -372,11 +374,11 @@ class LoRA(nn.Module):
                     context = torch.mean(hidden_states, dim=0, keepdim=True)
                     norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                     hidden_states = (hidden_states / norm) * scaling_vector
-                    print(self.mode)
+                    
                 else:
                     norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
                     hidden_states = (hidden_states / norm) * scaling_vector
-                    print(self.mode)
+                    
         # No operation mode
         elif self.mode == "noop":
             # If hidden_states is None, use layer_input instead
