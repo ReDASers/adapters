@@ -73,7 +73,6 @@ class LoRA(nn.Module):
         self._delta_w = None  # Placeholder for delta weights
 
         # Initialize additional attributes
-        self.alt_location = []
         self.autoencoder_arch = config.autoencoder_arch
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = "noop"
 
@@ -82,8 +81,7 @@ class LoRA(nn.Module):
             raise ValueError(f"Location key {self.location_key} is not enabled in config or invalid.")
         
         self.location_key = location_key 
-        # Setup alternative locations based on the config
-        self._setup_alt_locations(config)
+        
         self.mode = self._choose_calculation_strategy()
         self._setup_strategy(lora_A_shape, lora_B_shape)
        
@@ -110,23 +108,6 @@ class LoRA(nn.Module):
             logging.warning(f"LoRIA module has location key {self.location_key} but is not enabled in config.")
             return False
         return True
-     
-    def _setup_alt_locations(self, config):
-        """
-        Sets up alternative locations based on the config.
-
-        Args:
-            config (LoRAConfig): Configuration object for LoRA settings.
-        """
-        for loc in config.alt_location:
-            if loc == "selfattn_lora" and config.selfattn_lora:
-                self.alt_location.append(loc)
-            elif loc == "intermediate_lora" and config.intermediate_lora:
-                self.alt_location.append(loc)
-            elif loc == "output_lora" and config.output_lora:
-                self.alt_location.append(loc)
-            else:
-                raise ValueError(f"Unknown location key {loc} in alt_location.")
 
     def _choose_calculation_strategy(self):
         """
@@ -373,9 +354,9 @@ class LoRA(nn.Module):
                 l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                 hidden_states = hidden_states / l2_norm
             else: # if intermediate layer/fanout -> do elastic net
-                l1_norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
+                #l1_norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
                 l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
-                hidden_states = hidden_states / l1_norm / l2_norm
+                hidden_states = hidden_states  / l2_norm
                     
                  
         # No operation mode

@@ -458,7 +458,7 @@ class LoRAConfig(AdapterConfig):
     """
 
     # this implementation does not use alpha, it is the equivalent of setting alpha=r in the original paper
-    alpha: Optional[float] = None
+    alpha: int = 1
 
     # Default architecture type for the LoRA configuration
     architecture: Optional[str] = "lora"
@@ -471,13 +471,6 @@ class LoRAConfig(AdapterConfig):
     
     # Flag to determine if LoRA should be applied to output MLP weights
     output_lora: bool = True
-    
-    # List of additional locations LoRIA trains in the same way as in selfattn.
-    # Letting alt_location == [] is the equivlent of ["selfattn_lora"]
-    # If alt_location contains "intermediate_lora" or "output_lora", the  
-    # strategy used for self attention is applied to the respective layers, 
-    # overridng the default strategy of using custom configuration for each.
-    alt_location: List[str] = field(default_factory=list)
     
     # List of layer IDs where no adapter modules should be added
     leave_out: List[int] = field(default_factory=list)
