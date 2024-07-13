@@ -352,15 +352,16 @@ class LoRA(nn.Module):
                 hidden_states = torch.nan_to_num(hidden_states)
                 hidden_states = hidden_states * scaling_vector
             if self.mode == "dense_fan_in":
-                l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
-                hidden_states = hidden_states / l2_norm
+                #l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
+                hidden_states = hidden_states #/ l2_norm
             else: # if intermediate layer/fanout -> do elastic net
                 l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                 if self.elastic_net:
                     l1_norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
                     hidden_states = hidden_states / l1_norm / l2_norm
-            #    else:
-            #        hidden_states = hidden_states  / l2_norm
+                else:
+                    hidden_states = hidden_states / l2_norm
+
                     
                  
         # No operation mode
