@@ -71,6 +71,7 @@ class LoRA(nn.Module):
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]
         self._delta_w = None  # Placeholder for delta weights
+        self.elastic_net = config.elastic_net
 
         # Initialize additional attributes
         self.autoencoder_arch = config.autoencoder_arch
@@ -354,9 +355,12 @@ class LoRA(nn.Module):
                 l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                 hidden_states = hidden_states / l2_norm
             else: # if intermediate layer/fanout -> do elastic net
-                #l1_norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
                 l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
-                hidden_states = hidden_states  / l2_norm
+                if self.elastic_net:
+                    l1_norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
+                    hidden_states = hidden_states / l1_norm / l2_norm
+                else:
+                    hidden_states = hidden_states  / l2_norm
                     
                  
         # No operation mode
