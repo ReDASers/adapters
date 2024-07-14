@@ -205,6 +205,7 @@ class LoRA(nn.Module):
                 nn.Linear(self.hidden_size_in, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.bottleneck_size),
+                nn.Dropout(p=0.05),
                 nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.hidden_size_in),
@@ -352,12 +353,7 @@ class LoRA(nn.Module):
             if self.mode == "dense_fan_in":
                 l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                 hidden_states = hidden_states / l2_norm
-            elif self.mode == "dense_fan_out":
-                pass
-            else:
-                raise ValueError(f"Unknown mode: {self.mode}")
-           
-                 
+            
         # No operation mode
         elif self.mode == "noop":
             # If hidden_states is None, use layer_input instead
