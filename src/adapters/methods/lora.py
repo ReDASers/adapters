@@ -71,8 +71,6 @@ class LoRA(nn.Module):
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]
         self._delta_w = None  # Placeholder for delta weights
-        self.elastic_net = config.elastic_net
-
         # Initialize additional attributes
         self.autoencoder_arch = config.autoencoder_arch
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = "noop"
@@ -354,14 +352,11 @@ class LoRA(nn.Module):
             if self.mode == "dense_fan_in":
                 l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                 hidden_states = hidden_states / l2_norm
-            else: # if intermediate layer/fanout -> do elastic net
-                
-                if self.elastic_net:
-                    l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
-                    hidden_states = hidden_states / l2_norm
-   
-
-                    
+            elif self.mode == "dense_fan_out":
+                pass
+            else:
+                raise ValueError(f"Unknown mode: {self.mode}")
+           
                  
         # No operation mode
         elif self.mode == "noop":
@@ -374,7 +369,7 @@ class LoRA(nn.Module):
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
             # Compute gate values using a sigmoid function applied to the layer input
-            gate = torch.relu(self.gate(layer_input))
+            gate = torch.sigmoid(self.gate(layer_input))
             
             # Average gate values across the second dimension and add a new dimension at the end
             gate = torch.mean(gate, dim=1).unsqueeze(-1)

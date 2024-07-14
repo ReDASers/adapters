@@ -496,7 +496,6 @@ class LoRAConfig(AdapterConfig):
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu"  
 
-    elastic_net: bool = False
 
 
 
