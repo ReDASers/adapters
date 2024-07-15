@@ -368,8 +368,8 @@ class LoRA(nn.Module):
                 elif self.norm_output == "l2":
                     l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                     hidden_states = hidden_states / l2_norm
-                else:
-                    hidden_states = hidden_states
+                
+                    
             
         # No operation mode
         elif self.mode == "noop":
