@@ -178,7 +178,7 @@ class LoRA(nn.Module):
         """
         self.lora_A = nn.Parameter(torch.randn(lora_A_shape))
         self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
-        nn.init.kaiming_uniform_(self.lora_A, a=1e-2)
+        nn.init.kaiming_normal_(self.lora_A, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B)
 
     def _get_autoencoder_architecture(self):
