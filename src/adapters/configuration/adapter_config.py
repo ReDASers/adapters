@@ -483,6 +483,8 @@ class LoRAConfig(AdapterConfig):
     
     # Mode of composition for the injected weights with the original model weights
     composition_mode: str = "add"
+
+    init_weights: str = "fan_in"
     
     # Flag to determine if a trainable gating module should be included
     use_gating: bool = False
@@ -495,6 +497,8 @@ class LoRAConfig(AdapterConfig):
     
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu"  
+
+    norm_output: bool = True
 
 
 

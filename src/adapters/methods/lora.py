@@ -70,6 +70,8 @@ class LoRA(nn.Module):
         self.non_linearity = config.non_linearity 
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]
+        self.init_mode = config.init_weights 
+        self.norm_output = config.norm_output
         self._delta_w = None  # Placeholder for delta weights
         # Initialize additional attributes
         self.autoencoder_arch = config.autoencoder_arch
@@ -178,8 +180,27 @@ class LoRA(nn.Module):
         """
         self.lora_A = nn.Parameter(torch.randn(lora_A_shape))
         self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
+        self._initialize_lora_matrices()
+
+    def _initialize_lora_matrices(self):
+        """
+        Initializes the LoRA matrices A and B.
+        """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B)
+
+    def _initialize_weights(self, layers):
+        """
+        Initializes the weights of the given layers.
+        
+        Args:
+            layers (nn.Sequential): Sequential model containing the layers.
+        """
+        for layer in layers:
+            if isinstance(layer, nn.Linear):
+                nn.init.kaiming_normal_(layer.weight, mode=self.init_mode, a=1e-2)
+                if layer.bias is not None:
+                    nn.init.zeros_(layer.bias)
 
     def _get_autoencoder_architecture(self):
         """
@@ -241,19 +262,6 @@ class LoRA(nn.Module):
             return nn.Sequential(*architectures[self.autoencoder_arch])
         except KeyError:
             raise ValueError(f"Unknown autoencoder architecture: {self.autoencoder_arch}")
-
-    def _initialize_weights(self, layers):
-        """
-        Initializes the weights of the given layers.
-        
-        Args:
-            layers (nn.Sequential): Sequential model containing the layers.
-        """
-        for layer in layers:
-            if isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=1e-2)
-                if layer.bias is not None:
-                    nn.init.zeros_(layer.bias)
 
 
     @property
@@ -349,7 +357,7 @@ class LoRA(nn.Module):
             else: # this should not be normally executed
                 hidden_states = torch.nan_to_num(hidden_states)
                 hidden_states = hidden_states * scaling_vector
-            if self.mode == "dense_fan_in":
+            if self.mode == "dense_fan_in" and self.norm_output:
                 l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                 hidden_states = hidden_states / l2_norm
             
