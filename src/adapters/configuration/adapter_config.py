@@ -484,6 +484,8 @@ class LoRAConfig(AdapterConfig):
     # Mode of composition for the injected weights with the original model weights
     composition_mode: str = "add"
 
+    dropout: float = 0.0
+
     init_weights: str = "fan_in"
     
     # Flag to determine if a trainable gating module should be included

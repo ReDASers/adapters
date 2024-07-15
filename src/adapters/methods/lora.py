@@ -81,6 +81,7 @@ class LoRA(nn.Module):
         if self._is_valid_location_key(config, location_key) == False:
             raise ValueError(f"Location key {self.location_key} is not enabled in config or invalid.")
         
+        self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         self.location_key = location_key 
         
         self.mode = self._choose_calculation_strategy()
@@ -342,7 +343,7 @@ class LoRA(nn.Module):
             
             # Apply function f and handle NaNs in hidden_states
             # Perform matrix multiplications with lora_A and lora_B
-            dw = self.f(torch.nan_to_num(hidden_states)) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+            dw = self.f(self.dropout(torch.nan_to_num(hidden_states))) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
             
