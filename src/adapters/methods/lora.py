@@ -361,7 +361,7 @@ class LoRA(nn.Module):
                 l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                 hidden_states = hidden_states / l2_norm
             elif self.mode == "dense_fan_out" and self.norm_output:
-                l1_norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
+                l1_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                 hidden_states = hidden_states / l1_norm
             
         # No operation mode
