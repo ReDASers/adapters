@@ -66,7 +66,7 @@ class LoRA(nn.Module):
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
-        self.bottleneck_size = int(self.r) if config.bottleneck_size is None else int(config.bottleneck_size)
+        self.bottleneck_size = int(self.r * config.alpha) 
         self.non_linearity = config.non_linearity 
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]
@@ -74,7 +74,7 @@ class LoRA(nn.Module):
         self.norm_output = config.norm_output
         self._delta_w = None  # Placeholder for delta weights
         # Initialize additional attributes
-        self.autoencoder_arch = config.autoencoder_arch
+        self.autoencoder_arch = "NLbLN"
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = "noop"
 
         # Validate and set the location key
@@ -360,9 +360,15 @@ class LoRA(nn.Module):
             if self.mode == "dense_fan_in":
                 l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                 hidden_states = hidden_states / l2_norm
-            elif self.mode == "dense_fan_out" and self.norm_output:
-                l1_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
-                hidden_states = hidden_states / l1_norm
+            else:
+                if self.norm_output == "l1":
+                    l1_norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
+                    hidden_states = hidden_states / l1_norm
+                elif self.norm_output == "l2":
+                    l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
+                    hidden_states = hidden_states / l2_norm
+                else:
+                    hidden_states = hidden_states
             
         # No operation mode
         elif self.mode == "noop":

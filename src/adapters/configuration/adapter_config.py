@@ -458,7 +458,7 @@ class LoRAConfig(AdapterConfig):
     """
 
     # this implementation does not use alpha, it is the equivalent of setting alpha=r in the original paper
-    alpha: int = 1
+    alpha: int = 12
 
     # Default architecture type for the LoRA configuration
     architecture: Optional[str] = "lora"
@@ -489,16 +489,10 @@ class LoRAConfig(AdapterConfig):
     # Flag to determine if a trainable gating module should be included
     use_gating: bool = False
     
-    # Architecture of the autoencoder
-    autoencoder_arch: str = "NLbLN"
-    
-    # Size of the bottleneck layer
-    bottleneck_size: Union[int, None] = 96
-    
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu"  
 
-    norm_output: bool = True
+    norm_output: str = "l2"
 
 
 
