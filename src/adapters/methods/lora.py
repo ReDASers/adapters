@@ -251,7 +251,7 @@ class LoRA(nn.Module):
         """
         for layer in layers:
             if isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight, a=math.sqrt(5))
+                nn.init.kaiming_normal_(layer.weight, a=1e-2)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
