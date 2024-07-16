@@ -359,15 +359,15 @@ class LoRA(nn.Module):
                 hidden_states = torch.nan_to_num(hidden_states)
                 hidden_states = hidden_states * scaling_vector
             if self.mode == "dense_fan_in":
-                l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
-                hidden_states = hidden_states / l2_norm
-            else:
                 if self.norm_output == "l1":
                     l1_norm = hidden_states.norm(p=1, dim=1, keepdim=True) + 1e-9
                     hidden_states = hidden_states / l1_norm
                 elif self.norm_output == "l2":
                     l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
                     hidden_states = hidden_states / l2_norm
+            else:
+                l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
+                hidden_states = hidden_states / l2_norm
                 
                     
             
