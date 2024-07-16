@@ -70,7 +70,6 @@ class LoRA(nn.Module):
         self.non_linearity = config.non_linearity 
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]
-        self.init_mode = config.init_weights 
         self.norm_output = config.norm_output
         self._delta_w = None  # Placeholder for delta weights
         # Initialize additional attributes
@@ -200,7 +199,7 @@ class LoRA(nn.Module):
         """
         for layer in layers:
             if isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight, mode=self.init_mode, a=1e-2)
+                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=1e-2)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
