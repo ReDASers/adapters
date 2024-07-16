@@ -152,7 +152,7 @@ class LoRA(nn.Module):
         Sets up the basic calculation mode by initializing LoRA parameters.
         """
         self.lora_C = nn.Parameter(torch.zeros(self.num_weights_out, 1))
-        self.lora_C = nn.init.uniform_(self.lora_C, a=0.99, std=1.01)
+        self.lora_C = nn.init.uniform_(self.lora_C, a=0.95, b=1.05)
         #nn.init.ones_(self.lora_C)
 
     def _setup_full_calculation(self, lora_A_shape, lora_B_shape):
