@@ -70,7 +70,6 @@ class LoRA(nn.Module):
         self.non_linearity = config.non_linearity 
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]
-        self.norm_output = config.norm_output
         self._delta_w = None  # Placeholder for delta weights
         # Initialize additional attributes
         self.autoencoder_arch = "NLbLN"
@@ -149,25 +148,24 @@ class LoRA(nn.Module):
 
     def _setup_scaling(self):
         """
-        Sets up the basic calculation mode by initializing LoRA parameters.
+        Sets up the basic calculation mode by initializing scaling parameters.
         """
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
         if self.mode == "dense_fan_in":
+            self.scalar_fan_in = nn.Parameter(torch.tensor(1.0))
             nn.init.uniform_(self.lora_C, a=0.99, b=1.01)  # Initialize around 1.0 with a small std deviation
         else:
+            self.scalar_fan_out = nn.Parameter(torch.tensor(1.0))
             nn.init.ones_(self.lora_C)
             
-        
-        #nn.init.ones_(self.lora_C)
 
     def _setup_full_calculation(self, lora_A_shape, lora_B_shape):
         """
-        Sets up the full calculation mode by initializing LoRA matrices and other components.
+        Sets up the full calculation mode by initializing autoencoder and other components.
 
         Args:
             lora_A_shape (tuple): Shape of the A matrix in LoRA.
             lora_B_shape (tuple): Shape of the B matrix in LoRA.
-            dropout (float, optional): Dropout rate. Defaults to 0.0.
         """
         #assert self.hidden_size_in == self.num_weights_out, "Input and output sizes must match for full calculation."
         #assert lora_A_shape[0] == lora_B_shape[1] and lora_A_shape[1] == lora_B_shape[0], "dimensions of A and B.T must match"
@@ -320,7 +318,10 @@ class LoRA(nn.Module):
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
-            
+            if self.mode == "dense_fan_in":
+                scaling_vector = scaling_vector * self.scalar_fan_in
+            else:
+                scaling_vector = scaling_vector * self.scalar_fan_out
             # If hidden_states is None, use scaling_vector instead - this is the case most of the time
             if hidden_states is None:
                 hidden_states = scaling_vector
@@ -328,9 +329,7 @@ class LoRA(nn.Module):
                 hidden_states = torch.nan_to_num(hidden_states)
                 hidden_states = hidden_states * scaling_vector
                 logger.warning("hidden_state "+ str(hidden_states[0])+" shape "+ str(hidden_states.shape))
-            if self.mode == "dense_fan_in":
-                norm = scaling_vector.norm(p=2, dim=1, keepdim=True) - 1e-6
-                hidden_states = hidden_states / norm
+            
                 
                     
             

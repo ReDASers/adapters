@@ -490,9 +490,7 @@ class LoRAConfig(AdapterConfig):
     use_gating: bool = False
     
     # Type of non-linearity to use
-    non_linearity: str = "leakyrelu"  
-
-    norm_output: str = "l2"
+    non_linearity: str = "leakyrelu" 
 
 
 
