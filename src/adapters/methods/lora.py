@@ -322,9 +322,9 @@ class LoRA(nn.Module):
                 # Ensure the scalar is positive using ReLU6
                 scalar_fan_in = F.relu6(self.scalar_fan_in) + 1e-12
                 # Ensure the scaling vector is non-negative
-                scaling_vector = F.relu6(scaling_vector) + 1e-12
+                scaling_vector = F.relu(scaling_vector)
                 # Apply the positive scalar and ensure non-negative scaling vector
-                scaling_vector = scaling_vector * scalar_fan_in
+                scaling_vector = scaling_vector * scalar_fan_in + 1e-6
             #else:
             #    scaling_vector = scaling_vector * self.scalar_fan_out
             # If hidden_states is None, use scaling_vector instead - this is the case most of the time
