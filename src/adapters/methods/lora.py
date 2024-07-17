@@ -221,7 +221,7 @@ class LoRA(nn.Module):
                 nn.Linear(self.r, self.bottleneck_size),
                 nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
-                torch.nn.utils.parametrizations.weight_norm(nn.Linear(self.r, self.hidden_size_in), name='weight', dim=0),
+                nn.Linear(self.r, self.hidden_size_in),
             ],
         }
 
