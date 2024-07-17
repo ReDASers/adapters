@@ -327,11 +327,11 @@ class LoRA(nn.Module):
             if self.mode == "dense_fan_in":
                 
                 if self.norm_output == "in" or self.norm_output == "both":
-                    l2_norm = hidden_states.norm(p=2, dim=-1, keepdim=True) + 1e-9
+                    l2_norm = hidden_states.norm(p=2, dim=0, keepdim=True) + 1e-9
                     hidden_states = hidden_states / l2_norm
             else:
                 if self.norm_output == "out" or self.norm_output == "both":
-                    l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
+                    l2_norm = hidden_states.norm(p=2, dim=-1, keepdim=True) + 1e-9
                     hidden_states = hidden_states / l2_norm
                 
                     
