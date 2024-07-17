@@ -130,7 +130,7 @@ class LoRA(nn.Module):
         if self.mode == "attention":
             self._setup_full_calculation(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
-            self._setup_intermediate_calculation()
+            self._setup_scaling()
         elif self.mode == "noop":
             pass
         else:
@@ -147,12 +147,13 @@ class LoRA(nn.Module):
             self.gate = nn.Linear(self.hidden_size_in, gating_heads)
             nn.init.normal_(self.gate.weight, std=0.02)
 
-    def _setup_intermediate_calculation(self):
+    def _setup_scaling(self):
         """
         Sets up the basic calculation mode by initializing LoRA parameters.
         """
-        self.lora_C = nn.Parameter(torch.zeros(self.num_weights_out, 1))
-        self.lora_C = nn.init.uniform_(self.lora_C, a=0.95, b=1.05)
+        self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
+        nn.init.normal_(self.lora_C, mean=1.0, std=0.02)  # Initialize around 1.0 with a small std deviation
+        self.lora_C = torch.nn.utils.parametrizations.weight_norm(self.lora_C, name='weight', dim=0)
         #nn.init.ones_(self.lora_C)
 
     def _setup_full_calculation(self, lora_A_shape, lora_B_shape):
@@ -223,40 +224,6 @@ class LoRA(nn.Module):
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.hidden_size_in),
             ],
-            "NLbLN": [
-                nn.Linear(self.hidden_size_in, self.r),
-                Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.bottleneck_size),
-                nn.Linear(self.bottleneck_size, self.r),
-                Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.hidden_size_in),
-            ],
-            "NLN": [
-                nn.Linear(self.hidden_size_in, self.r),
-                Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.r),
-                Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.hidden_size_in),
-            ],
-            "NLbN": [
-                nn.Linear(self.hidden_size_in, self.r),
-                Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.bottleneck_size),
-                Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.bottleneck_size, self.hidden_size_in),
-            ],
-            "LbNL": [
-                nn.Linear(self.hidden_size_in, self.r),
-                nn.Linear(self.r, self.bottleneck_size),
-                Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.bottleneck_size, self.r),
-                nn.Linear(self.r, self.hidden_size_in),
-            ],
-            "N": [
-                nn.Linear(self.hidden_size_in, self.r),
-                Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.hidden_size_in),
-            ]
         }
 
         try:
@@ -340,7 +307,6 @@ class LoRA(nn.Module):
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
-            
             # Apply function f and handle NaNs in hidden_states
             # Perform matrix multiplications with lora_A and lora_B
             dw = self.f(self.dropout(torch.nan_to_num(hidden_states))) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
@@ -358,9 +324,11 @@ class LoRA(nn.Module):
             else: # this should not be normally executed
                 hidden_states = torch.nan_to_num(hidden_states)
                 hidden_states = hidden_states * scaling_vector
+                logger.warning("hidden_state "+ str(hidden_states[0])+" shape "+ str(hidden_states.shape))
             if self.mode == "dense_fan_in":
+                
                 if self.norm_output == "in" or self.norm_output == "both":
-                    l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
+                    l2_norm = hidden_states.norm(p=2, dim=-1, keepdim=True) + 1e-9
                     hidden_states = hidden_states / l2_norm
             else:
                 if self.norm_output == "out" or self.norm_output == "both":
