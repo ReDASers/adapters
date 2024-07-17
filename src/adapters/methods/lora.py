@@ -320,8 +320,8 @@ class LoRA(nn.Module):
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             if self.mode == "dense_fan_in":
                 scaling_vector = scaling_vector * self.scalar_fan_in
-            else:
-                scaling_vector = scaling_vector * self.scalar_fan_out
+            #else:
+            #    scaling_vector = scaling_vector * self.scalar_fan_out
             # If hidden_states is None, use scaling_vector instead - this is the case most of the time
             if hidden_states is None:
                 hidden_states = scaling_vector
