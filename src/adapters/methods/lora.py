@@ -152,7 +152,11 @@ class LoRA(nn.Module):
         Sets up the basic calculation mode by initializing LoRA parameters.
         """
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
-        nn.init.uniform_(self.lora_C, a=0.99, b=1.01)  # Initialize around 1.0 with a small std deviation
+        if self.mode == "dense_fan_in":
+            nn.init.uniform_(self.lora_C, a=0.99, b=1.01)  # Initialize around 1.0 with a small std deviation
+        else:
+            nn.init.ones_(self.lora_C)
+            
         
         #nn.init.ones_(self.lora_C)
 
@@ -324,15 +328,7 @@ class LoRA(nn.Module):
                 hidden_states = torch.nan_to_num(hidden_states)
                 hidden_states = hidden_states * scaling_vector
                 logger.warning("hidden_state "+ str(hidden_states[0])+" shape "+ str(hidden_states.shape))
-            if self.mode == "dense_fan_in":
-                
-                if self.norm_output == "in" or self.norm_output == "both":
-                    l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
-                    hidden_states = hidden_states / l2_norm
-            else:
-                if self.norm_output == "out" or self.norm_output == "both":
-                    l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + 1e-9
-                    hidden_states = hidden_states / l2_norm
+           
                 
                     
             
