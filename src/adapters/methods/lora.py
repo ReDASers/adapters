@@ -153,7 +153,7 @@ class LoRA(nn.Module):
         """
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
         nn.init.normal_(self.lora_C, mean=1.0, std=0.02)  # Initialize around 1.0 with a small std deviation
-        self.lora_C = torch.nn.utils.parametrizations.weight_norm(self.lora_C, name='weight', dim=0)
+        
         #nn.init.ones_(self.lora_C)
 
     def _setup_full_calculation(self, lora_A_shape, lora_B_shape):
@@ -169,6 +169,7 @@ class LoRA(nn.Module):
         #assert lora_A_shape[0] == lora_B_shape[1] and lora_A_shape[1] == lora_B_shape[0], "dimensions of A and B.T must match"
         #self.lora_dropout = nn.Dropout(p=dropout) if dropout > 0.0 else nn.Identity()
         self.f = self._get_autoencoder_architecture()
+        self.f = torch.nn.utils.parametrizations.weight_norm(self.f, name='weight', dim=0)
         self._initialize_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
 
