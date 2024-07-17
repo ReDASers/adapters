@@ -215,11 +215,10 @@ class LoRA(nn.Module):
             ValueError: If the autoencoder architecture is unknown.
         """
         architectures = {
-            "NLbNLN": [
+            "NLbLN": [
                 nn.Linear(self.hidden_size_in, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.bottleneck_size),
-                Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.hidden_size_in),
