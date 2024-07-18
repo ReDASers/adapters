@@ -87,6 +87,8 @@ class LoRA(nn.Module):
        
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
+        # Initialize step count and start
+        self.num_steps = 0
             
 
     def _is_valid_location_key(self, config, location_key):
@@ -300,7 +302,7 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-        
+        self.num_steps += 1  # Increment the step count
         
         # This may be a bit hard to follow because of optimizations
         # Check if full calculation mode is enabled
@@ -320,23 +322,24 @@ class LoRA(nn.Module):
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             if self.mode == "dense_fan_in":
                 # Ensure the scalar is positive using ReLU6
-                scalar_fan_in = F.relu(self.scalar_fan_in) + 1e-6
+                decay_rate = 0.99 ** self.num_steps
+                scalar_fan_in = F.relu6(self.scalar_fan_in * decay_rate) + 1e-6
                 # Ensure the scaling vector is non-negative
                 scaling_vector = F.relu(scaling_vector)
                 # Apply the positive scalar and ensure non-negative scaling vector
                 scaling_vector = scaling_vector * scalar_fan_in + 1e-6
+            else:
+                scaling_vector = F.relu(scaling_vector) + 1e-6
             #else:
             #    scaling_vector = scaling_vector * self.scalar_fan_out
             # If hidden_states is None, use scaling_vector instead - this is the case most of the time
+            
             if hidden_states is None:
                 hidden_states = scaling_vector
             else: # this should not be normally executed
                 hidden_states = torch.nan_to_num(hidden_states)
                 hidden_states = hidden_states * scaling_vector
-                logger.warning("hidden_state "+ str(hidden_states[0])+" shape "+ str(hidden_states.shape))
-            
-                
-                    
+                logger.warning("hidden_state "+ str(hidden_states[0])+" shape "+ str(hidden_states.shape))    
             
         # No operation mode
         elif self.mode == "noop":
@@ -360,7 +363,7 @@ class LoRA(nn.Module):
             gate = None
 
         # Return the processed hidden_states and gate
-        return hidden_states, gate
+        return torch.nan_to_num(hidden_states), gate
     
 
 class IA3(nn.Module):
