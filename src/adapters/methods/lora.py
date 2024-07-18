@@ -71,6 +71,7 @@ class LoRA(nn.Module):
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]
         self._delta_w = None  # Placeholder for delta weights
+        self.init_weights = config.init_weights
         # Initialize additional attributes
         self.autoencoder_arch = "NLbLN"
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = "noop"
@@ -144,7 +145,7 @@ class LoRA(nn.Module):
         """
         if self.use_gating:
             self.gate = nn.Linear(self.hidden_size_in, gating_heads)
-            nn.init.normal_(self.gate.weight, std=0.02)
+            nn.init.normal_(self.gate.weight, std=0.03)
 
     def _setup_scaling(self):
         """
@@ -156,7 +157,29 @@ class LoRA(nn.Module):
             nn.init.uniform_(self.lora_C, a=0.99, b=1.01)  # Initialize around 1.0 with a small std deviation
         else:
             self.scalar_fan_out = nn.Parameter(torch.tensor(1.0))
-            nn.init.normal_(self.lora_C, mean=1, std=0.05)   # Initialize around 1.0 with a small std deviation
+            if self.init_weights == "bert":
+                nn.init.normal_(self.lora_C, mean=1, std=0.02)
+            elif self.init_weights == "bert_uniform":
+                nn.init.uniform_(self.lora_C, a=0.98, b=1.02)
+            elif self.init_weights == "ia3":
+                nn.init.ones_(self.lora_C)
+            elif self.init_weights == "uniform":
+                nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
+            elif self.init_weights == "uniform_large":
+                nn.init.uniform_(self.lora_C, a=0.97, b=1.03)
+            elif self.init_weights == "normal":
+                nn.init.normal_(self.lora_C, mean=1, std=0.01)   # Initialize around 1.0 with a small std deviation
+            elif self.init_weights == "normal_large":
+                nn.init.normal_(self.lora_C, mean=1, std=0.03)   # Initialize around 1.0 with a large std deviation
+            elif self.init_weights == "xavier":
+                nn.init.xavier_uniform_(self.lora_C)
+            elif self.init_weights == "kaiming":
+                nn.init.kaiming_uniform_(self.lora_C, a=math.sqrt(5))
+            elif self.init_weights == "lecun":
+                nn.init.uniform_(self.lora_C, a=-math.sqrt(3), b=math.sqrt(3))
+            else:
+                raise ValueError(f"Unknown init_weights type: {self.init_weights}")
+            
             
 
     def _setup_full_calculation(self, lora_A_shape, lora_B_shape):

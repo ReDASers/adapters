@@ -488,6 +488,8 @@ class LoRAConfig(AdapterConfig):
     
     # Flag to determine if a trainable gating module should be included
     use_gating: bool = False
+
+    init_weights: str = "ia3"
     
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu" 
