@@ -325,7 +325,7 @@ class LoRA(nn.Module):
                 # Apply the positive scalar and ensure non-negative scaling vector
                 scaling_vector = scaling_vector * scalar_fan_in + 1e-6
             else:
-                scaling_vector = F.relu(scaling_vector) + 1e-6
+                scaling_vector = F.relu(scaling_vector) + 1e-9
             #else:
             #    scaling_vector = scaling_vector * self.scalar_fan_out
             # If hidden_states is None, use scaling_vector instead - this is the case most of the time
@@ -359,7 +359,7 @@ class LoRA(nn.Module):
             gate = None
 
         # Return the processed hidden_states and gate
-        return torch.nan_to_num(hidden_states), gate
+        return hidden_states, gate
     
 
 class IA3(nn.Module):
