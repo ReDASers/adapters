@@ -335,7 +335,7 @@ class LoRA(nn.Module):
             else: # this should not be normally executed
                 hidden_states = torch.nan_to_num(hidden_states)
                 hidden_states = hidden_states * scaling_vector
-                logger.warning("hidden_state "+ str(hidden_states[0])+" shape "+ str(hidden_states.shape))    
+                logging.warning("hidden_state "+ str(hidden_states[0])+" shape "+ str(hidden_states.shape))    
             
         # No operation mode
         elif self.mode == "noop":
