@@ -156,7 +156,7 @@ class LoRA(nn.Module):
             nn.init.uniform_(self.lora_C, a=0.99, b=1.01)  # Initialize around 1.0 with a small std deviation
         else:
             self.scalar_fan_out = nn.Parameter(torch.tensor(1.0))
-            nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
+            nn.init.ones_(self.lora_C)
             
 
     def _setup_full_calculation(self, lora_A_shape, lora_B_shape):
