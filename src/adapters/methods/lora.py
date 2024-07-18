@@ -156,7 +156,7 @@ class LoRA(nn.Module):
             self.scalar_fan_in = nn.Parameter(torch.tensor(1.0))
             nn.init.uniform_(self.lora_C, a=0.99, b=1.01)  # Initialize around 1.0 with a small std deviation
         else:
-            self.scalar_fan_out = nn.Parameter(torch.tensor(1.0))
+            self.scalar_fan_out = nn.Parameter(torch.tensor(0.0))
             if self.init_weights == "bert":
                 nn.init.normal_(self.lora_C, mean=1, std=0.02)
             elif self.init_weights == "bert_uniform":
@@ -347,7 +347,9 @@ class LoRA(nn.Module):
                 scaling_vector = F.relu(scaling_vector)
                 # Apply the positive scalar and ensure non-negative scaling vector
                 scaling_vector = scaling_vector * scalar_fan_in + 1e-6
-
+            else:
+                scalar_fan_out = self.scalar_fan_out
+                scaling_vector = scaling_vector + scalar_fan_out
                  
             #else:
             #    scaling_vector = scaling_vector * self.scalar_fan_out
@@ -357,8 +359,7 @@ class LoRA(nn.Module):
                 hidden_states = scaling_vector
             else: # this should not be normally executed
                 hidden_states = torch.nan_to_num(hidden_states)
-                hidden_states = hidden_states * scaling_vector
-                logging.warning("hidden_state "+ str(hidden_states[0])+" shape "+ str(hidden_states.shape))    
+                hidden_states = hidden_states * scaling_vector   
             
         # No operation mode
         elif self.mode == "noop":
