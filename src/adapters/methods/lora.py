@@ -87,8 +87,6 @@ class LoRA(nn.Module):
        
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
-        # Initialize step count and start
-        self.num_steps = 0
             
 
     def _is_valid_location_key(self, config, location_key):
@@ -302,7 +300,6 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-        self.num_steps += 1  # Increment the step count
         
         # This may be a bit hard to follow because of optimizations
         # Check if full calculation mode is enabled
@@ -322,8 +319,7 @@ class LoRA(nn.Module):
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             if self.mode == "dense_fan_in":
                 # Ensure the scalar is positive using ReLU6
-                decay_rate = 0.999999 ** self.num_steps
-                scalar_fan_in = F.relu6(self.scalar_fan_in * decay_rate) + 1e-6
+                scalar_fan_in = F.relu6(self.scalar_fan_in) + 1e-6
                 # Ensure the scaling vector is non-negative
                 scaling_vector = F.relu(scaling_vector)
                 # Apply the positive scalar and ensure non-negative scaling vector
