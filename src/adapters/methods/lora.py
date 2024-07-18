@@ -156,7 +156,7 @@ class LoRA(nn.Module):
             nn.init.uniform_(self.lora_C, a=0.99, b=1.01)  # Initialize around 1.0 with a small std deviation
         else:
             self.scalar_fan_out = nn.Parameter(torch.tensor(1.0))
-            nn.init.uniform_(self.lora_C, a=0.99, b=1.01)   # Initialize around 1.0 with a small std deviation
+            nn.init.uniform_(self.lora_C, a=0.95, b=1.05)   # Initialize around 1.0 with a small std deviation
             
 
     def _setup_full_calculation(self, lora_A_shape, lora_B_shape):
@@ -324,9 +324,7 @@ class LoRA(nn.Module):
                 scaling_vector = F.relu(scaling_vector)
                 # Apply the positive scalar and ensure non-negative scaling vector
                 scaling_vector = scaling_vector * scalar_fan_in + 1e-6
-            else:
-                
-                scaling_vector = scaling_vector + 1e-12
+
                  
             #else:
             #    scaling_vector = scaling_vector * self.scalar_fan_out
