@@ -153,11 +153,10 @@ class LoRA(nn.Module):
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
         if self.mode == "dense_fan_in":
             self.scalar_fan_in = nn.Parameter(torch.tensor(1.0))
-            nn.init.kaiming_uniform_(self.lora_C, nonlinearity="relu")
-            #nn.init.uniform_(self.lora_C, a=0.99, b=1.01)  # Initialize around 1.0 with a small std deviation
+            nn.init.uniform_(self.lora_C, a=0.99, b=1.01)  # Initialize around 1.0 with a small std deviation
         else:
             self.scalar_fan_out = nn.Parameter(torch.tensor(1.0))
-            nn.init.ones_(self.lora_C)
+            nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
             
 
     def _setup_full_calculation(self, lora_A_shape, lora_B_shape):
