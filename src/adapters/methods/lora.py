@@ -169,12 +169,16 @@ class LoRA(nn.Module):
                 nn.init.uniform_(self.lora_C, a=0.97, b=1.03)
             elif self.init_weights == "uniform_xl":
                 nn.init.uniform_(self.lora_C, a=0.95, b=1.05)
+            elif self.init_weights == "uniform_xxl":
+                nn.init.uniform_(self.lora_C, a=0.9, b=1.1)
             elif self.init_weights == "normal":
                 nn.init.normal_(self.lora_C, mean=1, std=0.01)   # Initialize around 1.0 with a small std deviation
             elif self.init_weights == "normal_large":
                 nn.init.normal_(self.lora_C, mean=1, std=0.03)   # Initialize around 1.0 with a large std deviation
             elif self.init_weights == "normal_xl":
                 nn.init.normal_(self.lora_C, mean=1, std=0.05)   # Initialize around 1.0 with a large std deviation
+            elif self.init_weights == "normal_xxl":
+                nn.init.normal_(self.lora_C, mean=1, std=0.1)   # Initialize around 1.0 with a large std deviation
             elif self.init_weights == "xavier":
                 nn.init.xavier_uniform_(self.lora_C)
             elif self.init_weights == "xavier_normal":
