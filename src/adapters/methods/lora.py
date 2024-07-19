@@ -173,10 +173,20 @@ class LoRA(nn.Module):
                 nn.init.normal_(self.lora_C, mean=1, std=0.03)   # Initialize around 1.0 with a large std deviation
             elif self.init_weights == "xavier":
                 nn.init.xavier_uniform_(self.lora_C)
+            elif self.init_weights == "xavier_normal":
+                nn.init.xavier_normal_(self.lora_C)
             elif self.init_weights == "kaiming":
-                nn.init.kaiming_uniform_(self.lora_C, a=math.sqrt(5))
+                nn.init.kaiming_uniform_(self.lora_C, mode="fan_out", a=0)
+            elif self.init_weights == "kaiming_normal":
+                nn.init.kaiming_normal_(self.lora_C, mode="fan_out", a=0)
+            elif self.init_weights == "he":
+                nn.init.kaiming_uniform_(self.lora_C, mode="fan_out", a=2e-2)
+            elif self.init_weights == "he_normal":
+                nn.init.kaiming_normal_(self.lora_C, mode="fan_out", a=2e-2)
             elif self.init_weights == "lecun":
                 nn.init.uniform_(self.lora_C, a=-math.sqrt(3), b=math.sqrt(3))
+            elif self.init_weights == "lecun_normal":
+                nn.init.normal_(self.lora_C, mean=1.0, std=math.sqrt(3))
             else:
                 raise ValueError(f"Unknown init_weights type: {self.init_weights}")
             
