@@ -167,10 +167,14 @@ class LoRA(nn.Module):
                 nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
             elif self.init_weights == "uniform_large":
                 nn.init.uniform_(self.lora_C, a=0.97, b=1.03)
+            elif self.init_weights == "uniform_xl":
+                nn.init.uniform_(self.lora_C, a=0.95, b=1.05)
             elif self.init_weights == "normal":
                 nn.init.normal_(self.lora_C, mean=1, std=0.01)   # Initialize around 1.0 with a small std deviation
             elif self.init_weights == "normal_large":
                 nn.init.normal_(self.lora_C, mean=1, std=0.03)   # Initialize around 1.0 with a large std deviation
+            elif self.init_weights == "normal_xl":
+                nn.init.normal_(self.lora_C, mean=1, std=0.05)   # Initialize around 1.0 with a large std deviation
             elif self.init_weights == "xavier":
                 nn.init.xavier_uniform_(self.lora_C)
             elif self.init_weights == "xavier_normal":
@@ -179,6 +183,10 @@ class LoRA(nn.Module):
                 nn.init.kaiming_uniform_(self.lora_C, mode="fan_out", a=0)
             elif self.init_weights == "kaiming_normal":
                 nn.init.kaiming_normal_(self.lora_C, mode="fan_out", a=0)
+            elif self.init_weights == "lora":
+                nn.init.kaiming_uniform_(self.lora_C, a=math.sqrt(5))
+            elif self.init_weights == "lora_normal":
+                nn.init.kaiming_normal_(self.lora_C, a=math.sqrt(5))
             elif self.init_weights == "he":
                 nn.init.kaiming_uniform_(self.lora_C, mode="fan_out", a=2e-2)
             elif self.init_weights == "he_normal":
