@@ -364,9 +364,7 @@ class LoRA(nn.Module):
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             if self.mode == "dense_fan_in":
                 # Ensure the scalar is positive using ReLU6
-                scalar_fan_in = F.relu6(self.scalar_fan_in) + 1e-6
-                # Ensure the scaling vector is non-negative
-                scaling_vector = F.relu(scaling_vector)
+                scalar_fan_in = F.relu6(self.scalar_fan_in) + 1e-9
                 # Apply the positive scalar and ensure non-negative scaling vector
                 scaling_vector = scaling_vector * scalar_fan_in + 1e-6
             else:
