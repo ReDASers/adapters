@@ -154,6 +154,7 @@ class LoRA(nn.Module):
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
         if self.mode == "dense_fan_in":
             self.scalar_fan_in = nn.Parameter(torch.tensor(1.0))
+            self.scalar_bias = nn.Parameter(torch.tensor(1e-6))
             nn.init.uniform_(self.lora_C, a=0.99, b=1.01)  # Initialize around 1.0 with a small std deviation
         else:
             self.scalar_fan_out = nn.Parameter(torch.tensor(1.0))
@@ -364,11 +365,11 @@ class LoRA(nn.Module):
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             if self.mode == "dense_fan_in":
                 # Ensure the scalar is positive using ReLU6
-                scalar_fan_in = F.relu6(self.scalar_fan_in) + 1e-6
+                scalar_fan_in = F.relu6(self.scalar_fan_in) + self.scalar_bias
                 # Apply the positive scalar and ensure non-negative scaling vector
-                scaling_vector = scaling_vector * scalar_fan_in + 1e-6
+                scaling_vector = scaling_vector * scalar_fan_in + self.scalar_bias
             else:
-                scaling_vector = F.relu6(scaling_vector - 1e-6)
+                scaling_vector = scaling_vector
                  
             #else:
             #    scaling_vector = scaling_vector * self.scalar_fan_out
