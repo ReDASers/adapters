@@ -204,7 +204,7 @@ class LoRA(nn.Module):
         else:
             self.scalar_fan_out = nn.Parameter(torch.tensor(1.0))
             self.scalar_bias = nn.Parameter(torch.tensor(1e-6))
-            nn.init.ones_(self.lora_C)
+            nn.init.uniform_(self.lora_C, a=0.95, b=1.05)
             
             
             
