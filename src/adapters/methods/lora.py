@@ -374,7 +374,7 @@ class LoRA(nn.Module):
                 scaling_vector = scaling_vector * scalar_fan_in + self.eps
                 
             else:
-                scaling_vector = F.relu6(scaling_vector + self.eps/20)
+                scaling_vector = scaling_vector/(1 + self.eps)
             # If hidden_states is None, use scaling_vector instead - this is the case most of the time
             
             if hidden_states is None:
