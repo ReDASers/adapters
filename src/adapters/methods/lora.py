@@ -158,6 +158,7 @@ class LoRA(nn.Module):
             nn.init.uniform_(self.lora_C, a=0.99, b=1.01)  # Initialize around 1.0 with a small std deviation
         else:
             self.scalar_fan_out = nn.Parameter(torch.tensor(1.0))
+            self.scalar_bias = nn.Parameter(torch.tensor(1e-6))
             if self.init_weights == "bert":
                 nn.init.normal_(self.lora_C, mean=1, std=0.02)
             elif self.init_weights == "bert_uniform":
@@ -367,9 +368,9 @@ class LoRA(nn.Module):
                 # Ensure the scalar is positive using ReLU6
                 scalar_fan_in = F.relu6(self.scalar_fan_in) + 1e-6
                 # Apply the positive scalar and ensure non-negative scaling vector
-                scaling_vector = scaling_vector * scalar_fan_in + self.scalar_bias
+                scaling_vector = scaling_vector * scalar_fan_in + 1e-6
             else:
-                scaling_vector = F.relu6(scaling_vector - 1e-6) + 1e-12
+                scaling_vector = F.relu6(scaling_vector - self.scalar_bias) + 1e-12
                  
             #else:
             #    scaling_vector = scaling_vector * self.scalar_fan_out
