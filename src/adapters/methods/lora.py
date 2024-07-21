@@ -367,14 +367,13 @@ class LoRA(nn.Module):
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
+            
             if self.mode == "dense_fan_in":
                 # Ensure the scalar is positive using ReLU6
                 scalar_fan_in = F.relu6(self.scalar_fan_in) + self.eps
                 # Apply the positive scalar and ensure non-negative scaling vector
                 scaling_vector = scaling_vector * scalar_fan_in + self.eps
-                
-            else:
-                scaling_vector = F.relu6(scaling_vector/(1 + self.eps)) + 1e-12
+               
             # If hidden_states is None, use scaling_vector instead - this is the case most of the time
             
             if hidden_states is None:
