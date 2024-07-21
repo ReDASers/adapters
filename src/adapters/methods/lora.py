@@ -72,6 +72,7 @@ class LoRA(nn.Module):
         self.num_weights_out = lora_B_shape[0]
         self._delta_w = None  # Placeholder for delta weights
         self.init_weights = config.init_weights
+        self.eps = config.eps
         # Initialize additional attributes
         self.autoencoder_arch = "NLbLN"
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = "noop"
@@ -155,10 +156,6 @@ class LoRA(nn.Module):
         if self.mode == "dense_fan_in":
             self.scalar_fan_in = nn.Parameter(torch.tensor(1.0))
             self.scalar_bias = nn.Parameter(torch.tensor(1e-6))
-            nn.init.uniform_(self.lora_C, a=0.99, b=1.01)  # Initialize around 1.0 with a small std deviation
-        else:
-            self.scalar_fan_out = nn.Parameter(torch.tensor(1.0))
-            self.scalar_bias = nn.Parameter(torch.tensor(1e-6))
             if self.init_weights == "bert":
                 nn.init.normal_(self.lora_C, mean=1, std=0.02)
             elif self.init_weights == "bert_uniform":
@@ -203,6 +200,12 @@ class LoRA(nn.Module):
                 nn.init.normal_(self.lora_C, mean=1.0, std=math.sqrt(3))
             else:
                 raise ValueError(f"Unknown init_weights type: {self.init_weights}")
+            
+        else:
+            self.scalar_fan_out = nn.Parameter(torch.tensor(1.0))
+            self.scalar_bias = nn.Parameter(torch.tensor(1e-6))
+            nn.init.ones_(self.lora_C)
+            
             
             
 
@@ -366,11 +369,11 @@ class LoRA(nn.Module):
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             if self.mode == "dense_fan_in":
                 # Ensure the scalar is positive using ReLU6
-                scalar_fan_in = F.relu6(self.scalar_fan_in) + 1e-6
+                scalar_fan_in = F.relu6(self.scalar_fan_in) + self.eps
                 # Apply the positive scalar and ensure non-negative scaling vector
-                scaling_vector = scaling_vector * scalar_fan_in + 1e-6
+                scaling_vector = scaling_vector * scalar_fan_in + self.eps
             else:
-                scaling_vector = F.relu6(scaling_vector - 1e-6) + 1e-12
+                scaling_vector = F.relu6(scaling_vector - self.eps) + 1e-12
                  
             #else:
             #    scaling_vector = scaling_vector * self.scalar_fan_out

@@ -494,6 +494,8 @@ class LoRAConfig(AdapterConfig):
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu" 
 
+    eps: float = 1e-6
+
 
 
 
