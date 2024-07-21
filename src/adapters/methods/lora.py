@@ -371,7 +371,7 @@ class LoRA(nn.Module):
                 # Ensure the scalar is positive using ReLU6
                 scalar_fan_in = F.relu6(self.scalar_fan_in) + self.eps
                 # Apply the positive scalar and ensure non-negative scaling vector
-                scaling_vector = scaling_vector * scalar_fan_in + self.eps
+                scaling_vector = scaling_vector + self.eps
             else:
                 scaling_vector = F.relu6(scaling_vector - self.eps) + 1e-12
                  
