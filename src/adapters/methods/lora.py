@@ -369,7 +369,7 @@ class LoRA(nn.Module):
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             
-            if self.mode == "dense_fan_out":
+            if self.mode == "dense_fan_in":
                 scaling_vector = scaling_vector/ (scaling_vector.norm(p=2, dim=1, keepdim=True) + self.eps)
                 # Ensure the scalar is positive using ReLU6
                 # scalar_fan_in = F.relu6(self.scalar_fan_in) + self.eps
