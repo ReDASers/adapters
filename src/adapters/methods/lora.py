@@ -155,58 +155,53 @@ class LoRA(nn.Module):
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
         if self.mode == "dense_fan_in":
             self.scalar_fan_in = nn.Parameter(torch.tensor(1.0))
-            self.scalar_bias = nn.Parameter(torch.tensor(1e-6))
-            if self.init_weights == "bert":
-                nn.init.normal_(self.lora_C, mean=1, std=0.02)
-            elif self.init_weights == "bert_uniform":
-                nn.init.uniform_(self.lora_C, a=0.98, b=1.02)
-            elif self.init_weights == "ia3":
-                nn.init.ones_(self.lora_C)
-            elif self.init_weights == "uniform":
-                nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
-            elif self.init_weights == "uniform_large":
-                nn.init.uniform_(self.lora_C, a=0.97, b=1.03)
-            elif self.init_weights == "uniform_xl":
-                nn.init.uniform_(self.lora_C, a=0.95, b=1.05)
-            elif self.init_weights == "uniform_xxl":
-                nn.init.uniform_(self.lora_C, a=0.9, b=1.1)
-            elif self.init_weights == "normal":
-                nn.init.normal_(self.lora_C, mean=1, std=0.01)   # Initialize around 1.0 with a small std deviation
-            elif self.init_weights == "normal_large":
-                nn.init.normal_(self.lora_C, mean=1, std=0.03)   # Initialize around 1.0 with a large std deviation
-            elif self.init_weights == "normal_xl":
-                nn.init.normal_(self.lora_C, mean=1, std=0.05)   # Initialize around 1.0 with a large std deviation
-            elif self.init_weights == "normal_xxl":
-                nn.init.normal_(self.lora_C, mean=1, std=0.1)   # Initialize around 1.0 with a large std deviation
-            elif self.init_weights == "xavier":
-                nn.init.xavier_uniform_(self.lora_C)
-            elif self.init_weights == "xavier_normal":
-                nn.init.xavier_normal_(self.lora_C)
-            elif self.init_weights == "kaiming":
-                nn.init.kaiming_uniform_(self.lora_C, mode="fan_out", a=0)
-            elif self.init_weights == "kaiming_normal":
-                nn.init.kaiming_normal_(self.lora_C, mode="fan_out", a=0)
-            elif self.init_weights == "lora":
-                nn.init.kaiming_uniform_(self.lora_C, a=math.sqrt(5))
-            elif self.init_weights == "lora_normal":
-                nn.init.kaiming_normal_(self.lora_C, a=math.sqrt(5))
-            elif self.init_weights == "he":
-                nn.init.kaiming_uniform_(self.lora_C, mode="fan_out", a=2e-2)
-            elif self.init_weights == "he_normal":
-                nn.init.kaiming_normal_(self.lora_C, mode="fan_out", a=2e-2)
-            elif self.init_weights == "lecun":
-                nn.init.uniform_(self.lora_C, a=-math.sqrt(3), b=math.sqrt(3))
-            elif self.init_weights == "lecun_normal":
-                nn.init.normal_(self.lora_C, mean=1.0, std=math.sqrt(3))
-            else:
-                raise ValueError(f"Unknown init_weights type: {self.init_weights}")
-            
-        else:
-            self.scalar_fan_out = nn.Parameter(torch.tensor(1.0))
-            self.scalar_bias = nn.Parameter(torch.tensor(1e-6))
+  
+        if self.init_weights == "bert":
+            nn.init.normal_(self.lora_C, mean=1, std=0.02)
+        elif self.init_weights == "bert_uniform":
+            nn.init.uniform_(self.lora_C, a=0.98, b=1.02)
+        elif self.init_weights == "ia3":
             nn.init.ones_(self.lora_C)
-        
-        
+        elif self.init_weights == "uniform":
+            nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
+        elif self.init_weights == "uniform_large":
+            nn.init.uniform_(self.lora_C, a=0.97, b=1.03)
+        elif self.init_weights == "uniform_xl":
+            nn.init.uniform_(self.lora_C, a=0.95, b=1.05)
+        elif self.init_weights == "uniform_xxl":
+            nn.init.uniform_(self.lora_C, a=0.9, b=1.1)
+        elif self.init_weights == "normal":
+            nn.init.normal_(self.lora_C, mean=1, std=0.01)   # Initialize around 1.0 with a small std deviation
+        elif self.init_weights == "normal_large":
+            nn.init.normal_(self.lora_C, mean=1, std=0.03)   # Initialize around 1.0 with a large std deviation
+        elif self.init_weights == "normal_xl":
+            nn.init.normal_(self.lora_C, mean=1, std=0.05)   # Initialize around 1.0 with a large std deviation
+        elif self.init_weights == "normal_xxl":
+            nn.init.normal_(self.lora_C, mean=1, std=0.1)   # Initialize around 1.0 with a large std deviation
+        elif self.init_weights == "xavier":
+            nn.init.xavier_uniform_(self.lora_C)
+        elif self.init_weights == "xavier_normal":
+            nn.init.xavier_normal_(self.lora_C)
+        elif self.init_weights == "kaiming":
+            nn.init.kaiming_uniform_(self.lora_C, mode="fan_out", a=0)
+        elif self.init_weights == "kaiming_normal":
+            nn.init.kaiming_normal_(self.lora_C, mode="fan_out", a=0)
+        elif self.init_weights == "lora":
+            nn.init.kaiming_uniform_(self.lora_C, a=math.sqrt(5))
+        elif self.init_weights == "lora_normal":
+            nn.init.kaiming_normal_(self.lora_C, a=math.sqrt(5))
+        elif self.init_weights == "he":
+            nn.init.kaiming_uniform_(self.lora_C, mode="fan_out", a=2e-2)
+        elif self.init_weights == "he_normal":
+            nn.init.kaiming_normal_(self.lora_C, mode="fan_out", a=2e-2)
+        elif self.init_weights == "lecun":
+            nn.init.uniform_(self.lora_C, a=-math.sqrt(3), b=math.sqrt(3))
+        elif self.init_weights == "lecun_normal":
+            nn.init.normal_(self.lora_C, mean=1.0, std=math.sqrt(3))
+        else:
+            raise ValueError(f"Unknown init_weights type: {self.init_weights}")
+    
+    
             
             
             
