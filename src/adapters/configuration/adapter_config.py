@@ -496,6 +496,8 @@ class LoRAConfig(AdapterConfig):
 
     eps: float = 1e-6
 
+    norm: str = "out"
+
 
 
 

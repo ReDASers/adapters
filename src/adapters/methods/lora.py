@@ -200,11 +200,7 @@ class LoRA(nn.Module):
             nn.init.normal_(self.lora_C, mean=1.0, std=math.sqrt(3))
         else:
             raise ValueError(f"Unknown init_weights type: {self.init_weights}")
-    
-    
-            
-            
-            
+          
 
     def _setup_full_calculation(self, lora_A_shape, lora_B_shape):
         """
@@ -370,20 +366,15 @@ class LoRA(nn.Module):
                 hidden_states = torch.nan_to_num(hidden_states)
                 hidden_states = hidden_states * scaling_vector  
             
-            if self.mode == "dense_fan_out":
+            if self.mode == "dense_fan_in":
                 norm = hidden_states.norm(p=2, dim=1, keepdim=True) + self.eps
                 hidden_states = hidden_states / norm
-            #if self.mode == "dense_fan_in":
-                # scaling_vector = scaling_vector/ (scaling_vector.norm(p=2, dim=1, keepdim=True) + self.eps)
+            
                 # Ensure the scalar is positive using ReLU6
                 # scalar_fan_in = F.relu6(self.scalar_fan_in) + self.eps
                 # Apply the positive scalar and ensure non-negative scaling vector
                 # hidden_states = hidden_states * scalar_fan_in + self.eps
-               
-            # If hidden_states is None, use scaling_vector instead - this is the case most of the time
-            
- 
-            
+                           
         # No operation mode
         elif self.mode == "noop":
             # If hidden_states is None, use layer_input instead
