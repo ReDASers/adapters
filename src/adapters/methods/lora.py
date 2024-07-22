@@ -370,6 +370,9 @@ class LoRA(nn.Module):
                 hidden_states = torch.nan_to_num(hidden_states)
                 hidden_states = hidden_states * scaling_vector  
             
+            if self.mode == "dense_fan_out":
+                norm = hidden_states.norm(p=2, dim=1, keepdim=True) + self.eps
+                hidden_states = hidden_states / norm
             #if self.mode == "dense_fan_in":
                 # scaling_vector = scaling_vector/ (scaling_vector.norm(p=2, dim=1, keepdim=True) + self.eps)
                 # Ensure the scalar is positive using ReLU6
