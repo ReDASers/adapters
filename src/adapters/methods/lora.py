@@ -369,18 +369,34 @@ class LoRA(nn.Module):
                 hidden_states = hidden_states * scaling_vector  
             
             if self.mode == "dense_fan_in":
-                if self.norm_output == "fan_in" or self.norm_output == "both":
+                if self.norm_output == "norm_fan_in" or self.norm_output == "norm_both":
                     l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + self.eps
                     hidden_states = hidden_states / l2_norm
+                elif self.norm_output == "scalar_fan_in" or "scalar_both":
+                    # Ensure the scalar is positive using ReLU6
+                    scalar_fan_in = F.relu6(self.scalar_scaler) + self.eps
+                    # Apply the positive scalar and ensure non-negative scaling vector
+                    hidden_states = hidden_states * scalar_fan_in + self.eps
+                elif self.norm_output is None:
+                    pass
+                else:
+                    raise ValueError(f"Unknown norm_output: {self.norm_output}")
             else:
-                if self.norm_output == "fan_out" or self.norm_output == "both":
+                if self.norm_output == "norm_fan_out" or self.norm_output == "norm_both":
                     l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + self.eps
                     hidden_states = hidden_states / l2_norm
+                elif self.norm_output == "scalar_fan_out" or "scalar_both":
+                    # Ensure the scalar is positive using ReLU6
+                    scalar_fan_out = F.relu6(self.scalar_scaler) + self.eps
+                    # Apply the positive scalar and ensure non-negative scaling vector
+                    hidden_states = hidden_states * scalar_fan_out + self.eps
+                elif self.norm_output is None:
+                    pass
+                else:
+                    raise ValueError(f"Unknown norm_output: {self.norm_output}")
+
             
-                # Ensure the scalar is positive using ReLU6
-                # scalar_fan_in = F.relu6(self.scalar_fan_in) + self.eps
-                # Apply the positive scalar and ensure non-negative scaling vector
-                # hidden_states = hidden_states * scalar_fan_in + self.eps
+
                            
         # No operation mode
         elif self.mode == "noop":
