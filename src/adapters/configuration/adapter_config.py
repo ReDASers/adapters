@@ -462,21 +462,17 @@ class LoRAConfig(AdapterConfig):
     architecture: Optional[str] = "lora"
 
     selfattn_lora: bool = True
-    intermediate_lora: bool = True
-    output_lora: bool = True
+    intermediate_lora: bool = False
+    output_lora: bool = False
     leave_out: List[int] = field(default_factory=list)
 
-    r: int = 64
-    alpha: Union[int, float] = 64
+    r: int = 8
+    alpha: int = 8
     dropout: float = 0.0
-    attn_matrices: List[str] = field(default_factory=lambda: ["q", "v", "k"])
+    attn_matrices: List[str] = field(default_factory=lambda: ["q", "v"])
     composition_mode: str = "add"
     init_weights: str = "lora"
     use_gating: bool = False
-    is_dora: bool = True
-    bottleneck_size: int = 64
-    scaling: Union[float, str, None] = "learnable"
-    non_linearity: Union[str, None] = "swish"
 
 
 @dataclass(eq=False)
