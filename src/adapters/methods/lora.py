@@ -377,7 +377,7 @@ class LoRA(nn.Module):
                     scalar_fan_in = F.relu6(self.scalar_scaler) + self.eps
                     # Apply the positive scalar and ensure non-negative scaling vector
                     hidden_states = hidden_states * scalar_fan_in + self.eps
-                elif self.norm_output is None:
+                elif self.norm_output == "none":
                     pass
                 else:
                     raise ValueError(f"Unknown norm_output: {self.norm_output}")
@@ -390,7 +390,7 @@ class LoRA(nn.Module):
                     scalar_fan_out = F.relu6(self.scalar_scaler) + self.eps
                     # Apply the positive scalar and ensure non-negative scaling vector
                     hidden_states = hidden_states * scalar_fan_out + self.eps
-                elif self.norm_output is None:
+                elif self.norm_output == "none":
                     pass
                 else:
                     raise ValueError(f"Unknown norm_output: {self.norm_output}")
