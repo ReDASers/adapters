@@ -17,7 +17,6 @@ from transformers.pytorch_utils import Conv1D
 from ..composition import AdapterCompositionBlock, Average, BatchSplit, Parallel, Stack
 from ..configuration import LoRAConfig, ModelAdaptersConfig
 from .adapter_layer_base import AdapterLayerBase, ComposableAdapterLayerBase
-from .modeling import Activation_Function_Class
 from .utils import dequantize_bnb_weight
 
 
