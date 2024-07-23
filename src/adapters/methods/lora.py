@@ -70,7 +70,7 @@ class LoRA(nn.Module):
         self.non_linearity = config.non_linearity 
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]
-        self.norm_output = config.norm_output
+        self.dense_strategy = config.dense_strategy
         self._delta_w = None  # Placeholder for delta weights
         self.init_weights = config.init_weights
         self.eps = config.eps
@@ -369,28 +369,28 @@ class LoRA(nn.Module):
                 hidden_states = hidden_states * scaling_vector  
             
             if self.mode == "dense_fan_in":
-                if "norm_fan_in" in self.norm_output or "norm_both" in self.norm_output:
+                if "norm_fan_in" in self.dense_strategy or "norm_both" in self.dense_strategy:
                     l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + self.eps
                     hidden_states = hidden_states / l2_norm
-                elif "scalar_fan_in" in self.norm_output or "scalar_both" in self.norm_output:
+                elif "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Ensure the scalar is positive using ReLU6
                     scalar_fan_in = F.relu6(self.scalar_scaler) + self.eps
                     # Apply the positive scalar and ensure non-negative scaling vector
                     hidden_states = hidden_states * scalar_fan_in + self.eps
-                elif "no_fan_in" in self.norm_output or "none" in self.norm_output:
+                elif "no_fan_in" in self.dense_strategy or "none" in self.dense_strategy:
                     pass
                 else:
-                    raise ValueError(f"Unknown norm_output: {self.norm_output}")
+                    raise ValueError(f"Unknown norm_output: {self.dense_strategy}")
             else:
-                if "norm_fan_out" in self.norm_output or "norm_both" in self.norm_output:
+                if "norm_fan_out" in self.dense_strategy or "norm_both" in self.dense_strategy:
                     l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + self.eps
                     hidden_states = hidden_states / l2_norm
-                elif "scalar_fan_out" in self.norm_output or "scalar_both" in self.norm_output:
+                elif "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Ensure the scalar is positive using ReLU6
                     scalar_fan_out = F.relu6(self.scalar_scaler) + self.eps
                     # Apply the positive scalar and ensure non-negative scaling vector
                     hidden_states = hidden_states * scalar_fan_out + self.eps
-                elif "no_fan_out" in self.norm_output or "none" in self.norm_output:
+                elif "no_fan_out" in self.dense_strategy or "none" in self.dense_strategy:
                     pass
                 else:
                     raise ValueError(f"Unknown norm_output: {self.norm_output}")
