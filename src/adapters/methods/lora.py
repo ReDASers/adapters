@@ -184,7 +184,7 @@ class LoRA(nn.Module):
             else:
                 raise ValueError(f"Unknown init_weights type: {self.init_weights}")
         elif self.mode == "dense_fan_in":
-            nn.init.ones_(self.lora_C)
+            nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
         else:
             raise ValueError(f"Should not be setting up scaling for mode: {self.mode}") 
 
