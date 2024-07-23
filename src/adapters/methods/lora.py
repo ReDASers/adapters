@@ -158,7 +158,7 @@ class LoRA(nn.Module):
         
         
         self.scalar_scaler = nn.Parameter(torch.tensor(1.0))
-        if self.mode == "dense_fan_in":
+        if self.mode == "dense_fan_out":
             if self.init_weights == "bert":
                 nn.init.normal_(self.lora_C, mean=1, std=0.02)
             elif self.init_weights == "bert_uniform":
@@ -183,7 +183,7 @@ class LoRA(nn.Module):
                 nn.init.normal_(self.lora_C, mean=1, std=0.1)   # Initialize around 1.0 with a large std deviation
             else:
                 raise ValueError(f"Unknown init_weights type: {self.init_weights}")
-        elif self.mode == "dense_fan_out":
+        elif self.mode == "dense_fan_in":
             nn.init.ones_(self.lora_C)
         else:
             raise ValueError(f"Should not be setting up scaling for mode: {self.mode}") 
