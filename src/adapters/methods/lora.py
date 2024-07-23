@@ -70,6 +70,7 @@ class LoRA(nn.Module):
         self.non_linearity = config.non_linearity 
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]
+        self.norm_output = config.norm_output
         self._delta_w = None  # Placeholder for delta weights
         self.init_weights = config.init_weights
         self.eps = config.eps
@@ -153,8 +154,9 @@ class LoRA(nn.Module):
         Sets up the basic calculation mode by initializing scaling parameters.
         """
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
-        if self.mode == "dense_fan_in":
-            self.scalar_fan_in = nn.Parameter(torch.tensor(1.0))
+        
+        # if self.mode == "dense_fan_in":
+        #    self.scalar_fan_in = nn.Parameter(torch.tensor(1.0))
   
         if self.init_weights == "bert":
             nn.init.normal_(self.lora_C, mean=1, std=0.02)
@@ -367,8 +369,13 @@ class LoRA(nn.Module):
                 hidden_states = hidden_states * scaling_vector  
             
             if self.mode == "dense_fan_in":
-                norm = hidden_states.norm(p=2, dim=1, keepdim=True) + self.eps
-                hidden_states = hidden_states / norm
+                if self.norm_output == "fan_in" or self.norm_output == "both":
+                    l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + self.eps
+                    hidden_states = hidden_states / l2_norm
+            else:
+                if self.norm_output == "fan_out" or self.norm_output == "both":
+                    l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + self.eps
+                    hidden_states = hidden_states / l2_norm
             
                 # Ensure the scalar is positive using ReLU6
                 # scalar_fan_in = F.relu6(self.scalar_fan_in) + self.eps
