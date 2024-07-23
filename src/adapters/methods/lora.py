@@ -156,7 +156,7 @@ class LoRA(nn.Module):
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
         
         # if self.mode == "dense_fan_in":
-        #    self.scalar_fan_in = nn.Parameter(torch.tensor(1.0))
+        self.scalar_scaler = nn.Parameter(torch.tensor(1.0))
   
         if self.init_weights == "bert":
             nn.init.normal_(self.lora_C, mean=1, std=0.02)
