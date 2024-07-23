@@ -42,156 +42,58 @@ class LoRA(nn.Module):
         super().__init__()
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
         self.r = config.r
-        self.lora_alpha = float(config.alpha)
+        self.lora_alpha = config.alpha
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
-        self.is_dora = config.is_dora
-        self.bottleneck_size = config.bottleneck_size
-        self.non_linearity = config.non_linearity
         # Optional dropout
         if config.dropout > 0.0:
             self.lora_dropout = nn.Dropout(p=config.dropout)
         else:
             self.lora_dropout = lambda x: x
 
-        std_dev = 1 / torch.sqrt(torch.tensor(self.r).float())
-       
-        if self.lora_alpha is None or self.lora_alpha <= 0:
-            self.lora_alpha = 1.0
-
-        if self.is_dora:
-            if self.non_linearity is not None:
-                self.f = nn.Sequential(
-                        nn.Linear(lora_A_shape[-1], self.bottleneck_size),
-                        Activation_Function_Class(config.non_linearity.lower()),
-                        nn.Linear(self.bottleneck_size, self.bottleneck_size),
-                        Activation_Function_Class(config.non_linearity.lower()),
-                        nn.Linear(self.bottleneck_size, lora_A_shape[-1]),
-                    )
-            else:
-                self.f = nn.Sequential(
-                        nn.Linear(lora_A_shape[-1], lora_A_shape[-1]),
-                        nn.Linear(lora_A_shape[-1], lora_A_shape[-1]),
-                )
-            for layer in self.f:
-                if isinstance(layer, nn.Linear):
-                    nn.init.kaiming_uniform_(layer.weight, a=math.sqrt(5))
-                    if layer.bias is not None:
-                        nn.init.zeros_(layer.bias)
-        self.lora_A = nn.Parameter(torch.randn(lora_A_shape) * std_dev)
-        self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
-        self.lora_C = nn.Parameter(torch.ones((lora_B_shape[0], 1)))
         # Actual trainable parameters
+        self.lora_A = nn.Parameter(torch.zeros(lora_A_shape))
+        self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
+        self.scaling = self.lora_alpha / self.r
 
-        if self.is_dora:
-            if self.lora_A.shape[1] == self.lora_B.shape[0]:
-                if config.scaling is None or isinstance(config.scaling, float):
-                    self.scaling = float(self.lora_alpha / math.sqrt(self.r))
-                elif  config.scaling == "learnable":
-                    self.scaling = nn.Parameter(torch.tensor(float(self.lora_alpha) / math.sqrt(float(self.r)), dtype=torch.float32, requires_grad=True))
-            else:
-                if config.scaling is None:
-                    self.scaling = torch.ones(1, dtype=torch.float32, requires_grad=False)
-                elif isinstance(config.scaling, float) or isinstance(config.scaling, int):
-                    self.scaling = torch.tensor(max(config.scaling, 1.0), dtype=torch.float32, requires_grad=False)
-                elif  config.scaling == "learnable":
-                    self.scaling = nn.Parameter(torch.tensor(float(1.0), dtype=torch.float32, requires_grad=True))
-        else:
-            self.scaling = self.lora_alpha / self.r
-
-        self.m = nn.Parameter(torch.ones(1, lora_B_shape[0])) 
-            #nn.init.ones_(self.m)
-        nn.init.normal_(self.m, mean=1.0, std=0.02)
-        self.dbg = 0
         # For compatibility with (IA)^3, allow all init_weights types here.
         # Usually should be "lora".
         if config.init_weights == "lora":
             # initialize A the same way as the default for nn.Linear and B to zero
             nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
             nn.init.zeros_(self.lora_B)
-            nn.init.ones_(self.lora_C)
         elif config.init_weights == "bert":
             nn.init.normal_(self.lora_A, std=0.02)
             nn.init.normal_(self.lora_B, std=0.02)
-            nn.init.normal_(self.lora_C, std=0.02)
         elif config.init_weights == "ia3":
             nn.init.ones_(self.lora_A)
             nn.init.ones_(self.lora_B)
-            nn.init.ones_(self.lora_C)
-        elif config.init_weights == "xavier":
-            nn.init.xavier_uniform_(self.lora_A)
-            nn.init.zeros_(self.lora_B)
-            nn.init.ones_(self.lora_C)
         else:
             raise ValueError("Unknown init_weights type: {}".format(config.init_weights))
 
         if self.use_gating:
             self.gate = nn.Linear(lora_A_shape[-1], gating_heads)
             nn.init.normal_(self.gate.weight, std=0.02)
-        '''
-        # Initialize scaling based on config type
-        if config.scaling is None:  # Changed from config["scaling"]
-            self.scaling = 1.0
-        elif isinstance(config.scaling, float):  # Changed from config["scaling"]
-            self.scaling = nn.Parameter(torch.tensor(max(config.scaling, 1.0)) )
-        else:
-            raise ValueError(f"Unknown scaling type: {config.scaling}")  # Changed from config["scaling"]
-        '''
+
     @property
     def delta_w(self) -> torch.Tensor:
-        if self.is_dora:
-            raise NotImplementedError("Delta_w is not available for new lora yet.")
-            if self.lora_A.shape[1] == self.lora_B.shape[0]:
-                return self.lora_B @ self.lora_A
-            else:
-                return self.lora_C
-        else:
-            return self.lora_B @ self.lora_A
+        return self.lora_B @ self.lora_A
 
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights."""
         if scaling is None:
             scaling = self.scaling
-            if self.dbg % 100 == 0:
-                print(scaling)
-        if self.is_dora and self.lora_A.shape[1] != self.lora_B.shape[0]:
-            return weights * (added * scaling)
         return weights + added * scaling
 
     def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
         """Inverts the composition operation between existing and injected weights."""
-        if self.is_dora and self.lora_A.shape[1] != self.lora_B.shape[0]:
-            return weights / (added * self.scaling)
         return weights - added * self.scaling
 
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
-        if self.is_dora:
-            if self.lora_A.shape[1] == self.lora_B.shape[0]:
-                if hidden_states is None:
-                    hidden_states = layer_input
-                hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
-                if self.non_linearity is None:
-                    hidden_states = self.lora_dropout(hidden_states)
-                fx = torch.nan_to_num(self.f(hidden_states))
-                
-                #print(x.shape, fx.shape, lora.lora_A.shape, lora.lora_B.shape, mult.shape)
-                delta_w = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
-                hidden_states = delta_w/ (delta_w.norm(p=2, dim=1, keepdim=True) + 1e-9)
-                # result = (result * mult + dora * lora.m*gate)*lora.scaling
-            else:
-                scaling_vector = self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1)
-                if hidden_states is None:
-                    hidden_states = scaling_vector
-                else:
-                    hidden_states = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
-                    hidden_states = hidden_states * scaling_vector
-            #result = result * gate
-            
-        else:
-            if hidden_states is None:
-                hidden_states = layer_input
-            hidden_states = self.lora_dropout(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+        if hidden_states is None:
+            hidden_states = layer_input
+        hidden_states = self.lora_dropout(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
         if self.use_gating:
             gate = torch.sigmoid(self.gate(layer_input))
             gate = torch.mean(gate, dim=1).unsqueeze(-1)
