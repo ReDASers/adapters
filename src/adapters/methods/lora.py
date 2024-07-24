@@ -204,7 +204,7 @@ class LoRA(nn.Module):
             case "uniform_xl":
                 nn.init.uniform_(self.lora_C, a=0.95, b=1.05)
             case _:
-                raise ValueError(f"Unknown init_weights type: {self.init_weights}")
+                raise ValueError(f"Unknown init_weights type: {init_weights}")
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
         """
