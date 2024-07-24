@@ -170,15 +170,28 @@ class LoRA(nn.Module):
             case "ia3":
                 nn.init.ones_(self.lora_C)
             case "normal":
+                self.sigma = 0.01
                 nn.init.normal_(self.lora_C, mean=1, std=0.01)
-            case "bert":
+            case "bert_normal":
+                self.sigma = 0.02
                 nn.init.normal_(self.lora_C, mean=1, std=0.02)
+            case "normal_03":
+                self.sigma = 0.03
+                nn.init.normal_(self.lora_C, mean=1, std=0.03)
+            case "normal_z":
+                self.sigma = 0.025
+                nn.init.normal_(self.lora_C, mean=1, std=0.025)
             case "normal_xl":
+                self.sigma = 0.05
                 nn.init.normal_(self.lora_C, mean=1, std=0.05)
             case "uniform":
                 nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
             case "bert_uniform":
                 nn.init.uniform_(self.lora_C, a=0.98, b=1.02)
+            case "uniform_z":
+                nn.init.uniform_(self.lora_C, a=0.975, b=1.025)
+            case "uniform_03":
+                nn.init.uniform_(self.lora_C, a=0.97, b=1.03)
             case "uniform_xl":
                 nn.init.uniform_(self.lora_C, a=0.95, b=1.05)
             case _:
@@ -314,6 +327,16 @@ class LoRA(nn.Module):
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
         
+    def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.02) -> torch.Tensor:
+        w = torch.nan_to_num(weights)
+        u = torch.mean(w, keepdim=True)
+        stddev = torch.std(w, keepdim=True)
+        # calculate z-scores
+        z = (w - u) / (stddev + 1e-12)
+        # rescale to original range
+        resicaled_weights = z * sigma + u
+        return resicaled_weights
+
 
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         """Forward pass of the LoRA module.
@@ -352,6 +375,9 @@ class LoRA(nn.Module):
                     scalar_fan_in = F.relu6(self.scalar_scaler) + self.eps
                     # Apply the positive scalar and ensure non-negative scaling vector
                     scaling_vector = scaling_vector * scalar_fan_in + self.eps
+                elif "rescale_fan_in" in self.dense_strategy:
+                    assert "normal" in self.init_weights_fan_in, "Rescaling only supported for normal init"
+                    scaling_vector = self.rescale(scaling_vector, sigma=self.sigma
                 elif "no_fan_in" in self.dense_strategy or "none" in self.dense_strategy:
                     pass
                 else:
@@ -363,6 +389,9 @@ class LoRA(nn.Module):
                 elif "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
                     scaling_vector = scaling_vector * (1-self.eps)
+                elif "rescale_fan_out" in self.dense_strategy:
+                    assert "normal" in self.init_weights_fan_out, "Rescaling only supported for normal init"
+                    scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
                 elif "no_fan_out" in self.dense_strategy or "none" in self.dense_strategy:
                     pass
                 else:
