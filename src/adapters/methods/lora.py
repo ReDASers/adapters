@@ -169,9 +169,6 @@ class LoRA(nn.Module):
         match init_weights:
             case "ia3":
                 nn.init.ones_(self.lora_C)
-            case "normal":
-                self.sigma = 0.01
-                nn.init.normal_(self.lora_C, mean=1, std=0.01)
             case "bert_normal":
                 self.sigma = 0.02
                 nn.init.normal_(self.lora_C, mean=1, std=0.02)
@@ -185,21 +182,19 @@ class LoRA(nn.Module):
                 self.sigma = 0.05
                 nn.init.normal_(self.lora_C, mean=1, std=0.05)
             case "scaled_xavier_in":
-                nn.init.normal_(self.lora_C, mean=1, std=1.0 / math.sqrt(self.hidden_size_in))
+                nn.init.normal_(self.lora_C, mean=1, std=math.sqrt(1.0/self.hidden_size_in))
             case "scaled_he_in":
-                nn.init.normal_(self.lora_C, mean=1, std=1.0 / math.sqrt(self.hidden_size_in * 2))
+                nn.init.normal_(self.lora_C, mean=1, std=math.sqrt(2.0/self.hidden_size_in))
+            case "scaled_xavier_both":
+                nn.init.normal_(self.lora_C, mean=1, std=math.sqrt(1.0/(self.hidden_size_in + self.num_weights_out)))
+            case "scaled_he_both":
+                nn.init.normal_(self.lora_C, mean=1, std=math.sqrt(2.0/(self.hidden_size_in + self.num_weights_out)))
             case "scaled_xavier_out":
-                nn.init.normal_(self.lora_C, mean=1, std=1.0 / math.sqrt(self.num_weights_out))
+                nn.init.normal_(self.lora_C, mean=1, std=math.sqrt(1.0/self.num_weights_out))
             case "scaled_he_out":
-                nn.init.normal_(self.lora_C, mean=1, std=1.0 / math.sqrt(self.num_weights_out * 2))
+                nn.init.normal_(self.lora_C, mean=1, std=math.sqrt(2.0/self.num_weights_out))
             case "uniform":
                 nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
-            case "bert_uniform":
-                nn.init.uniform_(self.lora_C, a=0.98, b=1.02)
-            case "uniform_z":
-                nn.init.uniform_(self.lora_C, a=0.975, b=1.025)
-            case "uniform_03":
-                nn.init.uniform_(self.lora_C, a=0.97, b=1.03)
             case "uniform_xl":
                 nn.init.uniform_(self.lora_C, a=0.95, b=1.05)
             case _:
