@@ -355,7 +355,7 @@ class LoRA(nn.Module):
                 elif "no_fan_in" in self.dense_strategy or "none" in self.dense_strategy:
                     pass
                 else:
-                    raise ValueError(f"Unknown norm_output: {self.dense_strategy}")
+                    raise ValueError(f"Unknown strategy for fanin: {self.dense_strategy}")
             elif self.mode == "dense_fan_out":
                 if "norm_fan_out" in self.dense_strategy or "norm_both" in self.dense_strategy:
                     norm = scaling_vector.norm(p=2, dim=1, keepdim=True) + 1e-9
@@ -366,9 +366,9 @@ class LoRA(nn.Module):
                 elif "no_fan_out" in self.dense_strategy or "none" in self.dense_strategy:
                     pass
                 else:
-                    raise ValueError(f"Unknown norm_output: {self.norm_output}")
+                    raise ValueError(f"Unknown strategy for fanout: {self.dense_strategy}")
             else: raise RuntimeError(f"Invalid mode (thid should never happen!): {self.mode}")
-            
+
             if hidden_states is None:
                 hidden_states = scaling_vector
             else: # this should not be normally executed
