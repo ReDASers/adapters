@@ -72,7 +72,8 @@ class LoRA(nn.Module):
         self.num_weights_out = lora_B_shape[0]
         self.dense_strategy = config.dense_strategy
         self._delta_w = None  # Placeholder for delta weights
-        self.init_weights = config.init_weights
+        self.init_weights_fan_in = config.init_weights_fan_in
+        self.init_weights_fan_out = config.init_weights_fan_out
         self.eps = config.eps
         # Initialize additional attributes
         self.autoencoder_arch = "NLbLN"
@@ -130,7 +131,7 @@ class LoRA(nn.Module):
     def _setup_strategy(self, lora_A_shape, lora_B_shape):
          # Determine calculation mode and setup accordingly
         if self.mode == "attention":
-            self._setup_full_calculation(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
+            self._setup_in_attn(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             self._setup_scaling()
         elif self.mode == "noop":
@@ -156,39 +157,34 @@ class LoRA(nn.Module):
         
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
         
-        
         self.scalar_scaler = nn.Parameter(torch.tensor(1.0))
         if self.mode == "dense_fan_out":
-            if self.init_weights == "bert":
-                nn.init.normal_(self.lora_C, mean=1, std=0.02)
-            elif self.init_weights == "bert_uniform":
-                nn.init.uniform_(self.lora_C, a=0.98, b=1.02)
-            elif self.init_weights == "ia3":
-                nn.init.ones_(self.lora_C)
-            elif self.init_weights == "uniform":
-                nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
-            elif self.init_weights == "uniform_large":
-                nn.init.uniform_(self.lora_C, a=0.97, b=1.03)
-            elif self.init_weights == "uniform_xl":
-                nn.init.uniform_(self.lora_C, a=0.95, b=1.05)
-            elif self.init_weights == "uniform_xxl":
-                nn.init.uniform_(self.lora_C, a=0.9, b=1.1)
-            elif self.init_weights == "normal":
-                nn.init.normal_(self.lora_C, mean=1, std=0.01)   # Initialize around 1.0 with a small std deviation
-            elif self.init_weights == "normal_large":
-                nn.init.normal_(self.lora_C, mean=1, std=0.03)   # Initialize around 1.0 with a large std deviation
-            elif self.init_weights == "normal_xl":
-                nn.init.normal_(self.lora_C, mean=1, std=0.05)   # Initialize around 1.0 with a large std deviation
-            elif self.init_weights == "normal_xxl":
-                nn.init.normal_(self.lora_C, mean=1, std=0.1)   # Initialize around 1.0 with a large std deviation
-            else:
-                raise ValueError(f"Unknown init_weights type: {self.init_weights}")
+            self._init_scaling_weights(self.init_weights_fan_out)
         elif self.mode == "dense_fan_in":
-            nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
+            self._init_scaling_weights(self.init_weights_fan_in)
         else:
             raise ValueError(f"Should not be setting up scaling for mode: {self.mode}") 
 
-    def _setup_full_calculation(self, lora_A_shape, lora_B_shape):
+    def _init_scaling_weights(self, init_weights):
+        match init_weights:
+            case "ia3":
+                nn.init.ones_(self.lora_C)
+            case "normal":
+                nn.init.normal_(self.lora_C, mean=1, std=0.01)
+            case "bert":
+                nn.init.normal_(self.lora_C, mean=1, std=0.02)
+            case "normal_xl":
+                nn.init.normal_(self.lora_C, mean=1, std=0.05)
+            case "uniform":
+                nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
+            case "bert_uniform":
+                nn.init.uniform_(self.lora_C, a=0.98, b=1.02)
+            case "uniform_xl":
+                nn.init.uniform_(self.lora_C, a=0.95, b=1.05)
+            case _:
+                raise ValueError(f"Unknown init_weights type: {self.init_weights}")
+            
+    def _setup_in_attn(self, lora_A_shape, lora_B_shape):
         """
         Sets up the full calculation mode by initializing autoencoder and other components.
 
@@ -346,38 +342,38 @@ class LoRA(nn.Module):
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
-            if hidden_states is None:
-                hidden_states = scaling_vector
-            else: # this should not be normally executed
-                hidden_states = torch.nan_to_num(hidden_states)
-                hidden_states = hidden_states * scaling_vector  
-            
+
             if self.mode == "dense_fan_in":
                 if "norm_fan_in" in self.dense_strategy or "norm_both" in self.dense_strategy:
-                    l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + self.eps
-                    hidden_states = hidden_states / l2_norm
+                    norm = scaling_vector.norm(p=2, dim=1, keepdim=True) + self.eps
+                    scaling_vector = scaling_vector / norm
                 elif "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Ensure the scalar is positive using ReLU6
                     scalar_fan_in = F.relu6(self.scalar_scaler) + self.eps
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    hidden_states = hidden_states * scalar_fan_in + self.eps
+                    scaling_vector = scaling_vector * scalar_fan_in + self.eps
                 elif "no_fan_in" in self.dense_strategy or "none" in self.dense_strategy:
                     pass
                 else:
                     raise ValueError(f"Unknown norm_output: {self.dense_strategy}")
-            else:
+            elif self.mode == "dense_fan_out":
                 if "norm_fan_out" in self.dense_strategy or "norm_both" in self.dense_strategy:
-                    l2_norm = hidden_states.norm(p=2, dim=1, keepdim=True) + self.eps
-                    hidden_states = hidden_states / l2_norm
+                    norm = scaling_vector.norm(p=2, dim=1, keepdim=True) + 1e-9
+                    scaling_vector = scaling_vector / norm
                 elif "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
-                    # Ensure the scalar is positive using ReLU6
-                    scalar_fan_out = F.relu6(self.scalar_scaler) + self.eps
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    hidden_states = hidden_states * scalar_fan_out + self.eps
+                    scaling_vector = scaling_vector * (1-self.eps)
                 elif "no_fan_out" in self.dense_strategy or "none" in self.dense_strategy:
                     pass
                 else:
                     raise ValueError(f"Unknown norm_output: {self.norm_output}")
+            else: raise RuntimeError(f"Invalid mode (thid should never happen!): {self.mode}")
+            
+            if hidden_states is None:
+                hidden_states = scaling_vector
+            else: # this should not be normally executed
+                hidden_states = torch.nan_to_num(hidden_states)
+                hidden_states = hidden_states * scaling_vector 
            
         # No operation mode
         elif self.mode == "noop":
