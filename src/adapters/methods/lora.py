@@ -190,7 +190,7 @@ class LoRA(nn.Module):
             case "scaled_normal_out":
                 nn.init.normal_(self.lora_C, mean=1, std=1.0/math.sqrt(2*self.hidden_size_in))
             case "scaled_normal_both":
-                nn.init.normal_(self.lora_C, mean=1, std=math.sqrt(1.0/(self.hidden_size_in + self.num_weights_out)))
+                nn.init.normal_(self.lora_C, mean=1, std=2.0/math.sqrt((self.hidden_size_in + self.num_weights_out)))
             case "scaled_xavier_both":
                 nn.init.normal_(self.lora_C, mean=1, std=math.sqrt(1.0/(self.hidden_size_in + self.num_weights_out)))
             case "scaled_he_both":
