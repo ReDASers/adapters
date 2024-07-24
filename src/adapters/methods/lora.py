@@ -188,7 +188,7 @@ class LoRA(nn.Module):
             case "scaled_xavier_out":
                 nn.init.normal_(self.lora_C, mean=1, std=math.sqrt(1.0/self.num_weights_out))
             case "scaled_he_out":
-                nn.init.normal_(self.lora_C, mean=1, std=2.0/math.sqrt(self.num_weights_out))
+                nn.init.normal_(self.lora_C, mean=1, std=math.sqrt(2.0/self.num_weights_out))
             case "uniform":
                 nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
             case "uniform_z":
