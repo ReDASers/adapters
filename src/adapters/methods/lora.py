@@ -157,7 +157,7 @@ class LoRA(nn.Module):
         
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
         
-        self.scalar_scaler = nn.Parameter(torch.tensor(1.0))
+        self.scalar_scaler = nn.Parameter(torch.tensor(self.eps))
         if self.mode == "dense_fan_out":
             self._init_scaling_weights(self.init_weights_fan_out)
         elif self.mode == "dense_fan_in":
@@ -376,10 +376,8 @@ class LoRA(nn.Module):
                     norm = scaling_vector.norm(p=2, dim=1, keepdim=True) + self.eps
                     scaling_vector = scaling_vector / norm
                 elif "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
-                    # Ensure the scalar is positive using ReLU6
-                    scalar_fan_in = F.relu6(self.scalar_scaler) + self.eps
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    scaling_vector = scaling_vector * scalar_fan_in + self.eps
+                    scaling_vector = scaling_vector + self.scalar_scaler
                 elif "rescale_fan_in" in self.dense_strategy:
                     assert "normal" in self.init_weights_fan_in, "Rescaling only supported for normal init"
                     scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
