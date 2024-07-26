@@ -72,9 +72,10 @@ class LoRA(nn.Module):
         self.num_weights_out = lora_B_shape[0]
         self.dense_strategy = config.dense_strategy
         self._delta_w = None  # Placeholder for delta weights
-        self.init_weights_fan_in = config.init_weights_fan_in
-        self.init_weights_fan_out = config.init_weights_fan_out
+        self.init_weights = config.init_weights
         self.eps = config.eps
+        self.rescale_frequency = config.rescale_frequency
+        self.n_steps = 0
         # Initialize additional attributes
         self.autoencoder_arch = "NLbLN"
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = "noop"
@@ -154,14 +155,10 @@ class LoRA(nn.Module):
         """
         Sets up the basic calculation mode by initializing scaling parameters.
         """
-        
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
-        
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps))
-        if self.mode == "dense_fan_out":
-            self._init_scaling_weights(self.init_weights_fan_out)
-        elif self.mode == "dense_fan_in":
-            self._init_scaling_weights(self.init_weights_fan_in)
+        if self.mode in ["dense_fan_out", "dense_fan_in"]:
+            self._init_scaling_weights(self.init_weights)
         else:
             raise ValueError(f"Should not be setting up scaling for mode: {self.mode}") 
 
@@ -175,18 +172,11 @@ class LoRA(nn.Module):
             case "normal_03":
                 self.sigma = 0.03
                 nn.init.normal_(self.lora_C, mean=1, std=0.03)
-            case "normal_z":
-                self.sigma = 0.025
-                nn.init.normal_(self.lora_C, mean=1, std=0.025)
-            case "normal_xl":
+            case "normal_05":
                 self.sigma = 0.05
                 nn.init.normal_(self.lora_C, mean=1, std=0.05)
             case "uniform":
                 nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
-            case "uniform_z":
-                nn.init.uniform_(self.lora_C, a=0.975, b=1.025)
-            case "uniform_xl":
-                nn.init.uniform_(self.lora_C, a=0.95, b=1.05)
             case _:
                 raise ValueError(f"Unknown init_weights type: {init_weights}")
             
@@ -198,9 +188,6 @@ class LoRA(nn.Module):
             lora_A_shape (tuple): Shape of the A matrix in LoRA.
             lora_B_shape (tuple): Shape of the B matrix in LoRA.
         """
-        #assert self.hidden_size_in == self.num_weights_out, "Input and output sizes must match for full calculation."
-        #assert lora_A_shape[0] == lora_B_shape[1] and lora_A_shape[1] == lora_B_shape[0], "dimensions of A and B.T must match"
-        #self.lora_dropout = nn.Dropout(p=dropout) if dropout > 0.0 else nn.Identity()
         self.f = self._get_autoencoder_architecture()
         self._initialize_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
@@ -339,7 +326,7 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-        
+        self.n_steps += 1
         # This may be a bit hard to follow because of optimizations
         # Check if full calculation mode is enabled
         if self.mode == "attention":
@@ -351,7 +338,8 @@ class LoRA(nn.Module):
             dw = self.f(self.dropout(torch.nan_to_num(hidden_states))) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
-            
+            if self.dense_strategy == "attention" and self.n_steps % self.rescale_frequency == 0:
+                hidden_states = self.rescale(hidden_states, sigma=self.sigma)
         # Alternative calculation mode
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
@@ -369,7 +357,7 @@ class LoRA(nn.Module):
                 else:
                     raise ValueError(f"Unknown strategy for fanin: {self.dense_strategy}")
                 
-                if "rescale_fan_in" in self.dense_strategy:
+                if "rescale_fan_in" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
                     assert "normal" in self.init_weights_fan_in, "Rescaling only supported for normal init"
                     scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
 
@@ -385,7 +373,7 @@ class LoRA(nn.Module):
                 else:
                     raise ValueError(f"Unknown strategy for fanout: {self.dense_strategy}")
                 
-                if "rescale_fan_out" in self.dense_strategy:
+                if "rescale_fan_out" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
                     assert "normal" in self.init_weights_fan_out, "Rescaling only supported for normal init"
                     scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
                     
@@ -404,6 +392,10 @@ class LoRA(nn.Module):
                 hidden_states = layer_input
         # should never happen
         else: raise ValueError(f"Unknown mode: {self.mode}")
+
+        if self.dense_strategy == "rescale_all" and self.n_steps % self.rescale_frequency == 0:
+            hidden_states = self.rescale(hidden_states, sigma=self.sigma)
+
         self.delta_w = hidden_states
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
