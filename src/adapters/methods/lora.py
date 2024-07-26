@@ -364,13 +364,15 @@ class LoRA(nn.Module):
                 elif "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
                     scaling_vector = scaling_vector + self.scalar_scaler
-                elif "rescale_fan_in" in self.dense_strategy:
-                    assert "normal" in self.init_weights_fan_in, "Rescaling only supported for normal init"
-                    scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
                 elif "no_fan_in" in self.dense_strategy or "none" in self.dense_strategy:
                     pass
                 else:
                     raise ValueError(f"Unknown strategy for fanin: {self.dense_strategy}")
+                
+                if "rescale_fan_in" in self.dense_strategy:
+                    assert "normal" in self.init_weights_fan_in, "Rescaling only supported for normal init"
+                    scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
+
             elif self.mode == "dense_fan_out":
                 if "norm_fan_out" in self.dense_strategy or "norm_both" in self.dense_strategy:
                     norm = scaling_vector.norm(p=2, dim=1, keepdim=True) + self.eps
@@ -378,13 +380,15 @@ class LoRA(nn.Module):
                 elif "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
                     scaling_vector = scaling_vector - self.scalar_scaler
-                elif "rescale_fan_out" in self.dense_strategy:
-                    assert "normal" in self.init_weights_fan_out, "Rescaling only supported for normal init"
-                    scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
                 elif "no_fan_out" in self.dense_strategy or "none" in self.dense_strategy:
                     pass
                 else:
                     raise ValueError(f"Unknown strategy for fanout: {self.dense_strategy}")
+                
+                if "rescale_fan_out" in self.dense_strategy:
+                    assert "normal" in self.init_weights_fan_out, "Rescaling only supported for normal init"
+                    scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
+                    
             else: raise RuntimeError(f"Invalid mode (thid should never happen!): {self.mode}")
 
             if hidden_states is None:
