@@ -373,7 +373,7 @@ class LoRA(nn.Module):
                     raise ValueError(f"Unknown strategy for fanin: {self.dense_strategy}")
             elif self.mode == "dense_fan_out":
                 if "norm_fan_out" in self.dense_strategy or "norm_both" in self.dense_strategy:
-                    norm = scaling_vector.norm(p=2, dim=1, keepdim=True) + 1e-9
+                    norm = scaling_vector.norm(p=2, dim=1, keepdim=True) + self.eps
                     scaling_vector = scaling_vector / norm
                 elif "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
