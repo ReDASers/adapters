@@ -320,16 +320,14 @@ class LoRA(nn.Module):
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
         
-    def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.02) -> torch.Tensor:
+    def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.0) -> torch.Tensor:
         w = torch.nan_to_num(weights)
-        u = torch.mean(w, keepdim=True)
-        stddev = torch.std(w, keepdim=True)
+        u = torch.mean(w)
+        stddev = torch.std(w)
         # calculate z-scores
         z = (w - u) / (stddev + 1e-12)
         # rescale to original range
-        resicaled_weights = z * sigma + u
-        return resicaled_weights
-
+        return z * sigma + u
 
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         """Forward pass of the LoRA module.
