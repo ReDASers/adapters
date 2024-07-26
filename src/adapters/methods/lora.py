@@ -391,7 +391,7 @@ class LoRA(nn.Module):
                     scaling_vector = scaling_vector / norm
                 elif "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    scaling_vector = scaling_vector * (1-self.eps)
+                    scaling_vector = scaling_vector - self.scalar_scaler
                 elif "rescale_fan_out" in self.dense_strategy:
                     assert "normal" in self.init_weights_fan_out, "Rescaling only supported for normal init"
                     scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
