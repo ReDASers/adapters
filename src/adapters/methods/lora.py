@@ -356,16 +356,15 @@ class LoRA(nn.Module):
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
+            hidden_states = self.dropout(torch.nan_to_num(hidden_states))
             # Apply function f and handle NaNs in hidden_states
-            # Perform matrix multiplications with lora_A and lora_B
-            if "rescale_attn" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
-                fx = self._rescale_layers(self.f(self.dropout(torch.nan_to_num(hidden_states))))
-            else:
-                fx = self.f(self.dropout(torch.nan_to_num(hidden_states)))
-            dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+            # Perform matrix multiplications with lora_A and lora_
+            
+            dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
-
+            if "rescale_attn" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
+                self._rescale_layers(self.f)
         # Alternative calculation mode
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
