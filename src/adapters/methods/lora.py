@@ -388,9 +388,9 @@ class LoRA(nn.Module):
                     scaling_vector = scaling_vector * (1 - self.scalar_scaler) + self.eps
                 
                 
-                if "rescale_fan_out" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
-                    assert "normal" in self.init_weights, "Rescaling only supported for normal init"
-                    scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
+                #if "rescale_fan_out" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
+                #    assert "normal" in self.init_weights, "Rescaling only supported for normal init"
+                #    scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
                     
             else: raise RuntimeError(f"Invalid mode (thid should never happen!): {self.mode}")
 
