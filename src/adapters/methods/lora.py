@@ -223,6 +223,7 @@ class LoRA(nn.Module):
                 nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=1e-2)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
+        
 
     def _get_autoencoder_architecture(self):
         """
@@ -338,8 +339,7 @@ class LoRA(nn.Module):
             dw = self.f(self.dropout(torch.nan_to_num(hidden_states))) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
-            if "attention" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
-                hidden_states = self.rescale(hidden_states, sigma=self.sigma)
+
         # Alternative calculation mode
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
@@ -392,9 +392,6 @@ class LoRA(nn.Module):
                 hidden_states = layer_input
         # should never happen
         else: raise ValueError(f"Unknown mode: {self.mode}")
-
-        if "rescale_all" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
-            hidden_states = self.rescale(hidden_states, sigma=self.sigma)
 
         self.delta_w = hidden_states
         # Apply gating mechanism if use_gating is enabled
