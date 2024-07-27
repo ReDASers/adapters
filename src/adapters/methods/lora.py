@@ -358,7 +358,7 @@ class LoRA(nn.Module):
             # Apply function f and handle NaNs in hidden_states
             # Perform matrix multiplications with lora_A and lora_
             
-            dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+            dw = self.f(hidden_states) #@ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
         # Alternative calculation mode
