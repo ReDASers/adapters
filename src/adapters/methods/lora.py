@@ -276,9 +276,13 @@ class LoRA(nn.Module):
             torch.Tensor: Composed weights.
         """
         if self.mode == "attention":
-            return weights + self.rescale(added, sigma=0.05)
+            if "rescale_attn" or "rescale_all" in self.dense_strategy:
+                return weights + self.rescale(added, sigma=0.05)
+            return weights + added
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
-            return weights * self.rescale(added, sigma=0.03)
+            if "rescale_dense" or "rescale_all" in self.dense_strategy:
+                return weights * self.rescale(added, sigma=0.03)
+            return weights * added
         elif self.mode == "noop":
             return weights
         else:
@@ -357,8 +361,6 @@ class LoRA(nn.Module):
             dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
-            if "rescale_attn" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
-                self._rescale_layers(self.f)
         # Alternative calculation mode
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
