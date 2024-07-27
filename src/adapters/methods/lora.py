@@ -111,7 +111,7 @@ class LoRA(nn.Module):
         if (config.selfattn_lora == False and location_key == "selfattn_lora") or \
            (config.intermediate_lora == False and location_key == "intermediate_lora") or \
            (config.output_lora == False and location_key == "output_lora"):
-            logging.warning(f"LoRIA module has location key {self.location_key} but is not enabled in config.")
+            logging.warning(f"LoRIA module has location key {location_key} but is not enabled in config.")
             return False
         return True
 
@@ -120,7 +120,7 @@ class LoRA(nn.Module):
         Checks if advanced calculation is possible based on the current configuration.
 
         Returns:
-            bool: True if advanced calculation is possible, False otherwise.
+            stromg: how adapter weights will be handled.
         """
         if self.hidden_size_in == self.num_weights_out or self.location_key == "selfattn_lora":
             return "attention"
@@ -311,13 +311,13 @@ class LoRA(nn.Module):
             raise ValueError(f"Unknown mode: {self.mode}")
         
     
-    def kaiming_sigma_estimator(self, layer, a: float=1e-2):
+    def _kaiming_sigma_estimator(self, layer, a: float=1e-2):
         # Calculate the standard deviation based on the Kaiming initialization formula
         sigma = math.sqrt(2 / ((1 + a ** 2) * layer.weight.size(0)))
         # Save the standard deviation in self.sigma
         return sigma
     
-    def rescale_layers(self, layers: nn.Sequential):
+    def _rescale_layers(self, layers: nn.Sequential):
         """
         Rescales the weights of the given layers.
 
