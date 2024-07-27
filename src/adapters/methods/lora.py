@@ -280,8 +280,12 @@ class LoRA(nn.Module):
                 return weights + self.rescale(added, sigma=0.05)
             return weights + added
         elif self.mode == "dense_fan_in":
-            return weights * self.rescale(added, sigma=0.03)
+            if self.n_steps % self.rescale_frequency == 0:
+                return weights * self.rescale(added, sigma=0.03)
+            return weights * added
         elif self.mode == "dense_fan_out":
+            if "rescale_fan_out" in self.dense_strategy:
+                return weights * self.rescale(added, sigma=0.02)
             return weights * added
         elif self.mode == "noop":
             return weights
