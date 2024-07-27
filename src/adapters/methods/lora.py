@@ -276,11 +276,11 @@ class LoRA(nn.Module):
             torch.Tensor: Composed weights.
         """
         if self.mode == "attention":
-            if "rescale_attn" or "rescale_all" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
+            if "rescale_attn" or "rescale_all" in self.dense_strategy:
                 return weights + self.rescale(added, sigma=0.05)
             return weights + added
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
-            if "rescale_dense" or "rescale_all" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
+            if "rescale_dense" or "rescale_all" in self.dense_strategy:
                 return weights * self.rescale(added, sigma=0.03)
             return weights * added
         elif self.mode == "noop":
@@ -358,7 +358,7 @@ class LoRA(nn.Module):
             # Apply function f and handle NaNs in hidden_states
             # Perform matrix multiplications with lora_A and lora_
             
-            dw = self.f(hidden_states) #@ torch.t(self.lora_A) @ torch.t(self.lora_B)
+            dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
         # Alternative calculation mode
