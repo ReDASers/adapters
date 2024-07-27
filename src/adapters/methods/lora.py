@@ -76,6 +76,7 @@ class LoRA(nn.Module):
         self.eps = config.eps
         self.rescale_frequency = config.rescale_frequency
         self.n_steps = 0
+        self.a = 1e-2
         # Initialize additional attributes
         self.autoencoder_arch = "NLbLN"
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = "noop"
@@ -140,7 +141,7 @@ class LoRA(nn.Module):
         else:
             raise ValueError(f"Unknown calculation strategy: {self.mode}")
             
-    def _setup_gating_maybe(self, gating_heads):
+    def _setup_gating_maybe(self, gating_heads: int):
         """
         Sets up the gating mechanism if use_gating is enabled.
 
@@ -211,7 +212,8 @@ class LoRA(nn.Module):
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B)
 
-    def _initialize_weights(self, layers):
+
+    def _initialize_weights(self, layers: nn.Sequential):
         """
         Initializes the weights of the given layers.
         
@@ -308,7 +310,27 @@ class LoRA(nn.Module):
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
         
+    
+    def kaiming_sigma_estimator(self, layer, a: float=1e-2):
+        # Calculate the standard deviation based on the Kaiming initialization formula
+        sigma = math.sqrt(2 / ((1 + a ** 2) * layer.weight.size(0)))
+        # Save the standard deviation in self.sigma
+        return sigma
+    
+    def rescale_layers(self, layers: nn.Sequential):
+        """
+        Rescales the weights of the given layers.
+
+        Args:
+            layers (nn.Sequential): Sequential model containing the layers.
+        """
+        for layer in layers:
+            if isinstance(layer, nn.Linear):
+                sigma = self._kaiming_sigma_estimator(layer, a=self.a)
+                layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
+        
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.0) -> torch.Tensor:
+        
         w = torch.nan_to_num(weights)
         u = torch.mean(w)
         stddev = torch.std(w)
@@ -336,7 +358,11 @@ class LoRA(nn.Module):
                 hidden_states = layer_input
             # Apply function f and handle NaNs in hidden_states
             # Perform matrix multiplications with lora_A and lora_B
-            dw = self.f(self.dropout(torch.nan_to_num(hidden_states))) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+            if "rescale_attn" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
+                fx = self._rescale_layers(self.f(self.dropout(torch.nan_to_num(hidden_states))))
+            else:
+                fx = self.f(self.dropout(torch.nan_to_num(hidden_states)))
+            dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
 
@@ -346,32 +372,22 @@ class LoRA(nn.Module):
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
 
             if self.mode == "dense_fan_in":
-                if "norm_fan_in" in self.dense_strategy or "norm_both" in self.dense_strategy:
-                    norm = scaling_vector.norm(p=2, dim=1, keepdim=True) + self.eps
-                    scaling_vector = scaling_vector / norm
-                elif "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
+                
+                if "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    scaling_vector = scaling_vector + self.scalar_scaler
-                elif "no_fan_in" in self.dense_strategy or "none" in self.dense_strategy:
-                    pass
-                else:
-                    raise ValueError(f"Unknown strategy for fanin: {self.dense_strategy}")
+                    scalar_scaler = self.scalar_scaler + self.eps
+                    scaling_vector = scaling_vector * scalar_scaler + self.eps
+
                 
                 if "rescale_fan_in" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
                     assert "normal" in self.init_weights, "Rescaling only supported for normal init"
                     scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
 
             elif self.mode == "dense_fan_out":
-                if "norm_fan_out" in self.dense_strategy or "norm_both" in self.dense_strategy:
-                    norm = scaling_vector.norm(p=2, dim=1, keepdim=True) + self.eps
-                    scaling_vector = scaling_vector / norm
-                elif "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
+                if "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    scaling_vector = scaling_vector + self.scalar_scaler
-                elif "no_fan_out" in self.dense_strategy or "none" in self.dense_strategy:
-                    pass
-                else:
-                    raise ValueError(f"Unknown strategy for fanout: {self.dense_strategy}")
+                    scaling_vector = scaling_vector * (1 - self.scalar_scaler) + self.eps
+                
                 
                 if "rescale_fan_out" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
                     assert "normal" in self.init_weights, "Rescaling only supported for normal init"
