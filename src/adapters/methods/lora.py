@@ -338,7 +338,7 @@ class LoRA(nn.Module):
             dw = self.f(self.dropout(torch.nan_to_num(hidden_states))) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
-            if self.dense_strategy == "attention" and self.n_steps % self.rescale_frequency == 0:
+            if "attention" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
                 hidden_states = self.rescale(hidden_states, sigma=self.sigma)
         # Alternative calculation mode
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
@@ -393,7 +393,7 @@ class LoRA(nn.Module):
         # should never happen
         else: raise ValueError(f"Unknown mode: {self.mode}")
 
-        if self.dense_strategy == "rescale_all" and self.n_steps % self.rescale_frequency == 0:
+        if "rescale_all" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
             hidden_states = self.rescale(hidden_states, sigma=self.sigma)
 
         self.delta_w = hidden_states
