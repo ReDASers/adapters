@@ -358,7 +358,7 @@ class LoRA(nn.Module):
                     raise ValueError(f"Unknown strategy for fanin: {self.dense_strategy}")
                 
                 if "rescale_fan_in" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
-                    assert "normal" in self.init_weights_fan_in, "Rescaling only supported for normal init"
+                    assert "normal" in self.init_weights, "Rescaling only supported for normal init"
                     scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
 
             elif self.mode == "dense_fan_out":
@@ -367,14 +367,14 @@ class LoRA(nn.Module):
                     scaling_vector = scaling_vector / norm
                 elif "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    scaling_vector = scaling_vector - self.scalar_scaler
+                    scaling_vector = scaling_vector + self.scalar_scaler
                 elif "no_fan_out" in self.dense_strategy or "none" in self.dense_strategy:
                     pass
                 else:
                     raise ValueError(f"Unknown strategy for fanout: {self.dense_strategy}")
                 
                 if "rescale_fan_out" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
-                    assert "normal" in self.init_weights_fan_out, "Rescaling only supported for normal init"
+                    assert "normal" in self.init_weights, "Rescaling only supported for normal init"
                     scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
                     
             else: raise RuntimeError(f"Invalid mode (thid should never happen!): {self.mode}")
