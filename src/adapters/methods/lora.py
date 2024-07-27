@@ -276,11 +276,11 @@ class LoRA(nn.Module):
             torch.Tensor: Composed weights.
         """
         if self.mode == "attention":
-            if "rescale_attn" or "rescale_all" in self.dense_strategy:
+            if "rescale_attn" or "rescale_all" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
                 return weights + self.rescale(added, sigma=0.05)
             return weights + added
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
-            if "rescale_dense" or "rescale_all" in self.dense_strategy:
+            if "rescale_dense" or "rescale_all" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
                 return weights * self.rescale(added, sigma=0.03)
             return weights * added
         elif self.mode == "noop":
