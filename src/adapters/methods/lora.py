@@ -276,9 +276,9 @@ class LoRA(nn.Module):
             torch.Tensor: Composed weights.
         """
         if self.mode == "attention":
-            return weights + added
+            return weights + self.rescale(added, sigma=0.05)
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
-            return weights * added
+            return weights * self.rescale(added, sigma=0.03)
         elif self.mode == "noop":
             return weights
         else:
