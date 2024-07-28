@@ -160,6 +160,7 @@ class LoRA(nn.Module):
     def _init_scaling_weights(self, init_weights):
         match init_weights:
             case "ia3":
+                self.sigma = 0.0
                 nn.init.ones_(self.lora_C)
             case "bert_normal":
                 self.sigma = 0.02
@@ -170,8 +171,6 @@ class LoRA(nn.Module):
             case "normal_05":
                 self.sigma = 0.05
                 nn.init.normal_(self.lora_C, mean=1, std=0.05)
-            case "uniform":
-                nn.init.uniform_(self.lora_C, a=0.99, b=1.01)
             case _:
                 raise ValueError(f"Unknown init_weights type: {init_weights}")
             
@@ -300,11 +299,11 @@ class LoRA(nn.Module):
             return weights + added
         elif self.mode == "dense_fan_in":
             if self.do_rescale():
-                return weights * self.rescale(added, sigma=0.03)
+                return weights * self.rescale(added, sigma=self.sigma)
             return weights * added
         elif self.mode == "dense_fan_out":
             if self.do_rescale():
-                return weights * self.rescale(added, sigma=0.02)
+                return weights * self.rescale(added, sigma=self.sigma)
             return weights * added
         elif self.mode == "noop":
             return weights
