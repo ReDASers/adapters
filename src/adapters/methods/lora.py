@@ -236,11 +236,11 @@ class LoRA(nn.Module):
         except KeyError:
             raise ValueError(f"Unknown autoencoder architecture: {self.autoencoder_arch}")
 
-    def _kaiming_sigma_estimator(self,  weights:  torch.Tensor, a: float=1e-2):
+    def _kaiming_sigma_estimator(self,  mode: str = "fan_in", a: float=1e-2):
         # Calculate the standard deviation based on the Kaiming initialization formula
-        sigma = math.sqrt(2 / ((1 + a ** 2) * (weights.size(-1))))
+        sigma = math.sqrt(2 / ((1 + (1e-2) ** 2) * self.hidden_size_i))
         # Save the standard deviation in self.sigma
-        return 2.0*sigma
+        return sigma
 
     @property
     def delta_w(self) -> torch.Tensor:
@@ -290,7 +290,7 @@ class LoRA(nn.Module):
         """
         if self.mode == "attention":
             if self.do_rescale():
-                return weights + self.rescale(added, sigma=0.01)
+                return weights + self.rescale(added, sigma=0.03)
             return weights + added
         elif self.mode == "dense_fan_in":
             if self.do_rescale():
