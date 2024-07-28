@@ -151,7 +151,7 @@ class LoRA(nn.Module):
         Sets up the basic calculation mode by initializing scaling parameters.
         """
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
-        self.scalar_scaler = nn.Parameter(torch.tensor(1.0 - self.eps**2))
+        self.scalar_scaler = nn.Parameter(torch.tensor(1.0 - self.eps))
         if self.mode in ["dense_fan_out", "dense_fan_in"]:
             self._init_scaling_weights()
         else:
@@ -384,14 +384,14 @@ class LoRA(nn.Module):
                 if "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
                    
-                    scaling_vector = scaling_vector * self.scalar_scaler + self.eps**epoch
+                    scaling_vector = scaling_vector * self.scalar_scaler
 
 
             elif self.mode == "dense_fan_out":
                 if "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
                     
-                    scaling_vector = scaling_vector * self.scalar_scaler + self.eps**epoch
+                    scaling_vector = scaling_vector * self.scalar_scaler
 
                     
             
