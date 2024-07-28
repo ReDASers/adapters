@@ -371,6 +371,7 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self.n_steps += 1
+        epoch = self.n_steps // self.rescale_frequency
         # This may be a bit hard to follow because of optimizations
         # Check if full calculation mode is enabled
         if self.mode == "attention":
@@ -393,24 +394,18 @@ class LoRA(nn.Module):
                 
                 if "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    scalar_scaler = 1.0 + self.scalar_scaler
+                    scalar_scaler = 1.0 + self.scalar_scaler + self.eps
                     scaling_vector = scaling_vector * scalar_scaler + 1e-12
 
-                
-                # if "rescale_fan_in" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
-                #    assert "normal" in self.init_weights, "Rescaling only supported for normal init"
-                #    scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
 
             elif self.mode == "dense_fan_out":
                 if "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    scalar_scaler = 1.0 + self.scalar_scaler
+                    scalar_scaler = 1.0 - self.scalar_scaler + self.eps
                     scaling_vector = scaling_vector * scalar_scaler + 1e-12
-                
-                
-                #if "rescale_fan_out" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
-                #    assert "normal" in self.init_weights, "Rescaling only supported for normal init"
-                #    scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
+
+                    
+            
                     
             else: raise RuntimeError(f"Invalid mode (thid should never happen!): {self.mode}")
 
