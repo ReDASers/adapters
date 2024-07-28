@@ -151,7 +151,7 @@ class LoRA(nn.Module):
         Sets up the basic calculation mode by initializing scaling parameters.
         """
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
-        self.scalar_scaler = nn.Parameter(torch.tensor(self.eps))
+        self.scalar_scaler = nn.Parameter(torch.tensor(1.0 - self.eps**2))
         if self.mode in ["dense_fan_out", "dense_fan_in"]:
             self._init_scaling_weights()
         else:
@@ -161,9 +161,8 @@ class LoRA(nn.Module):
         if self.sigma < 0:
             self.sigma =  math.sqrt(2 / ((1 + (1e-2) ** 2) * self.hidden_size_in))
         elif self.sigma == 0:
-            self.sigma = math.sqrt(2 / ((1 + (1e-2) ** 2) * self.num_weights_out))
-        nn.init.normal_(self.lora_C, mean=1, std=self.sigma)
-         
+            self.sigma = 0.01
+        nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
         """
@@ -384,15 +383,15 @@ class LoRA(nn.Module):
                 
                 if "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    scalar_scaler = 1.0 - self.scalar_scaler * epoch
-                    scaling_vector = scaling_vector * scalar_scaler
+                   
+                    scaling_vector = scaling_vector * self.scalar_scaler + self.eps**epoch
 
 
             elif self.mode == "dense_fan_out":
                 if "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    scalar_scaler = 1.0 - self.scalar_scaler * epoch
-                    scaling_vector = scaling_vector * scalar_scaler
+                    
+                    scaling_vector = scaling_vector * self.scalar_scaler + self.eps**epoch
 
                     
             
