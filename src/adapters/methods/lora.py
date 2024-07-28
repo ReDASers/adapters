@@ -159,7 +159,7 @@ class LoRA(nn.Module):
 
     def _init_scaling_weights(self):
         if self.sigma < 0:
-            self.sigma = math.sqrt(2.0 / float(self.num_weights_out))
+            self.sigma = math.sqrt(1.0 / float(self.num_weights_out))
         nn.init.normal_(self.lora_C, mean=1, std=self.sigma)
          
             
