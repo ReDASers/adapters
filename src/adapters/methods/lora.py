@@ -236,9 +236,9 @@ class LoRA(nn.Module):
         except KeyError:
             raise ValueError(f"Unknown autoencoder architecture: {self.autoencoder_arch}")
 
-    def _kaiming_sigma_estimator(layer: nn.Linear, a: float=1e-2):
+    def _kaiming_sigma_estimator( weights: torch.Tensor, a: float=1e-2):
         # Calculate the standard deviation based on the Kaiming initialization formula
-        sigma = math.sqrt(2 / ((1 + a ** 2) * layer.weight.size(-1)))
+        sigma = math.sqrt(2 / ((1 + a ** 2) * weights.size(-1)))
         # Save the standard deviation in self.sigma
         return sigma
 
