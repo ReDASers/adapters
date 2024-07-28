@@ -394,15 +394,15 @@ class LoRA(nn.Module):
                 
                 if "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    scalar_scaler = 1.0 + self.scalar_scaler + self.eps
-                    scaling_vector = scaling_vector * scalar_scaler + 1e-12
+                    scalar_scaler = 1.0 - self.scalar_scaler
+                    scaling_vector = scaling_vector * scalar_scaler
 
 
             elif self.mode == "dense_fan_out":
                 if "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    scalar_scaler = 1.0 - self.scalar_scaler + self.eps
-                    scaling_vector = scaling_vector * scalar_scaler + 1e-12
+                    scalar_scaler = 1.0 - self.scalar_scaler
+                    scaling_vector = scaling_vector * scalar_scaler
 
                     
             
