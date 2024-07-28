@@ -274,7 +274,7 @@ class LoRA(nn.Module):
             case "dense_fan_in":
                 return self.n_steps % self.rescale_frequency == 0
             case "dense_fan_out":
-                return "rescale_fan_out" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0
+                return self.n_steps % self.rescale_frequency == 0
             case "attention":
                 return "rescale_attn" in self.dense_strategy or "rescale_all" in self.dense_strategy
             case _:
