@@ -263,6 +263,25 @@ class LoRA(nn.Module):
         """Deletes the delta_w value."""
         del self._delta_w
 
+    def do_rescale(self) -> bool:
+        """
+        Checks if rescaling is required based on the configuration.
+
+        Returns:
+            bool: True if rescaling is required, False otherwise.
+        """
+        match self.mode:
+            case "dense_fan_in":
+                return self.n_steps % self.rescale_frequency == 0
+            case "dense_fan_out":
+                return "rescale_fan_out" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0
+            case "attention":
+                return "rescale_attn" in self.dense_strategy or "rescale_all" in self.dense_strategy
+            case _:
+                return False
+        
+        
+
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
 
@@ -276,15 +295,15 @@ class LoRA(nn.Module):
             torch.Tensor: Composed weights.
         """
         if self.mode == "attention":
-            if "rescale_attn" or "rescale_all" in self.dense_strategy:
+            if self.do_rescale():
                 return weights + self.rescale(added, sigma=0.05)
             return weights + added
         elif self.mode == "dense_fan_in":
-            if self.n_steps % self.rescale_frequency == 0:
+            if self.do_rescale():
                 return weights * self.rescale(added, sigma=0.03)
             return weights * added
         elif self.mode == "dense_fan_out":
-            if "rescale_fan_out" in self.dense_strategy:
+            if self.do_rescale():
                 return weights * self.rescale(added, sigma=0.02)
             return weights * added
         elif self.mode == "noop":
@@ -374,18 +393,19 @@ class LoRA(nn.Module):
                 
                 if "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    scalar_scaler = self.scalar_scaler + self.eps
-                    scaling_vector = scaling_vector * scalar_scaler + self.eps
+                    scalar_scaler = 1.0 + self.scalar_scaler
+                    scaling_vector = scaling_vector * scalar_scaler + 1e-12
 
                 
-                if "rescale_fan_in" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
-                    assert "normal" in self.init_weights, "Rescaling only supported for normal init"
-                    scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
+                # if "rescale_fan_in" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
+                #    assert "normal" in self.init_weights, "Rescaling only supported for normal init"
+                #    scaling_vector = self.rescale(scaling_vector, sigma=self.sigma)
 
             elif self.mode == "dense_fan_out":
                 if "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    scaling_vector = scaling_vector * (1 - self.scalar_scaler) + self.eps
+                    scalar_scaler = 1.0 + self.scalar_scaler
+                    scaling_vector = scaling_vector * scalar_scaler + 1e-12
                 
                 
                 #if "rescale_fan_out" in self.dense_strategy and self.n_steps % self.rescale_frequency == 0:
