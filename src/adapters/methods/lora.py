@@ -290,7 +290,7 @@ class LoRA(nn.Module):
         """
         if self.mode == "attention":
             if self.do_rescale():
-                return weights + self.rescale(added, sigma=0.1)
+                return weights + self.rescale(added, sigma=0.02)
             return weights + added
         elif self.mode == "dense_fan_in":
             if self.do_rescale():
