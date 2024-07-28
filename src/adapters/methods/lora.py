@@ -153,11 +153,13 @@ class LoRA(nn.Module):
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps))
         if self.mode in ["dense_fan_out", "dense_fan_in"]:
-            self._init_scaling_weights(self.init_weights)
+            self._init_scaling_weights()
         else:
             raise ValueError(f"Should not be setting up scaling for mode: {self.mode}") 
 
-    def _init_scaling_weights(self, init_weights):
+    def _init_scaling_weights(self):
+        if self.sigma < 0:
+            self.sigma = math.sqrt(2.0 / float(self.num_weights_out))
         nn.init.normal_(self.lora_C, mean=1, std=self.sigma)
          
             
