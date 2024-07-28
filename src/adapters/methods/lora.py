@@ -236,6 +236,11 @@ class LoRA(nn.Module):
         except KeyError:
             raise ValueError(f"Unknown autoencoder architecture: {self.autoencoder_arch}")
 
+    def _kaiming_sigma_estimator(layer: nn.Linear, a: float=1e-2):
+        # Calculate the standard deviation based on the Kaiming initialization formula
+        sigma = math.sqrt(2 / ((1 + a ** 2) * layer.weight.size(-1)))
+        # Save the standard deviation in self.sigma
+        return sigma
 
     @property
     def delta_w(self) -> torch.Tensor:
@@ -285,7 +290,8 @@ class LoRA(nn.Module):
         """
         if self.mode == "attention":
             if self.do_rescale():
-                return weights + self.rescale(added, sigma=0.05)
+                self.sigma = self._kaiming_sigma_estimator(added)
+                return weights + self.rescale(added, sigma=self.sigma)
             return weights + added
         elif self.mode == "dense_fan_in":
             if self.do_rescale():
@@ -320,24 +326,6 @@ class LoRA(nn.Module):
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
         
-    
-    def _kaiming_sigma_estimator(self, layer, a: float=1e-2):
-        # Calculate the standard deviation based on the Kaiming initialization formula
-        sigma = math.sqrt(2 / ((1 + a ** 2) * layer.weight.size(0)))
-        # Save the standard deviation in self.sigma
-        return sigma
-    
-    def _rescale_layers(self, layers: nn.Sequential):
-        """
-        Rescales the weights of the given layers.
-
-        Args:
-            layers (nn.Sequential): Sequential model containing the layers.
-        """
-        for layer in layers:
-            if isinstance(layer, nn.Linear):
-                sigma = self._kaiming_sigma_estimator(layer, a=self.a)
-                layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
         
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.0) -> torch.Tensor:
         
@@ -360,16 +348,12 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self.n_steps += 1
-        # This may be a bit hard to follow because of optimizations
         # Check if full calculation mode is enabled
         if self.mode == "attention":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
             hidden_states = self.dropout(torch.nan_to_num(hidden_states))
-            # Apply function f and handle NaNs in hidden_states
-            # Perform matrix multiplications with lora_A and lora_
-            
             dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
@@ -379,23 +363,13 @@ class LoRA(nn.Module):
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
 
             if self.mode == "dense_fan_in":
-                
                 if "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                   
                     scaling_vector = scaling_vector * (1.0 - self.scalar_scaler)
-
-
-            elif self.mode == "dense_fan_out":
+            else:
                 if "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
-                    
                     scaling_vector = scaling_vector * (1.0 - self.scalar_scaler)
-
-                    
-            
-                    
-            else: raise RuntimeError(f"Invalid mode (thid should never happen!): {self.mode}")
 
             if hidden_states is None:
                 hidden_states = scaling_vector
