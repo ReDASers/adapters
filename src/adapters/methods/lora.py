@@ -66,7 +66,7 @@ class LoRA(nn.Module):
         self.num_weights_out = lora_B_shape[0]
         self.dense_strategy = config.dense_strategy
         self._delta_w = None  # Placeholder for delta weights
-        self.init_weights = config.init_weights
+        self.sigma = config.init_weights
         self.eps = config.eps
         self.rescale_frequency = config.rescale_frequency
         self.n_steps = 0
@@ -158,21 +158,8 @@ class LoRA(nn.Module):
             raise ValueError(f"Should not be setting up scaling for mode: {self.mode}") 
 
     def _init_scaling_weights(self, init_weights):
-        match init_weights:
-            case "ia3":
-                self.sigma = 0.0
-                nn.init.ones_(self.lora_C)
-            case "bert_normal":
-                self.sigma = 0.02
-                nn.init.normal_(self.lora_C, mean=1, std=0.02)
-            case "normal_03":
-                self.sigma = 0.03
-                nn.init.normal_(self.lora_C, mean=1, std=0.03)
-            case "normal_05":
-                self.sigma = 0.05
-                nn.init.normal_(self.lora_C, mean=1, std=0.05)
-            case _:
-                raise ValueError(f"Unknown init_weights type: {init_weights}")
+        nn.init.normal_(self.lora_C, mean=1, std=self.sigma)
+         
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
         """
