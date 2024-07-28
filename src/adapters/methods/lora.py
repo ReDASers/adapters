@@ -290,8 +290,7 @@ class LoRA(nn.Module):
         """
         if self.mode == "attention":
             if self.do_rescale():
-                self.sigma = self._kaiming_sigma_estimator(weights)
-                return weights + self.rescale(added, sigma=self.sigma)
+                return weights + self.rescale(added, sigma=0.01)
             return weights + added
         elif self.mode == "dense_fan_in":
             if self.do_rescale():
