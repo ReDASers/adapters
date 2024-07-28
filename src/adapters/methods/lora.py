@@ -360,7 +360,6 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self.n_steps += 1
-        epoch = self.n_steps // self.rescale_frequency
         # This may be a bit hard to follow because of optimizations
         # Check if full calculation mode is enabled
         if self.mode == "attention":
@@ -384,14 +383,14 @@ class LoRA(nn.Module):
                 if "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
                    
-                    scaling_vector = scaling_vector * F.relu((1.0 - self.scalar_scaler - self.eps * self.n_steps)) 
+                    scaling_vector = scaling_vector * F.relu((1.0 - self.scalar_scaler - self.eps)) 
 
 
             elif self.mode == "dense_fan_out":
                 if "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
                     # Apply the positive scalar and ensure non-negative scaling vector
                     
-                    scaling_vector = scaling_vector * F.relu((1.0 - self.scalar_scaler - self.eps * self.n_steps))
+                    scaling_vector = scaling_vector * F.relu((1.0 - self.scalar_scaler - self.eps))
 
                     
             
