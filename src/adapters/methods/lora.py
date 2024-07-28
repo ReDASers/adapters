@@ -240,7 +240,7 @@ class LoRA(nn.Module):
         # Calculate the standard deviation based on the Kaiming initialization formula
         sigma = math.sqrt(2 / ((1 + a ** 2) * (weights.size(-1))))
         # Save the standard deviation in self.sigma
-        return sigma
+        return 2.0*sigma
 
     @property
     def delta_w(self) -> torch.Tensor:
