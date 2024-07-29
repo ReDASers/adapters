@@ -357,20 +357,14 @@ class LoRA(nn.Module):
             hidden_states = self.dropout(torch.nan_to_num(hidden_states))
             dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
-            hidden_states = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
+            dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
+            hidden_states = dw / dw_norm
         # Alternative calculation mode
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             # Apply scaling to the weights
-            scaling_vector = scaling_vector * (1.0 - self.scalar_scaler)
-
-            if hidden_states is None:
-                hidden_states = scaling_vector
-            else: # this should not be normally executed
-                hidden_states = torch.nan_to_num(hidden_states)
-                hidden_states = hidden_states * scaling_vector 
-           
+            hidden_states = scaling_vector * (1.0 - self.scalar_scaler)           
         # No operation mode
         elif self.mode == "noop":
             # If hidden_states is None, use layer_input instead
