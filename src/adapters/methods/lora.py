@@ -161,9 +161,9 @@ class LoRA(nn.Module):
 
     def _init_scaling_weights(self):
         if self.sigma < 0:
-            self.sigma =  math.sqrt(2 / ((1 + (math.sqrt(5)) ** 2) * self.connections_in))
+            self.sigma =  math.sqrt(1 / (1 + self.connections_in))
         elif self.sigma == 0:
-            self.sigma =  math.sqrt(2 / ((1 + (math.sqrt(5)) ** 2) * self.connections_out))
+            self.sigma =  math.sqrt(1 / (1 + self.connections_out))
         elif self.sigma > 0 and self.mode == "dense_fan_out":
             self.sigma = self.sigma/math.sqrt(self.connections_out/self.connections_in)
         else:
