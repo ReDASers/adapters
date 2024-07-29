@@ -56,11 +56,13 @@ class LoRA(nn.Module):
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
         
         # Initialize configuration parameters
-        self.r = config.r
+        self.r = int(config.r)
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
-        self.bottleneck_size = int(self.r * config.alpha) 
+        self.scaling = config.alpha / self.r if config.alpha is not None else 1.0
+        self.beta = config.beta if config.beta is not None else 12
+        self.bottleneck_size = int(self.beta * self.r)  
         self.non_linearity = config.non_linearity 
         self.hidden_size_in = lora_A_shape[-1]
         self.num_weights_out = lora_B_shape[0]
@@ -70,7 +72,7 @@ class LoRA(nn.Module):
         self.eps = config.eps
         self.rescale_frequency = config.rescale_frequency
         self.n_steps = 0
-        self.a = 1e-2
+        
         # Initialize additional attributes
         self.autoencoder_arch = "NLbLN"
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = "noop"
@@ -144,7 +146,7 @@ class LoRA(nn.Module):
         """
         if self.use_gating:
             self.gate = nn.Linear(self.hidden_size_in, gating_heads)
-            nn.init.normal_(self.gate.weight, std=0.03)
+            nn.init.normal_(self.gate.weight, std=0.02)
 
     def _setup_scaling(self):
         """
@@ -236,12 +238,6 @@ class LoRA(nn.Module):
         except KeyError:
             raise ValueError(f"Unknown autoencoder architecture: {self.autoencoder_arch}")
 
-    def _kaiming_sigma_estimator(self,  mode: str = "fan_in", a: float=1e-2):
-        # Calculate the standard deviation based on the Kaiming initialization formula
-        sigma = math.sqrt(2 / ((1 + (1e-2) ** 2) * self.hidden_size_i))
-        # Save the standard deviation in self.sigma
-        return sigma
-
     @property
     def delta_w(self) -> torch.Tensor:
         """Placeholder for delta_w calculation."""
@@ -270,13 +266,12 @@ class LoRA(nn.Module):
             case "dense_fan_out":
                 return self.n_steps % self.rescale_frequency == 0
             case "attention":
-                return True
+                return self.n_steps % self.rescale_frequency == 0
             case _:
                 return False
         
         
-
-    def com(self, weights: torch.Tensor, added: torch.Tensor, scaling=None) -> torch.Tensor:
+    def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
 
         Args:
@@ -288,17 +283,21 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
+
+        if scaling is None:
+            scaling = self.scaling
+
         if self.mode == "attention":
             if self.do_rescale():
-                return weights + self.rescale(added, sigma=0.05)
-            return weights + added
+                return weights + self.rescale(added * scaling, sigma=0.05)
+            return weights + added * scaling
         elif self.mode == "dense_fan_in":
             if self.do_rescale():
-                return weights * self.rescale(added, sigma=self.sigma)
+                return weights * self.rescale(added * scaling, sigma=self.sigma)
             return weights * added
         elif self.mode == "dense_fan_out":
             if self.do_rescale():
-                return weights * self.rescale(added, sigma=self.sigma)
+                return weights * self.rescale(added * scaling, sigma=self.sigma)
             return weights * added
         elif self.mode == "noop":
             return weights
@@ -360,15 +359,8 @@ class LoRA(nn.Module):
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
-
-            if self.mode == "dense_fan_in":
-                if "scalar_fan_in" in self.dense_strategy or "scalar_both" in self.dense_strategy:
-                    # Apply the positive scalar and ensure non-negative scaling vector
-                    scaling_vector = scaling_vector * (1.0 - self.scalar_scaler)
-            else:
-                if "scalar_fan_out" in self.dense_strategy or "scalar_both" in self.dense_strategy:
-                    # Apply the positive scalar and ensure non-negative scaling vector
-                    scaling_vector = scaling_vector * (1.0 - self.scalar_scaler)
+            # Apply scaling to the weights
+            scaling_vector = scaling_vector * (1.0 - self.scalar_scaler)
 
             if hidden_states is None:
                 hidden_states = scaling_vector
@@ -389,10 +381,8 @@ class LoRA(nn.Module):
         if self.use_gating:
             # Compute gate values using a sigmoid function applied to the layer input
             gate = torch.sigmoid(self.gate(layer_input))
-            
             # Average gate values across the second dimension and add a new dimension at the end
             gate = torch.mean(gate, dim=1).unsqueeze(-1)
-            
             # Multiply hidden_states by the gate values
             hidden_states = hidden_states * gate
         else:

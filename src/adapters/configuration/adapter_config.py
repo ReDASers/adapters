@@ -489,7 +489,7 @@ class LoRAConfig(AdapterConfig):
     # Flag to determine if a trainable gating module should be included
     use_gating: bool = False
 
-    init_weights: float = 0.02
+    init_weights: float = -1
     
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu" 
@@ -497,8 +497,6 @@ class LoRAConfig(AdapterConfig):
     eps: float = 1e-9
 
     rescale_frequency: int = 3
-
-    dense_strategy: str = "no_fan_out,norm_fan_in"
 
 
 
