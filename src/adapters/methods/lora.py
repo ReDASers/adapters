@@ -60,8 +60,9 @@ class LoRA(nn.Module):
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
-        self.scaling = config.alpha / self.r if config.alpha is not None else 1.0
-        self.beta = config.beta if config.beta is not None else 12
+        self.alpha = int(config.alpha // self.r)
+        self.scaling = 1.0 if self.alpha < 1 else float(self.alpha)
+        self.beta = config.beta if config.beta is not None else int(self.r * 1.5)
         self.bottleneck_size = int(self.beta * self.r)  
         self.non_linearity = config.non_linearity 
         self.hidden_size_in = lora_A_shape[-1]
