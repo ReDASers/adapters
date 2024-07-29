@@ -120,11 +120,11 @@ class LoRA(nn.Module):
             stromg: how adapter weights will be handled.
         """
         match self.location_key:
-            case "selfattn_lora" if self.hidden_size_in == self.num_weights_out:
+            case "selfattn_lora" if self.connections_in == self.connections_out:
                 return "attention"
-            case "intermediate_lora" if self.hidden_size_in < self.num_weights_out:
+            case "intermediate_lora" if self.connections_in < self.connections_out:
                 return "dense_fan_out"
-            case "output_lora" if self.hidden_size_in > self.num_weights_out:
+            case "output_lora" if self.connections_in > self.connections_out:
                 return "dense_fan_in"
             case _:
                 return "noop"
@@ -148,20 +148,20 @@ class LoRA(nn.Module):
             gating_heads (int): Number of gating heads.
         """
         if self.use_gating:
-            self.gate = nn.Linear(self.hidden_size_in, gating_heads)
+            self.gate = nn.Linear(self.connections_in, gating_heads)
             nn.init.normal_(self.gate.weight, std=0.02)
 
     def _setup_scaling(self):
         """
         Sets up the basic calculation mode by initializing scaling parameters.
         """
-        self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
+        self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1))
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps))
         self._init_scaling_weights()
 
     def _init_scaling_weights(self):
         if self.sigma < 0:
-            self.sigma =  math.sqrt(2 / ((1 + (1e-2) ** 2) * self.hidden_size_in))
+            self.sigma =  math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
         elif self.sigma == 0:
             self.sigma = 0.01
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
@@ -225,12 +225,12 @@ class LoRA(nn.Module):
         """
         architectures = {
             "NLbLN": [
-                nn.Linear(self.hidden_size_in, self.r),
+                nn.Linear(self.connections_in, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.bottleneck_size),
                 nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.hidden_size_in),
+                nn.Linear(self.r, self.connections_in),
             ],
         }
 
