@@ -174,7 +174,7 @@ class LoRA(nn.Module):
             lora_A_shape (tuple): Shape of the A matrix in LoRA.
             lora_B_shape (tuple): Shape of the B matrix in LoRA.
         """
-        self.f = self._get_autoencoder_architecture()
+        self.f = self._get_autoencoder_architecture("NLbLN")
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
         self.sigma = 0.05  # empirically determined
@@ -213,7 +213,7 @@ class LoRA(nn.Module):
                     nn.init.zeros_(layer.bias)
         
 
-    def _get_autoencoder_architecture(self):
+    def _get_autoencoder_architecture(self, arch: str = "NLbLN"):
         """
         Retrieves the autoencoder architecture based on the configuration.
 
@@ -235,9 +235,9 @@ class LoRA(nn.Module):
         }
 
         try:
-            return nn.Sequential(*architectures[self.autoencoder_arch])
+            return nn.Sequential(*architectures[arch])
         except KeyError:
-            raise ValueError(f"Unknown autoencoder architecture: {self.autoencoder_arch}")
+            raise ValueError(f"Unknown autoencoder architecture: {arch}")
 
     @property
     def delta_w(self) -> torch.Tensor:
