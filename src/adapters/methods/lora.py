@@ -263,9 +263,9 @@ class LoRA(nn.Module):
         """
         match self.mode:
             case "dense_fan_in":
-                return self.n_steps % self.rescale_frequency == 0
-            case "dense_fan_out":
                 return True
+            case "dense_fan_out":
+                return self.n_steps % self.rescale_frequency == 0
             case "attention":
                 return True
             case _:
@@ -291,14 +291,10 @@ class LoRA(nn.Module):
         if self.mode == "attention":
             if self.do_rescale():
                 return weights + self.rescale(added * scaling, sigma=self.sigma)
-                # w = weights + added * scaling
-                #return self.rescale(w, sigma=self.sigma)
             return weights + added * scaling
         elif self.mode in ["dense_fan_in", "dense_fan_out"]:
             if self.do_rescale():
-                # return weights * self.rescale(added * scaling, sigma=self.sigma)
-                w = weights * added * scaling
-                return self.rescale(w, sigma=self.sigma)
+                return weights * self.rescale(added * scaling, sigma=self.sigma)
             return weights * added * scaling
         elif self.mode == "noop":
             return weights
