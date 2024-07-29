@@ -85,7 +85,7 @@ class LoRA(nn.Module):
         self.location_key = location_key 
         
         self.mode = self._choose_calculation_strategy()
-        self._setup_strategy(lora_A_shape, lora_B_shape)
+        self._layer_specific_setup(lora_A_shape, lora_B_shape)
        
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
@@ -118,24 +118,26 @@ class LoRA(nn.Module):
         Returns:
             stromg: how adapter weights will be handled.
         """
-        if self.hidden_size_in == self.num_weights_out or self.location_key == "selfattn_lora":
-            return "attention"
-        if self.hidden_size_in < self.num_weights_out or self.location_key == "intermediate_lora" :
-            return "dense_fan_out"
-        if self.hidden_size_in > self.num_weights_out or self.location_key == "output_lora":
-            return "dense_fan_in"
-        return "noop"
+        match self.location_key:
+            case "selfattn_lora" if self.hidden_size_in == self.num_weights_out:
+                return "attention"
+            case "intermediate_lora" if self.hidden_size_in < self.num_weights_out:
+                return "dense_fan_out"
+            case "output_lora" if self.hidden_size_in > self.num_weights_out:
+                return "dense_fan_in"
+            case _:
+                return "noop"
+
     
-    def _setup_strategy(self, lora_A_shape, lora_B_shape):
+    def _layer_specific_setup(self, lora_A_shape, lora_B_shape):
          # Determine calculation mode and setup accordingly
-        if self.mode == "attention":
-            self._setup_in_attn(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-        elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
-            self._setup_scaling()
-        elif self.mode == "noop":
-            pass
-        else:
-            raise ValueError(f"Unknown calculation strategy: {self.mode}")
+        match self.mode:
+            case "attention":
+                self._setup_in_attn(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
+            case "dense_fan_in" | "dense_fan_out":
+                self._setup_scaling()
+            case _:
+                pass
             
     def _setup_gating_maybe(self, gating_heads: int):
         """
@@ -154,10 +156,7 @@ class LoRA(nn.Module):
         """
         self.lora_C = nn.Parameter(torch.ones(self.num_weights_out, 1))
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps))
-        if self.mode in ["dense_fan_out", "dense_fan_in"]:
-            self._init_scaling_weights()
-        else:
-            raise ValueError(f"Should not be setting up scaling for mode: {self.mode}") 
+        self._init_scaling_weights()
 
     def _init_scaling_weights(self):
         if self.sigma < 0:
@@ -175,7 +174,7 @@ class LoRA(nn.Module):
             lora_B_shape (tuple): Shape of the B matrix in LoRA.
         """
         self.f = self._get_autoencoder_architecture()
-        self._initialize_weights(self.f)
+        self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
 
     def _setup_lora_matrices(self, lora_A_shape, lora_B_shape):
@@ -198,7 +197,7 @@ class LoRA(nn.Module):
         nn.init.zeros_(self.lora_B)
 
 
-    def _initialize_weights(self, layers: nn.Sequential):
+    def _initialize_autoencoder_weights(self, layers: nn.Sequential):
         """
         Initializes the weights of the given layers.
         
