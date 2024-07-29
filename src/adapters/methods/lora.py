@@ -238,6 +238,7 @@ class LoRA(nn.Module):
             return nn.Sequential(*architectures[arch])
         except KeyError:
             raise ValueError(f"Unknown autoencoder architecture: {arch}")
+        
 
     @property
     def delta_w(self) -> torch.Tensor:
@@ -263,14 +264,14 @@ class LoRA(nn.Module):
         """
         match self.mode:
             case "dense_fan_in":
-                return True
-            case "dense_fan_out":
                 return self.n_steps % self.rescale_frequency == 1
+            case "dense_fan_out":
+                return True 
             case "attention":
                 return True
             case _:
                 return False
-        
+            
         
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
@@ -331,6 +332,7 @@ class LoRA(nn.Module):
         z = (w - u) / (stddev + 1e-12)
         # rescale to original range
         return z * sigma + u
+    
 
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         """Forward pass of the LoRA module.
