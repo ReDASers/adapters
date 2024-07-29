@@ -30,27 +30,6 @@ except ImportError:
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
 
-'''
-****************************************************************
-Displaying results for sst-2, K=100...
-
-****************************************************************
-
-SUMMARY ROUNDED RESULT FOR GLUE sst-2, K=100 
-accuracy: 83.6 std_accuracy: 1.26
-
-ADAPTER CONFIGURATION:
-
-{'alpha': 1, 'beta': 12, 'architecture': 'lora',
-    'selfattn_lora': True, 'intermediate_lora': True,
-    'output_lora': True, 'leave_out': [], 'r': 8,
-    'attn_matrices': ['v', 'k'], 'composition_mode': 'add', 
-    'dropout': 0.1, 'use_gating': False, 'init_weights': -1,
-    'non_linearity': 'leakyrelu', 'eps': 1e-09, 
-    'rescale_frequency': 3}
-
-****************************************************************
-'''
 
 class LoRA(nn.Module):
     def __init__(
@@ -311,16 +290,16 @@ class LoRA(nn.Module):
 
         if self.mode == "attention":
             if self.do_rescale():
-                return weights + self.rescale(added * scaling, sigma=self.sigma)
+                #  return weights + self.rescale(added * scaling, sigma=self.sigma)
+                w = weights + added * scaling
+                return self.rescale(w, sigma=self.sigma)
             return weights + added * scaling
-        elif self.mode == "dense_fan_in":
+        elif self.mode in ["dense_fan_in", "dense_fan_out"]:
             if self.do_rescale():
-                return weights * self.rescale(added * scaling, sigma=self.sigma)
-            return weights * added
-        elif self.mode == "dense_fan_out":
-            if self.do_rescale():
-                return weights * self.rescale(added * scaling, sigma=self.sigma)
-            return weights * added
+                # return weights * self.rescale(added * scaling, sigma=self.sigma)
+                w = weights * added * scaling
+                return self.rescale(w, sigma=self.sigma)
+            return weights * added * scaling
         elif self.mode == "noop":
             return weights
         else:
@@ -338,9 +317,9 @@ class LoRA(nn.Module):
             torch.Tensor: Inverted weights.
         """
         if self.mode == "attention":
-            return weights - added
+            return weights - added * self.scaling
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
-            return weights / added
+            return weights / (added * self.scaling)
         elif self.mode == "noop":
             return weights
         else:
