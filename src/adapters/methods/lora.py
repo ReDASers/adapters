@@ -165,7 +165,7 @@ class LoRA(nn.Module):
         elif self.sigma == 0:
             self.sigma =  math.sqrt(2 / ((1 + (math.sqrt(5)) ** 2) * self.connections_out))
         elif self.sigma > 0 and self.mode == "dense_fan_out":
-            self.sigma = self.sigma/(self.connections_out/self.connections_in)
+            self.sigma = self.sigma/math.sqrt(self.connections_out/self.connections_in)
         else:
             self.sigma = self.sigma
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
