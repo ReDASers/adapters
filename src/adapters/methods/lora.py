@@ -164,9 +164,9 @@ class LoRA(nn.Module):
         if self.init_weights < 0:
             self.sigma =  math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
         elif self.init_weights == 0:
-            self.sigma =  math.sqrt(1 / (1 + self.connections_out))
+            self.sigma =  0.03
         elif self.init_weights > 0 and self.mode == "dense_fan_out":
-            self.sigma = self.init_weights/math.sqrt(self.connections_out/self.connections_in)
+            self.sigma = self.init_weights/(self.connections_out/self.connections_in)
         else:
             self.sigma = self.init_weights
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
@@ -334,9 +334,6 @@ class LoRA(nn.Module):
             case "attention":
                 self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.sigma)
                 self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.sigma)
-                for layer in self.f:
-                    if isinstance(layer, nn.Linear):
-                        layer.weight.data = self.rescale(layer.weight.data, sigma=self.sigma)
             case "dense_fan_in" | "dense_fan_out":
                 self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma)
             case "noop":
