@@ -54,42 +54,42 @@ class LoRA(nn.Module):
         
         # Ensure the composition mode is 'add'
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
-        
-        # Initialize configuration parameters
-        self.r = int(config.r)
-        self.composition_mode = config.composition_mode
-        self.attn_matrices = config.attn_matrices
-        self.use_gating = config.use_gating
-        self.alpha = int(config.alpha // self.r)
-        self.scaling = 1.0 if self.alpha < 1 else float(self.alpha)
-        self.beta = config.beta if config.beta is not None else int(self.r * 1.5)
-        self.bottleneck_size = int(self.beta * self.r)  
-        self.non_linearity = config.non_linearity 
-        self.hidden_size_in = lora_A_shape[-1]
-        self.num_weights_out = lora_B_shape[0]
-        self.dense_strategy = config.dense_strategy
-        self._delta_w = None  # Placeholder for delta weights
-        self.sigma = config.init_weights
-        self.eps = config.eps
-        self.rescale_frequency = config.rescale_frequency
-        self.n_steps = 0
-        
-        # Initialize additional attributes
-        self.autoencoder_arch = "NLbLN"
-        self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = "noop"
-
         # Validate and set the location key
         if self._is_valid_location_key(config, location_key) == False:
             raise ValueError(f"Location key {self.location_key} is not enabled in config or invalid.")
-        
-        self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
+        # Initialize configuration parameters
         self.location_key = location_key 
+        self.connections_in = lora_A_shape[-1]
+        self.connections_out = lora_B_shape[0]
+        self.r = int(config.r)
         
-        self.mode = self._choose_calculation_strategy()
+        assert self.r == lora_A_shape[0] == lora_B_shape[1], "r must match the first dimension of A and the second dimension of B."
+        # The following is for flexibility; normally, alpha is normally 1 for loria
+        self.alpha = int(config.alpha // self.r) if config.alpha > self.r else 1
+        #  scaling factor is also 1 for loria
+        self.scaling = 1.0 if self.alpha < 1 else float(self.alpha)
+
+        beta = config.beta if config.beta is not None else int(self.r * 1.5)
+        self.bottleneck_size = int(beta * self.r)  
+        
+        self.composition_mode = config.composition_mode
+        self.attn_matrices = config.attn_matrices
+        self.use_gating = config.use_gating
+        self.non_linearity = config.non_linearity 
+        self.sigma = config.init_weights
+        self.eps = config.eps
+        self.rescale_frequency = config.rescale_frequency
+
+        self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
+        
+        self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
        
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
+
+        self._delta_w = None  # Placeholder for delta weights
+        self.n_steps = 0 # have not trained yet
             
 
     def _is_valid_location_key(self, config, location_key):
@@ -112,7 +112,7 @@ class LoRA(nn.Module):
             return False
         return True
 
-    def _choose_calculation_strategy(self):
+    def _calculation_mode(self):
         """
         Checks if advanced calculation is possible based on the current configuration.
 
@@ -177,6 +177,7 @@ class LoRA(nn.Module):
         self.f = self._get_autoencoder_architecture()
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
+        self.sigma = 0.05  # empirically determined
 
     def _setup_lora_matrices(self, lora_A_shape, lora_B_shape):
         """
@@ -289,7 +290,7 @@ class LoRA(nn.Module):
 
         if self.mode == "attention":
             if self.do_rescale():
-                return weights + self.rescale(added * scaling, sigma=0.05)
+                return weights + self.rescale(added * scaling, sigma=self.sigma)
             return weights + added * scaling
         elif self.mode == "dense_fan_in":
             if self.do_rescale():
