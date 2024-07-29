@@ -163,7 +163,7 @@ class LoRA(nn.Module):
         if self.sigma < 0:
             self.sigma =  math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
         elif self.sigma == 0:
-            self.sigma = 0.01
+            self.sigma =  math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_out))
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
