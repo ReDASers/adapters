@@ -263,11 +263,11 @@ class LoRA(nn.Module):
         """
         match self.mode:
             case "dense_fan_in":
-                return self.n_steps % (self.rescale_frequency * 3.0) == 0
+                return self.n_steps % (self.rescale_frequency * 2) == 0
             case "dense_fan_out":
-                return self.n_steps % (self.rescale_frequency * 2.0) == 0
-            case "attention":
                 return self.n_steps % self.rescale_frequency == 0
+            case "attention":
+                return True
             case _:
                 return False
         
