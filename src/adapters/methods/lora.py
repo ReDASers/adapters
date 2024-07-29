@@ -76,9 +76,10 @@ class LoRA(nn.Module):
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
         self.non_linearity = config.non_linearity 
-        self.sigma = config.init_weights
+        self.init_weights = config.init_weights
+        self.sigma = None
         self.eps = config.eps
-        self.rescale_frequency = config.rescale_frequency
+        self.batches_per_epoch = config.rescale_frequency
 
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
@@ -89,7 +90,7 @@ class LoRA(nn.Module):
         self._setup_gating_maybe(gating_heads)
 
         self._delta_w = None  # Placeholder for delta weights
-        self.n_steps = 0 # have not trained yet
+        self.n_batches = 0 # have not trained yet
             
 
     def _is_valid_location_key(self, config, location_key):
@@ -160,14 +161,14 @@ class LoRA(nn.Module):
         self._init_scaling_weights()
 
     def _init_scaling_weights(self):
-        if self.sigma < 0:
-            self.sigma =  math.sqrt(1 / (1 + self.connections_in))
-        elif self.sigma == 0:
+        if self.init_weights < 0:
+            self.sigma =  math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
+        elif self.init_weights == 0:
             self.sigma =  math.sqrt(1 / (1 + self.connections_out))
-        elif self.sigma > 0 and self.mode == "dense_fan_out":
-            self.sigma = self.sigma/math.sqrt(self.connections_out/self.connections_in)
+        elif self.init_weights > 0 and self.mode == "dense_fan_out":
+            self.sigma = self.init_weights/math.sqrt(self.connections_out/self.connections_in)
         else:
-            self.sigma = self.sigma
+            self.sigma = self.init_weights
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
@@ -199,7 +200,7 @@ class LoRA(nn.Module):
         """
         Initializes the LoRA matrices A and B.
         """
-        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+        nn.init.kaiming_normal_(self.lora_A)
         nn.init.zeros_(self.lora_B)
 
 
@@ -266,15 +267,15 @@ class LoRA(nn.Module):
         Returns:
             bool: True if rescaling is required, False otherwise.
         """
-        match self.mode:
-            case "dense_fan_in":
-                return self.n_steps % self.rescale_frequency == 0
-            case "dense_fan_out":
-                return True 
-            case "attention":
-                return True
-            case _:
-                return False
+        if self.batches_per_epoch < 1:
+            raise ValueError("Steps per epoch must be >= 1.")
+        
+        self.n_batches += 1
+
+        if self.n_batches >= self.batches_per_epoch:
+            self.n_batches = 0
+            return True
+        return False
             
         
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
@@ -293,14 +294,13 @@ class LoRA(nn.Module):
         if scaling is None:
             scaling = self.scaling
 
+        if self.do_rescale():
+            self.rescale_weights()
+
         if self.mode == "attention":
-            if self.do_rescale():
-                return weights + self.rescale(added * scaling, sigma=self.sigma)
-            return weights + added * scaling
+            return weights + self.rescale(added * scaling, sigma=self.sigma)
         elif self.mode in ["dense_fan_in", "dense_fan_out"]:
-            if self.do_rescale():
-                return weights * self.rescale(added * scaling, sigma=self.sigma)
-            return weights * added * scaling
+            return weights * self.rescale(added * scaling, sigma=self.sigma)
         elif self.mode == "noop":
             return weights
         else:
@@ -326,9 +326,26 @@ class LoRA(nn.Module):
         else:
             raise ValueError(f"Unknown mode: {self.mode}")
         
-        
+    def rescale_weights(self):
+        """
+        Rescale the lora_A and lora_B weights based on the current configuration.
+        """
+        match self.mode:
+            case "attention":
+                self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.sigma)
+                self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.sigma)
+                for layer in self.f:
+                    if isinstance(layer, nn.Linear):
+                        layer.weight.data = self.rescale(layer.weight.data, sigma=self.sigma)
+            case "dense_fan_in" | "dense_fan_out":
+                self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma)
+            case "noop":
+                pass
+            case _:
+                raise ValueError(f"Unknown mode: {self.mode}")
+    
+         
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.0) -> torch.Tensor:
-        
         w = torch.nan_to_num(weights)
         u = torch.mean(w)
         stddev = torch.std(w)
@@ -348,7 +365,8 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-        self.n_steps += 1
+        if self.do_rescale():
+            self.rescale_weights()
         # Check if full calculation mode is enabled
         if self.mode == "attention":
             # If hidden_states is None, use layer_input instead
