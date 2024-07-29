@@ -30,6 +30,27 @@ except ImportError:
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
 
+'''
+****************************************************************
+Displaying results for sst-2, K=100...
+
+****************************************************************
+
+SUMMARY ROUNDED RESULT FOR GLUE sst-2, K=100 
+accuracy: 83.6 std_accuracy: 1.26
+
+ADAPTER CONFIGURATION:
+
+{'alpha': 1, 'beta': 12, 'architecture': 'lora',
+    'selfattn_lora': True, 'intermediate_lora': True,
+    'output_lora': True, 'leave_out': [], 'r': 8,
+    'attn_matrices': ['v', 'k'], 'composition_mode': 'add', 
+    'dropout': 0.1, 'use_gating': False, 'init_weights': -1,
+    'non_linearity': 'leakyrelu', 'eps': 1e-09, 
+    'rescale_frequency': 3}
+
+****************************************************************
+'''
 
 class LoRA(nn.Module):
     def __init__(
