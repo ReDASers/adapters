@@ -294,13 +294,11 @@ class LoRA(nn.Module):
         if scaling is None:
             scaling = self.scaling
 
-        if self.do_rescale():
-            self.rescale_weights()
-
         if self.mode == "attention":
             return weights + self.rescale(added * scaling, sigma=self.sigma)
         elif self.mode in ["dense_fan_in", "dense_fan_out"]:
-            return weights * self.rescale(added * scaling, sigma=self.sigma)
+            return weights * added * scaling
+
         elif self.mode == "noop":
             return weights
         else:
@@ -332,8 +330,7 @@ class LoRA(nn.Module):
         """
         match self.mode:
             case "attention":
-                self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.sigma)
-                self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.sigma)
+                pass
             case "dense_fan_in" | "dense_fan_out":
                 self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma)
             case "noop":
@@ -362,8 +359,6 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-        if self.do_rescale():
-            self.rescale_weights()
         # Check if full calculation mode is enabled
         if self.mode == "attention":
             # If hidden_states is None, use layer_input instead
@@ -400,6 +395,9 @@ class LoRA(nn.Module):
             hidden_states = hidden_states * gate
         else:
             gate = None
+
+        if self.do_rescale():
+            self.rescale_weights()
 
         # Return the processed hidden_states and gate
         return hidden_states, gate
