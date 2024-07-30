@@ -30,6 +30,31 @@ except ImportError:
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
 
+'''
+****************************************************************
+Displaying results for sst-2, K=100...
+
+****************************************************************
+
+ADAPTER CONFIGURATION:
+
+{'alpha': 1, 'beta': 12, 'architecture': 'lora', 'selfattn_lora': True, 'intermediate_lora': True, 'output_lora': True, 'leave_out': [], 'r': 8, 'attn_matrices': ['v', 'k'], 'composition_mode': 'add', 'dropout': 0.1, 'use_gating': False, 'init_weights': -1, 'non_linearity': 'leakyrelu', 'eps': 1e-09, 'rescale_frequency': 3}
+
+****************************************************************
+
+{'eval_loss': [0.8019659519195557, 0.6658837795257568, 0.7392714023590088, 0.9019482731819153, 0.8189060091972351], 'eval_accuracy': [0.8495370370370371, 0.8321759259259259, 0.8136574074074074, 0.8321759259259259, 0.8564814814814815], 'eval_runtime': [1.4017, 1.4257, 1.4427, 1.4885, 1.4305], 'eval_samples_per_second': [622.086, 611.639, 604.441, 585.833, 609.584], 'eval_steps_per_second': [19.975, 19.64, 19.409, 18.811, 19.574], 'epoch': [52.0, 47.0, 46.0, 60.0, 60.0], 'task': ['sst-2', 'sst-2', 'sst-2', 'sst-2', 'sst-2'], 'seed': [0, 42, 123, 1001, 2024], 'k': [100, 100, 100, 100, 100]}
+
+mean_eval_loss: 0.7855950832366944 std_eval_loss: 0.07923681920223546
+mean_eval_accuracy: 0.8368055555555556 std_eval_accuracy: 0.015019563145841056
+mean_eval_runtime: 1.43782 std_eval_runtime: 0.028626589038863844
+mean_eval_samples_per_second: 606.7166 std_eval_samples_per_second: 11.916153449834399
+mean_eval_steps_per_second: 19.4818 std_eval_steps_per_second: 0.3826347605746248
+mean_epoch: 53.0 std_epoch: 6.06630035524124
+mean_seed: 638.0 std_seed: 784.8885271170677
+
+****************************************************************
+SUMMARY ROUNDED RESULT FOR GLUE sst-2, K=100: accuracy: 83.7 std_accuracy: 1.50
+'''
 
 class LoRA(nn.Module):
     def __init__(
