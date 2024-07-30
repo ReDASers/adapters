@@ -365,11 +365,11 @@ class LoRA(nn.Module):
         """
 
         if scaling is None:
-            scaling = self.scaling
+            scaling = self.alpha
 
         match self.mode:
             case "attention":
-                return weights + (self.rescale(added, sigma=self.sigma) * scaling)
+                return weights + (self.rescale(added, sigma=self.sigma))
             case "dense_fan_in" | "dense_fan_out": 
                 return weights * added
             case _:
@@ -386,7 +386,7 @@ class LoRA(nn.Module):
             torch.Tensor: Inverted weights.
         """
         if self.mode == "attention":
-            return weights - added * self.scaling
+            return weights - added
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             return weights / added
         elif self.mode == "noop":
