@@ -490,11 +490,6 @@ class LoRAConfig(AdapterConfig):
     
     # Flag to determine if a trainable gating module should be included
     use_gating: bool = False
-
-    # set to -1 to use a version of He init suitable for this adapter and scaling vectors in general
-    # set to 0 to use an empiridally determined std dev of normal distribution with mean = 1
-    # or pass your own value for standard deviation
-    init_weights: Optional[str | float] = "kaiming"
     
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu" 
@@ -511,6 +506,8 @@ class LoRAConfig(AdapterConfig):
     training_set_size: Optional[int] = None
 
     batch_size: Optional[int] = None
+
+    sigma: Optional[float | str] = "loria"
 
 
 

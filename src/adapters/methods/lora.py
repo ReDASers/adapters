@@ -101,7 +101,6 @@ class LoRA(nn.Module):
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
         self.non_linearity = config.non_linearity 
-        self.init_weights = config.init_weights
         self.sigma = None
         self.eps = config.eps
         self.batches_per_epoch = self._calculate_batches_per_epoch(config)
@@ -109,13 +108,14 @@ class LoRA(nn.Module):
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
-        self._layer_specific_setup(lora_A_shape, lora_B_shape)
+        self._layer_specific_setup(lora_A_shape, lora_B_shape, config)
        
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
 
         self._delta_w = None  # Placeholder for delta weights
         self.n_batches = 0 # have not trained yet
+        
 
     def _calculate_batches_per_epoch(self, config):
         if config.batch_size is None or config.training_set_size is None:
@@ -161,13 +161,13 @@ class LoRA(nn.Module):
                 return "noop"
 
     
-    def _layer_specific_setup(self, lora_A_shape, lora_B_shape):
+    def _layer_specific_setup(self, lora_A_shape, lora_B_shape, config):
          # Determine calculation mode and setup accordingly
         match self.mode:
             case "attention":
                 self._setup_in_attn(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
             case "dense_fan_in" | "dense_fan_out":
-                self._setup_scaling()
+                self._setup_scaling(config.sigma)
             case _:
                 pass
             
