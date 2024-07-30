@@ -465,7 +465,7 @@ class LoRAConfig(AdapterConfig):
     # Default architecture type for the LoRA configuration
     architecture: Optional[str] = "lora"
 
-    autoencoder: Literal["NLbLN", "NLbNLN"] = "NLbLN"
+    # autoencoder: Literal["NLbLN", "NLbNLN"] = "NLbLN"
     
     # Flag to determine if LoRA should be applied to self-attention weights
     selfattn_lora: bool = True
