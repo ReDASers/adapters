@@ -431,7 +431,7 @@ class LoRA(nn.Module):
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             # Apply scaling to the weights
-            hidden_states = scaling_vector       
+            hidden_states = scaling_vector + self.scalar_scaler       
         # No operation mode
         elif self.mode == "noop":
             # If hidden_states is None, use layer_input instead
