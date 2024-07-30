@@ -108,7 +108,7 @@ class LoRA(nn.Module):
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
-        self._layer_specific_setup(lora_A_shape, lora_B_shape, config)
+        self._layer_specific_setup(lora_A_shape, lora_B_shape)
        
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
