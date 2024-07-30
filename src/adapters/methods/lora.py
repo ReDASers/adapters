@@ -101,9 +101,9 @@ class LoRA(nn.Module):
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
         self.non_linearity = config.non_linearity 
-        self.sigma = None
+        self.sigma = config.sigma
         self.eps = config.eps
-        self.batches_per_epoch = self._calculate_batches_per_epoch(config)
+        self._delta_w = None  # Placeholder for delta weights
 
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
@@ -113,14 +113,16 @@ class LoRA(nn.Module):
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
 
-        self._delta_w = None  # Placeholder for delta weights
+        
+
+        self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         self.n_batches = 0 # have not trained yet
         
 
-    def _calculate_batches_per_epoch(self, config):
-        if config.batch_size is None or config.training_set_size is None:
-            return 1
-        return config.training_set_size // config.batch_size
+    def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
+        if batch_size is not None and training_set_size is not None:
+            return training_set_size // batch_size
+        return 1
             
 
     def _is_valid_location_key(self, config, location_key):
@@ -161,13 +163,13 @@ class LoRA(nn.Module):
                 return "noop"
 
     
-    def _layer_specific_setup(self, lora_A_shape, lora_B_shape, config):
+    def _layer_specific_setup(self, lora_A_shape, lora_B_shape):
          # Determine calculation mode and setup accordingly
         match self.mode:
             case "attention":
                 self._setup_in_attn(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
             case "dense_fan_in" | "dense_fan_out":
-                self._setup_scaling(config.sigma)
+                self._setup_scaling()
             case _:
                 pass
             
@@ -182,29 +184,29 @@ class LoRA(nn.Module):
             self.gate = nn.Linear(self.connections_in, gating_heads, dtype=torch.float32)
             nn.init.normal_(self.gate.weight, std=0.02)
 
-    def _setup_scaling(self, sigma: Optional[float | str] = None):
+    def _setup_scaling(self):
         """
         Sets up the basic calculation mode by initializing scaling parameters.
         """
         self.lora_C = nn.Parameter(torch.zeros(self.connections_out, 1, dtype=torch.float32))
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
-        self._init_scaling_weights(sigma)
+        self._init_scaling_weights()
 
-    def _init_scaling_weights(self, sigma: Optional[float | str] = None):
-        if sigma is None:
+    def _init_scaling_weights(self):
+        if self.sigma is None:
             if self.mode == "dense_fan_in":   
                 self.sigma = 0.03
             else:
                 self.sigma = 0.03/math.sqrt(self.connections_out/self.connections_in)
-        elif isinstance(sigma, str):
-            if sigma == "loria":
+        elif isinstance(self.sigma, str):
+            if self.sigma == "loria":
                 self.sigma =  math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
             else:
-                raise ValueError(f"Unknown sigma type: {sigma}")
+                raise ValueError(f"Unknown sigma type: {self.sigma}")
         elif isinstance(self.sigma, float):
-            self.sigma = sigma if sigma > 0 else 0.0
+            self.sigma = self.sigma if self.sigma > 0 else 0.0
         else:
-            raise ValueError(f"Unknown sigma type: {sigma}")
+            raise ValueError(f"Unknown sigma type: {self.sigma}")
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):

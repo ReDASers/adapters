@@ -503,9 +503,9 @@ class LoRAConfig(AdapterConfig):
     # be lost due to numerical precision issues or instability or quantization
     eps: float = 1e-9
 
-    training_set_size: Optional[int] = None
+    training_set_size: Optional[int] = 100
 
-    batch_size: Optional[int] = None
+    batch_size: Optional[int] = 32
 
     sigma: Optional[float | str] = "loria"
 
