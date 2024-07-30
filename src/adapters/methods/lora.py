@@ -294,16 +294,18 @@ class LoRA(nn.Module):
         if scaling is None:
             scaling = self.scaling
 
-        if self.mode == "attention":
-            return weights + (self.rescale(added, sigma=self.sigma) * scaling)
-        elif self.mode == "dense_fan_in": 
-            return weights * added * scaling
-        elif self.mode == "dense_fan_out":
-            return weights * added * scaling
-        elif self.mode == "noop":
-            return weights
-        else:
-            raise ValueError(f"Unknown mode: {self.mode}")
+        match self.mode:
+            case "attention":
+                w = weights + (self.rescale(added, sigma=self.sigma) * scaling)
+            case "dense_fan_in" | "dense_fan_out": 
+                w = weights * added * scaling
+            case _:
+                w = weights
+            
+        if self.do_rescale():
+            self.rescale_weights()
+
+        return w
         
 
     def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
@@ -361,8 +363,7 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         # Check if full calculation mode is enabled
-        if self.do_rescale():
-            self.rescale_weights()
+
         if self.mode == "attention":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
