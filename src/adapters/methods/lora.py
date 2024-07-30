@@ -371,7 +371,7 @@ class LoRA(nn.Module):
             case "attention":
                 return weights + (self.rescale(added, sigma=self.sigma) * scaling)
             case "dense_fan_in" | "dense_fan_out": 
-                return weights * added * scaling
+                return weights * added
             case _:
                 return weights
 
@@ -388,7 +388,7 @@ class LoRA(nn.Module):
         if self.mode == "attention":
             return weights - added * self.scaling
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
-            return weights / (added * self.scaling)
+            return weights / added
         elif self.mode == "noop":
             return weights
         else:
@@ -431,9 +431,9 @@ class LoRA(nn.Module):
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             # Apply scaling to the weights
-            scaler = scaling_vector * self.scalar_scaler
+            scaler = scaling_vector * (self.scaling - self.scalar_scaler)
             scaler = scaler + (scaler == 0).float() * 1e-9  # Avoid scaling by zero
-            hidden_states = scaler      
+            hidden_states = scaler      , 
         # No operation mode
         elif self.mode == "noop":
             # If hidden_states is None, use layer_input instead
