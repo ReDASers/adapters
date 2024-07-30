@@ -271,6 +271,7 @@ class LoRA(nn.Module):
                 nn.Linear(self.connections_in, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.bottleneck_size),
+                Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.connections_in),
