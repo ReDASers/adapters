@@ -156,7 +156,7 @@ class LoRA(nn.Module):
         """
         Sets up the basic calculation mode by initializing scaling parameters.
         """
-        self.lora_C = nn.Parameter(torch.zeros(self.connections_out, 1))
+        self.lora_C = nn.Parameter(torch.zeros(self.connections_out, 1, dtype=torch.float32))
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
         self._init_scaling_weights()
 
@@ -333,16 +333,16 @@ class LoRA(nn.Module):
             case "attention":
                 pass
             case "dense_fan_in" | "dense_fan_out":
-                self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma)
+                self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
             case "noop":
                 pass
             case _:
                 raise ValueError(f"Unknown mode: {self.mode}")
     
          
-    def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.0) -> torch.Tensor:
+    def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         w = torch.nan_to_num(weights)
-        u = torch.mean(w)
+        u = torch.mean(w, dtype=dtype)
         stddev = torch.std(w)
         # calculate z-scores
         z = (w - u) / (stddev + 1e-12)
