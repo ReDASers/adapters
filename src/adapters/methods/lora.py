@@ -260,7 +260,7 @@ class LoRA(nn.Module):
         """Deletes the delta_w value."""
         del self._delta_w
 
-    def do_rescale(self) -> bool:
+    def _do_rescale(self) -> bool:
         """
         Checks if rescaling is required based on the configuration.
 
@@ -277,57 +277,7 @@ class LoRA(nn.Module):
             return True
         return False
             
-        
-    def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
-        """Performs the composition operation between existing and injected weights.
-
-        Args:
-            weights (torch.Tensor): Existing weights.
-            added (torch.Tensor): Weights to add.
-            scaling (float, optional): Scaling factor -- left for compatibility with the API. 
-                                       Not used in our implementation. Defaults to None. 
-
-        Returns:
-            torch.Tensor: Composed weights.
-        """
-
-        if scaling is None:
-            scaling = self.scaling
-
-        match self.mode:
-            case "attention":
-                w = weights + (self.rescale(added, sigma=self.sigma) * scaling)
-            case "dense_fan_in" | "dense_fan_out": 
-                w = weights * added * scaling
-            case _:
-                w = weights
-            
-        if self.do_rescale():
-            self.rescale_weights()
-
-        return w
-        
-
-    def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
-        """Inverts the composition operation between existing and injected weights.
-
-        Args:
-            weights (torch.Tensor): Existing weights.
-            added (torch.Tensor): Weights to subtract.
-
-        Returns:
-            torch.Tensor: Inverted weights.
-        """
-        if self.mode == "attention":
-            return weights - added * self.scaling
-        elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
-            return weights / (added * self.scaling)
-        elif self.mode == "noop":
-            return weights
-        else:
-            raise ValueError(f"Unknown mode: {self.mode}")
-        
-    def rescale_weights(self):
+    def _rescale_weights(self):
         """
         Rescale the lora_A and lora_B weights based on the current configuration.
         """
@@ -351,7 +301,49 @@ class LoRA(nn.Module):
         # rescale to original range
         return z * sigma + u
     
+    def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
+        """Performs the composition operation between existing and injected weights.
 
+        Args:
+            weights (torch.Tensor): Existing weights.
+            added (torch.Tensor): Weights to add.
+            scaling (float, optional): Scaling factor -- left for compatibility with the API. 
+                                       Not used in our implementation. Defaults to None. 
+
+        Returns:
+            torch.Tensor: Composed weights.
+        """
+
+        if scaling is None:
+            scaling = self.scaling
+
+        match self.mode:
+            case "attention":
+                return weights + (self.rescale(added, sigma=self.sigma) * scaling)
+            case "dense_fan_in" | "dense_fan_out": 
+                return weights * added * scaling
+            case _:
+                return weights
+
+    def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
+        """Inverts the composition operation between existing and injected weights.
+
+        Args:
+            weights (torch.Tensor): Existing weights.
+            added (torch.Tensor): Weights to subtract.
+
+        Returns:
+            torch.Tensor: Inverted weights.
+        """
+        if self.mode == "attention":
+            return weights - added * self.scaling
+        elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
+            return weights / (added * self.scaling)
+        elif self.mode == "noop":
+            return weights
+        else:
+            raise ValueError(f"Unknown mode: {self.mode}")
+        
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         """Forward pass of the LoRA module.
     
@@ -362,7 +354,17 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-        # Check if full calculation mode is enabled
+
+        # Rescale weights if required
+        #
+        # Rescaling after the update to the gradients at the
+        # end of the epoch is the correct way to do it, but
+        # to keep the code within the adapter module, we do it here.
+        # So we update the weights in the beginning of the first
+        # training step of the next epoch.
+        #
+        if self._do_rescale():
+            self._rescale_weights()
 
         if self.mode == "attention":
             # If hidden_states is None, use layer_input instead
@@ -399,9 +401,6 @@ class LoRA(nn.Module):
             hidden_states = hidden_states * gate
         else:
             gate = None
-
-        #if self.do_rescale():
-        #    self.rescale_weights()
 
         # Return the processed hidden_states and gate
         return hidden_states, gate
