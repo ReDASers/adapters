@@ -149,7 +149,7 @@ class LoRA(nn.Module):
             gating_heads (int): Number of gating heads.
         """
         if self.use_gating:
-            self.gate = nn.Linear(self.connections_in, gating_heads)
+            self.gate = nn.Linear(self.connections_in, gating_heads, dtype=torch.float32)
             nn.init.normal_(self.gate.weight, std=0.02)
 
     def _setup_scaling(self):
@@ -157,7 +157,7 @@ class LoRA(nn.Module):
         Sets up the basic calculation mode by initializing scaling parameters.
         """
         self.lora_C = nn.Parameter(torch.zeros(self.connections_out, 1))
-        self.scalar_scaler = nn.Parameter(torch.tensor(self.eps))
+        self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
         self._init_scaling_weights()
 
     def _init_scaling_weights(self):
