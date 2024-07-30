@@ -494,7 +494,7 @@ class LoRAConfig(AdapterConfig):
     # set to -1 to use a version of He init suitable for this adapter and scaling vectors in general
     # set to 0 to use an empiridally determined std dev of normal distribution with mean = 1
     # or pass your own value for standard deviation
-    init_weights: float = -1
+    init_weights: Optional[str | float] = "kaiming"
     
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu" 
@@ -508,7 +508,9 @@ class LoRAConfig(AdapterConfig):
     # be lost due to numerical precision issues or instability or quantization
     eps: float = 1e-9
 
-    rescale_frequency: int = 3
+    training_set_size: Optional[int] = None
+
+    batch_size: Optional[int] = None
 
 
 

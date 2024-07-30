@@ -79,7 +79,7 @@ class LoRA(nn.Module):
         self.init_weights = config.init_weights
         self.sigma = None
         self.eps = config.eps
-        self.batches_per_epoch = config.rescale_frequency
+        self.batches_per_epoch = self._calculate_batches_per_epoch(config)
 
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
@@ -91,6 +91,11 @@ class LoRA(nn.Module):
 
         self._delta_w = None  # Placeholder for delta weights
         self.n_batches = 0 # have not trained yet
+
+    def _calculate_batches_per_epoch(self, config):
+        if config.batch_size is None or config.training_set_size is None:
+            return 1
+        return config.training_set_size // config.batch_size
             
 
     def _is_valid_location_key(self, config, location_key):
@@ -152,23 +157,29 @@ class LoRA(nn.Module):
             self.gate = nn.Linear(self.connections_in, gating_heads, dtype=torch.float32)
             nn.init.normal_(self.gate.weight, std=0.02)
 
-    def _setup_scaling(self):
+    def _setup_scaling(self, sigma: Optional[float | str] = None):
         """
         Sets up the basic calculation mode by initializing scaling parameters.
         """
         self.lora_C = nn.Parameter(torch.zeros(self.connections_out, 1, dtype=torch.float32))
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
-        self._init_scaling_weights()
+        self._init_scaling_weights(sigma)
 
-    def _init_scaling_weights(self):
-        if self.init_weights < 0:
-            self.sigma =  math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
-        elif self.init_weights == 0:
-            self.sigma =  0.03
-        elif self.init_weights > 0 and self.mode == "dense_fan_out":
-            self.sigma = self.init_weights/math.sqrt(self.connections_out/self.connections_in)
+    def _init_scaling_weights(self, sigma: Optional[float | str] = None):
+        if sigma is None:
+            if self.mode == "dense_fan_in":   
+                self.sigma = 0.03
+            else:
+                self.sigma = 0.03/math.sqrt(self.connections_out/self.connections_in)
+        elif isinstance(sigma, str):
+            if sigma == "loria":
+                self.sigma =  math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
+            else:
+                raise ValueError(f"Unknown sigma type: {sigma}")
+        elif isinstance(self.sigma, float):
+            self.sigma = sigma if sigma > 0 else 0.0
         else:
-            self.sigma = self.init_weights
+            raise ValueError(f"Unknown sigma type: {sigma}")
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
@@ -293,6 +304,8 @@ class LoRA(nn.Module):
     
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
+        if sigma == 0.0:
+            return weights
         w = torch.nan_to_num(weights)
         u = torch.mean(w, dtype=dtype)
         stddev = torch.std(w)
