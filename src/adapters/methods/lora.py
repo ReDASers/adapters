@@ -271,7 +271,6 @@ class LoRA(nn.Module):
                 nn.Linear(self.connections_in, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.bottleneck_size),
-                Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.connections_in),
@@ -362,7 +361,7 @@ class LoRA(nn.Module):
             case "attention":
                 return weights + (self.rescale(added, sigma=self.sigma) * scaling)
             case "dense_fan_in" | "dense_fan_out": 
-                return weights * added * scaling
+                return weights * added
             case _:
                 return weights
 
@@ -379,7 +378,7 @@ class LoRA(nn.Module):
         if self.mode == "attention":
             return weights - added * self.scaling
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
-            return weights / (added * self.scaling)
+            return weights / (added)
         elif self.mode == "noop":
             return weights
         else:
