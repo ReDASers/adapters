@@ -106,7 +106,7 @@ class LoRA(nn.Module):
         self._delta_w = None  # Placeholder for delta weights
 
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
-        
+        self.autoencoder: Literal["NLbLN", "NLbNLN"] = config.autoencoder
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
        
@@ -275,6 +275,16 @@ class LoRA(nn.Module):
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.connections_in),
             ],
+            "NLbNLN": [
+                nn.Linear(self.connections_in, self.r),
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.r, self.bottleneck_size),
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.bottleneck_size, self.r),
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.r, self.connections_in),
+            ],
+
         }
 
         try:

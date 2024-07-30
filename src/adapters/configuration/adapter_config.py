@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Mapping
 from dataclasses import FrozenInstanceError, asdict, dataclass, field, replace
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Literal
 
 from ..utils import resolve_adapter_config
 
@@ -464,6 +464,8 @@ class LoRAConfig(AdapterConfig):
 
     # Default architecture type for the LoRA configuration
     architecture: Optional[str] = "lora"
+
+    autoencoder: Literal["NLbLN", "NLbNLN"] = "NLbLN"
     
     # Flag to determine if LoRA should be applied to self-attention weights
     selfattn_lora: bool = True
