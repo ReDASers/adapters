@@ -299,7 +299,7 @@ class LoRA(nn.Module):
         elif self.mode == "dense_fan_in": 
             return weights * added * scaling
         elif self.mode == "dense_fan_out":
-            return weights * added * scaling
+            return weights * (self.rescale(added, sigma=self.sigma, dtype=torch.float32) * scaling)
         elif self.mode == "noop":
             return weights
         else:
