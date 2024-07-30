@@ -90,10 +90,10 @@ class LoRA(nn.Module):
         
         assert self.r == lora_A_shape[0] == lora_B_shape[1], "r must match the first dimension of A and the second dimension of B."
         # The following is for flexibility; normally, alpha is normally 1 for loria
-        alpha = int(config.alpha // self.r) if config.alpha > self.r else 1
+        self.alpha = int(config.alpha // self.r) if config.alpha > self.r else 1
         #  scaling factor is also 1 for loria
-        self.alpha = torch.tensor(alpha, dtype=torch.float32)
-        
+        self.scaling = 1.0 if self.alpha < 1 else float(self.alpha)
+
         beta = config.beta if config.beta is not None else int(self.r * 1.5)
         self.bottleneck_size = int(beta * self.r)  
         
@@ -106,7 +106,7 @@ class LoRA(nn.Module):
         self._delta_w = None  # Placeholder for delta weights
 
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
-        self.autoencoder: Literal["NLbLN", "NLbNLN"] = config.autoencoder
+        
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
        
@@ -275,16 +275,6 @@ class LoRA(nn.Module):
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.connections_in),
             ],
-            "NLbNLN": [
-                nn.Linear(self.connections_in, self.r),
-                Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.bottleneck_size),
-                Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.bottleneck_size, self.r),
-                Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.connections_in),
-            ],
-
         }
 
         try:
@@ -365,13 +355,13 @@ class LoRA(nn.Module):
         """
 
         if scaling is None:
-            scaling = self.alpha
+            scaling = self.scaling
 
         match self.mode:
             case "attention":
-                return weights + (self.rescale(added, sigma=self.sigma))
+                return weights + (self.rescale(added, sigma=self.sigma) * scaling)
             case "dense_fan_in" | "dense_fan_out": 
-                return weights * added
+                return weights * added * scaling
             case _:
                 return weights
 
@@ -386,9 +376,9 @@ class LoRA(nn.Module):
             torch.Tensor: Inverted weights.
         """
         if self.mode == "attention":
-            return weights - added
+            return weights - added * self.scaling
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
-            return weights / added
+            return weights / (added * self.scaling)
         elif self.mode == "noop":
             return weights
         else:
@@ -431,7 +421,7 @@ class LoRA(nn.Module):
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             # Apply scaling to the weights
-            hidden_states = scaling_vector * (1.0 - self.scalar_scaler)
+            hidden_states = scaling_vector * (1.0 - self.scalar_scaler)           
         # No operation mode
         elif self.mode == "noop":
             # If hidden_states is None, use layer_input instead
