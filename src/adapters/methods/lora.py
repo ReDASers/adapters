@@ -332,8 +332,10 @@ class LoRA(nn.Module):
         match self.mode:
             case "attention":
                 pass
-            case "dense_fan_in" | "dense_fan_out":
+            case "dense_fan_in":
                 self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
+            case "dense_fan_out":
+                pass
             case "noop":
                 pass
             case _:
