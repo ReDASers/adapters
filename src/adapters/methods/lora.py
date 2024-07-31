@@ -90,7 +90,7 @@ class LoRA(nn.Module):
         
         assert self.r == lora_A_shape[0] == lora_B_shape[1], "r must match the first dimension of A and the second dimension of B."
         # The following is for flexibility; normally, alpha is normally 1 for loria
-        self.alpha = float(config.alpha) / math.sqrt(float(self.r)) if config.alpha > 0 else 1.0
+        self.alpha = float(config.alpha) / math.sqrt(float(self.r)) if config.alpha > 1 else 1.0
         #  scaling factor is also 1 for loria
 
         beta = config.beta if config.beta is not None else int(self.r * 1.5)
