@@ -233,7 +233,7 @@ class LoRA(nn.Module):
 
     def _estimate_scaling_sigma(self):
         if self.sigma is None:
-            return self._get_sigma_kaiming_normal(self.lora_C, mode="fan_in")
+            return self._get_sigma_kaiming_normal(self.lora_C, mode="fan_out")
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
                 return math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
