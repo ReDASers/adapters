@@ -174,8 +174,8 @@ class LoRA(nn.Module):
 
     def _calculate_gain(self, nonlinearity: str):
         match nonlinearity:
-            case "leaky_relu" | "leakyrelu":
-                return nn.init.calculate_gain("leaky_relu", param=1e-2)
+            case "leaky_relu" | "leakyrelu" | "prelu":
+                return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
             case "linear" | "self_norm"  | "sigmoid":
                 return 1.0
             case "tanh":
@@ -183,9 +183,9 @@ class LoRA(nn.Module):
             case "selu":
                 return nn.init.calculate_gain("selu")
             case "mish":
-                return nn.init.calculate_gain("leaky_relu", param=3e-4)
+                return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
             case "gelu":
-                return nn.init.calculate_gain("leaky_relu", param=5.1e-4)
+                return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
             case _:
                 return math.sqrt(2.0) # default value
             
@@ -231,38 +231,39 @@ class LoRA(nn.Module):
         """
         self.lora_C = nn.Parameter(torch.zeros(self.connections_out, 1, dtype=torch.float32))
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
-        self._init_scaling_weights()
+        self.sigma = self._estimate_scaling_sigma()
+        nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
 
-    def _init_scaling_weights(self):
+    def _estimate_scaling_sigma(self):
         if self.sigma is None:
-            self.sigma = self._get_sigma_kaiming_normal(self.lora_C, mode="fan_in")
+            return self._get_sigma_kaiming_normal(self.lora_C, mode="fan_in")
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
-                self.sigma =  math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
+                return math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
             else:
-                self.sigma = self._get_sigma_kaiming_normal(self.lora_C, nonlinearity=self.sigma)
+                return self._get_sigma_kaiming_normal(self.lora_C, nonlinearity=self.sigma)
         elif isinstance(self.sigma, float) or isinstance(self.sigma, int):
-            self.sigma = float(self.sigma) if self.sigma > 0 else 0.0
+            return float(self.sigma) if self.sigma > 0 else 0.0
         else:
             raise ValueError(f"Unknown sigma type: {self.sigma}")
-        nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
+       
 
     def _estimate_attn_sigma(self):
         if self.sigma is None:
-            self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
+            return self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
                 if self.non_linearity == "leakyrelu":
-                    self.sigma =  0.05
+                    return  0.05
                 else:
-                    self.sigma = self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
+                    return self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
             else:
                 if self.non_linearity == "leakyrelu":
-                    self.sigma = math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
+                    return math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
                 else:
-                    self.sigma = self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
+                    return self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
         elif isinstance(self.sigma, float) or isinstance(self.sigma, int):
-            self.sigma = float(self.sigma) if self.sigma > 0 else 0.0
+            return float(self.sigma) if self.sigma > 0 else 0.0
         else:
             raise ValueError(f"Unknown sigma type: {self.sigma}")
 
@@ -299,6 +300,22 @@ class LoRA(nn.Module):
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         nn.init.zeros_(self.lora_B)
 
+    def _get_neg_slope(self, non_linearity: str = "leakyrelu"):
+        """
+        Retruns the negative slope for various activation functions.
+
+        Returns:
+            float: Negative slope value.
+        """
+        match self.non_linearity:
+            case "leakyrelu" | "leaky_relu" | "prelu":
+                return 1e-2
+            case "mish":
+                return 3e-4
+            case "gelu":
+                return 5.1e-4
+            case _:
+                return 0.0
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
         """
@@ -309,7 +326,7 @@ class LoRA(nn.Module):
         """
         for layer in layers:
             if isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=1e-2)
+                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=self._get_neg_slope(self.non_linearity))
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
         
