@@ -420,13 +420,13 @@ class LoRA(nn.Module):
             torch.Tensor: Composed weights.
         """
         if scaling is None:
-            scaling = 1.0
+            scaling = self.scaling
 
         match self.mode:
             case "attention":
                 return weights + (self.rescale(added, sigma=self.sigma) * scaling)
             case "dense_fan_in" | "dense_fan_out": 
-                return weights * added
+                return weights * (added * scaling)
             case _:
                 return weights
 
@@ -442,9 +442,9 @@ class LoRA(nn.Module):
         """
         match self.mode:
             case "attention":
-                return weights - added
+                return weights - (added * self.scaling)
             case "dense_fan_in" | "dense_fan_out":
-                return weights / added
+                return weights / (added * self.scaling)
             case _:
                 return weights
 
@@ -479,7 +479,6 @@ class LoRA(nn.Module):
             hidden_states = self.dropout(torch.nan_to_num(hidden_states))
             dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
-            dw = self.scaling * dw
             dw_norm = dw.norm(p=2, dim=1, keepdim=True)
             dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
             hidden_states = dw / dw_norm
