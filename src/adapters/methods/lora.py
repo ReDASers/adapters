@@ -171,6 +171,47 @@ class LoRA(nn.Module):
                 self._setup_scaling()
             case _:
                 pass
+
+    def _calculate_gain(self, nonlinearity: str):
+        match nonlinearity:
+            case "leaky_relu" | "leakyrelu":
+                return nn.init.calculate_gain("leaky_relu", param=1e-2)
+            case "linear" | "self_norm"  | "sigmoid":
+                return 1.0
+            case "tanh":
+                return nn.init.calculate_gain("tanh")
+            case "selu":
+                return nn.init.calculate_gain("selu")
+            case "mish":
+                return nn.init.calculate_gain("leaky_relu", param=3e-4)
+            case "gelu":
+                return nn.init.calculate_gain("leaky_relu", param=5.1e-4)
+            case _:
+                return math.sqrt(2.0) # default value
+            
+    def _calculate_std(self, gain, fan):
+        return gain / math.sqrt(float(fan))
+
+    def _get_sigma_kaiming_normal(self, 
+                                  weights, 
+                                  nonlinearity: str = "gelu", 
+                                  mode: Literal["fan_in", "fan_out"] = "fan_in"):
+        """
+        Calculates the sigma value for Kaiming normal initialization.
+
+        Args:
+            weights (torch.Tensor): Weights tensor.
+            nonlinearity (str, optional): Non-linearity function. Defaults to "gelu".
+            mode (Literal["fan_in", "fan_out"], optional): Calculation mode. Defaults to "fan_in".
+
+        Returns:
+            float: standard deviation value to which the weights will be initialized under kaiming normal.
+        """
+        fan = nn.init._calculate_correct_fan(weights, mode)
+        gain = self._calculate_gain(nonlinearity)
+        std = self._calculate_std(gain, fan)
+        return std
+
             
     def _setup_gating_maybe(self, gating_heads: int):
         """
@@ -181,7 +222,8 @@ class LoRA(nn.Module):
         """
         if self.use_gating:
             self.gate = nn.Linear(self.connections_in, gating_heads, dtype=torch.float32)
-            nn.init.normal_(self.gate.weight, std=0.02)
+            std = self._get_sigma_kaiming_normal(self.gate.weight, nonlinearity="sigmoid", mode="fan_in")
+            nn.init.normal_(self.gate.weight, std=std)
 
     def _setup_scaling(self):
         """
@@ -193,20 +235,37 @@ class LoRA(nn.Module):
 
     def _init_scaling_weights(self):
         if self.sigma is None:
-            if self.mode == "dense_fan_in":   
-                self.sigma = 0.03
-            else:
-                self.sigma = 0.03/math.sqrt(self.connections_out/self.connections_in)
+            self.sigma = self._get_sigma_kaiming_normal(self.lora_C, mode="fan_in")
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
                 self.sigma =  math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
             else:
-                raise ValueError(f"Unknown sigma type: {self.sigma}")
-        elif isinstance(self.sigma, float):
-            self.sigma = self.sigma if self.sigma > 0 else 0.0
+                self.sigma = self._get_sigma_kaiming_normal(self.lora_C, nonlinearity=self.sigma)
+        elif isinstance(self.sigma, float) or isinstance(self.sigma, int):
+            self.sigma = float(self.sigma) if self.sigma > 0 else 0.0
         else:
             raise ValueError(f"Unknown sigma type: {self.sigma}")
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
+
+    def _estimate_attn_sigma(self):
+        if self.sigma is None:
+            self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
+        elif isinstance(self.sigma, str):
+            if self.sigma == "loria":
+                if self.non_linearity == "leakyrelu":
+                    self.sigma =  0.05
+                else:
+                    self.sigma = self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
+            else:
+                if self.non_linearity == "leakyrelu":
+                    self.sigma = math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
+                else:
+                    self.sigma = self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
+        elif isinstance(self.sigma, float) or isinstance(self.sigma, int):
+            self.sigma = float(self.sigma) if self.sigma > 0 else 0.0
+        else:
+            raise ValueError(f"Unknown sigma type: {self.sigma}")
+
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
         """
@@ -219,7 +278,7 @@ class LoRA(nn.Module):
         self.f = self._get_autoencoder_architecture("NLbLN")
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-        self.sigma = 0.07  # empirically determined
+        self.sigma = self._estimate_attn_sigma()
 
     def _setup_lora_matrices(self, lora_A_shape, lora_B_shape):
         """
