@@ -238,12 +238,13 @@ class LoRA(nn.Module):
 
     def _estimate_scaling_sigma(self):
         if self.sigma is None:
-            return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_in))
+            return self._get_sigma_kaiming_normal(self.lora_C, mode="fan_out", nonlinearity=self.non_linearity)
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
-                return math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
+                return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_in))
             else:
                 return self._get_sigma_kaiming_normal(self.lora_C, mode="fan_out", nonlinearity=self.sigma)
+                
         elif isinstance(self.sigma, float) or isinstance(self.sigma, int):
             return float(self.sigma) if self.sigma > 0 else 0.0
         else:
