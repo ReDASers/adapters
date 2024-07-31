@@ -90,9 +90,8 @@ class LoRA(nn.Module):
         
         assert self.r == lora_A_shape[0] == lora_B_shape[1], "r must match the first dimension of A and the second dimension of B."
         # The following is for flexibility; normally, alpha is normally 1 for loria
-        self.alpha = int(config.alpha // self.r) if config.alpha > self.r else 1
+        self.alpha = float(config.alpha) / math.sqrt(float(self.r)) if config.alpha > 0 else 1.0
         #  scaling factor is also 1 for loria
-        self.scaling = 1.0 if self.alpha < 1 else float(self.alpha)
 
         beta = config.beta if config.beta is not None else int(self.r * 1.5)
         self.bottleneck_size = int(beta * self.r)  
@@ -355,7 +354,7 @@ class LoRA(nn.Module):
         """
 
         if scaling is None:
-            scaling = self.scaling
+            scaling = self.alpha
 
         match self.mode:
             case "attention":
@@ -376,7 +375,7 @@ class LoRA(nn.Module):
             torch.Tensor: Inverted weights.
         """
         if self.mode == "attention":
-            return weights - added * self.scaling
+            return weights - added * self.alpha
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             return weights / (added)
         elif self.mode == "noop":
