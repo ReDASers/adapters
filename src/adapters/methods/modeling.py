@@ -94,6 +94,8 @@ class Activation_Function_Class(nn.Module):
             self.f = nn.functional.leaky_relu
         elif act == "hardswish":
             self.f = nn.functional.hardswish
+        elif act == "snselu":
+            self.f = nn.functional.selu
         elif act == "fastswish":
             self.f = FastSwish()
         elif act == "aptx":

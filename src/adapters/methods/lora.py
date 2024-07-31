@@ -111,9 +111,6 @@ class LoRA(nn.Module):
        
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
-
-        
-
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         self.n_batches = 0 # have not trained yet
         
@@ -176,7 +173,7 @@ class LoRA(nn.Module):
         match nonlinearity:
             case "leaky_relu" | "leakyrelu" | "prelu":
                 return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
-            case "linear" | "self_norm"  | "sigmoid":
+            case "linear" | "snselu"  | "sigmoid":
                 return 1.0
             case "tanh":
                 return nn.init.calculate_gain("tanh")
@@ -307,7 +304,7 @@ class LoRA(nn.Module):
         Returns:
             float: Negative slope value.
         """
-        match self.non_linearity:
+        match non_linearity:
             case "leakyrelu" | "leaky_relu" | "prelu":
                 return 1e-2
             case "mish":
