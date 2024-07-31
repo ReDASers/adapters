@@ -90,9 +90,9 @@ class LoRA(nn.Module):
         
         assert self.r == lora_A_shape[0] == lora_B_shape[1], "r must match the first dimension of A and the second dimension of B."
         # The following is for flexibility; normally, alpha is normally 1 for loria
-        self.alpha = float(config.alpha) / math.sqrt(float(self.r)) if config.alpha > 1 else 1.0
+        self.lora_alpha = float(config.alpha) if config.alpha > 0 else math.sqrt(self.r)
         #  scaling factor is also 1 for loria
-
+        self.scaling = float(self.lora_alpha / self.r)
         beta = config.beta if config.beta is not None else int(self.r * 1.5)
         self.bottleneck_size = int(beta * self.r)  
         
@@ -108,7 +108,6 @@ class LoRA(nn.Module):
         
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
-       
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
@@ -117,7 +116,13 @@ class LoRA(nn.Module):
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         if batch_size is not None and training_set_size is not None:
-            return training_set_size // batch_size
+            batches_per_epoch = training_set_size // batch_size
+            if batches_per_epoch < 1:
+                raise ValueError("Steps per epoch must be >= 1.")
+            return batches_per_epoch
+        logging.warning("Batch size or training set size is None. \
+                        Cannot calculate batches per epoch. Setting to 1. \
+                        This may lead to incorrect rescaling and suboptimal performance.")
         return 1
             
 
@@ -388,16 +393,8 @@ class LoRA(nn.Module):
         """
         Rescale the lora_A and lora_B weights based on the current configuration.
         """
-        match self.mode:
-            case "attention":
-                pass
-            case "dense_fan_in" | "dense_fan_out":
-                self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
-            case "noop":
-                pass
-            case _:
-                raise ValueError(f"Unknown mode: {self.mode}")
-    
+        if self.mode in ["dense_fan_in", "dense_fan_out"]:
+            self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0.0:
@@ -422,13 +419,12 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
-
         if scaling is None:
-            scaling = self.alpha
+            scaling = self.scaling
 
         match self.mode:
             case "attention":
-                return weights + added
+                return weights + (self.rescale(added, sigma=self.sigma) * scaling)
             case "dense_fan_in" | "dense_fan_out": 
                 return weights * added
             case _:
@@ -444,14 +440,14 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Inverted weights.
         """
-        if self.mode == "attention":
-            return weights - added * self.alpha
-        elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
-            return weights / (added)
-        elif self.mode == "noop":
-            return weights
-        else:
-            raise ValueError(f"Unknown mode: {self.mode}")
+        match self.mode:
+            case "attention":
+                return weights - added * self.scaling
+            case "dense_fan_in" | "dense_fan_out":
+                return weights / added
+            case _:
+                return weights
+
         
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         """Forward pass of the LoRA module.
@@ -479,8 +475,8 @@ class LoRA(nn.Module):
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
-            hidden_states = self.rescale(torch.nan_to_num(hidden_states), sigma=self.sigma)
-            hidden_states = self.dropout(hidden_states)
+           
+            hidden_states = self.dropout(torch.nan_to_num(hidden_states))
             dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             dw = self.alpha * dw
@@ -495,12 +491,10 @@ class LoRA(nn.Module):
             # Apply scaling to the weights
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler)           
         # No operation mode
-        elif self.mode == "noop":
+        else:
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
-        # should never happen
-        else: raise ValueError(f"Unknown mode: {self.mode}")
 
         self.delta_w = hidden_states
         # Apply gating mechanism if use_gating is enabled
