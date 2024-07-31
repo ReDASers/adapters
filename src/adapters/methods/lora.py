@@ -253,12 +253,9 @@ class LoRA(nn.Module):
                 if self.non_linearity == "leakyrelu":
                     return  0.05
                 else:
-                    return self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
+                    return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_in))
             else:
-                if self.non_linearity == "leakyrelu":
-                    return math.sqrt(2 / ((1 + (1e-2) ** 2) * self.connections_in))
-                else:
-                    return self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
+                return self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_out)
         elif isinstance(self.sigma, float) or isinstance(self.sigma, int):
             return float(self.sigma) if self.sigma > 0 else 0.0
         else:
