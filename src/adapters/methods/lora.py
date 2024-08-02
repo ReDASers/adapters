@@ -92,7 +92,7 @@ class LoRA(nn.Module):
         # The following is for flexibility; normally, alpha is normally 1 for loria
         self.lora_alpha = float(config.alpha) if config.alpha > 0 else math.sqrt(self.r)
         #  scaling factor is also 1 for loria
-        self.scaling = float(self.lora_alpha / self.r)
+        self.scaling = float(self.lora_alpha / self.r) if self.lora_alpha > 1.0 else 1.0
         beta = config.beta if config.beta is not None else int(self.r * 1.5)
         self.bottleneck_size = int(beta * self.r)  
         
@@ -118,8 +118,9 @@ class LoRA(nn.Module):
         if batch_size is not None and training_set_size is not None:
             batches_per_epoch = training_set_size // batch_size
             if batches_per_epoch < 1:
-                raise ValueError("Steps per epoch must be >= 1.")
+                logging.warning("Turning off rescaling...")
             return batches_per_epoch
+        
         logging.warning("Batch size or training set size is None. \
                         Cannot calculate batches per epoch. Setting to 1. \
                         This may lead to incorrect rescaling and suboptimal performance.")
@@ -232,7 +233,7 @@ class LoRA(nn.Module):
         Sets up the basic calculation mode by initializing scaling parameters.
         """
         self.lora_C = nn.Parameter(torch.zeros(self.connections_out, 1, dtype=torch.float32))
-        self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
+        self.scalar_scaler = nn.Parameter(torch.tensor(self.eps * self.lora_alpha, dtype=torch.float32))
         self.sigma = self._estimate_scaling_sigma()
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
 
@@ -241,7 +242,7 @@ class LoRA(nn.Module):
             return self._get_sigma_kaiming_normal(self.lora_C, mode="fan_out", nonlinearity=self.non_linearity)
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
-                return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_in))
+                return math.sqrt(self.scaling)*math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_in))
             else:
                 return self._get_sigma_kaiming_normal(self.lora_C, mode="fan_out", nonlinearity=self.sigma)
                 
@@ -257,7 +258,7 @@ class LoRA(nn.Module):
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
                 if self.non_linearity == "leakyrelu":
-                    return  0.05
+                    return  0.05 * math.sqrt(self.scaling)
                 else:
                     return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_in))
             else:
@@ -314,6 +315,8 @@ class LoRA(nn.Module):
                 return 3e-4
             case "gelu":
                 return 5.1e-4
+            case "linear":
+                return 1.0
             case _:
                 return 0.0
 
