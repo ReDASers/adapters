@@ -384,7 +384,7 @@ class LoRA(nn.Module):
             bool: True if rescaling is required, False otherwise.
         """
         if self.batches_per_epoch < 1:
-            raise False
+            return False
         
         self.n_batches += 1
 
