@@ -384,7 +384,7 @@ class LoRA(nn.Module):
             bool: True if rescaling is required, False otherwise.
         """
         if self.batches_per_epoch < 1:
-            raise ValueError("Steps per epoch must be >= 1.")
+            raise False
         
         self.n_batches += 1
 
@@ -397,7 +397,8 @@ class LoRA(nn.Module):
         """
         Rescale the lora_A and lora_B weights based on the current configuration.
         """
-        if self.mode in ["dense_fan_in", "dense_fan_out"]:
+        
+        if self.mode in ["dense_fan_in", "dense_fan_out"] and self.batches_per_epoch >= 1:
             self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
