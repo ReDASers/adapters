@@ -242,7 +242,7 @@ class LoRA(nn.Module):
             return self._get_sigma_kaiming_normal(self.lora_C, mode="fan_out", nonlinearity=self.non_linearity)
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
-                return math.sqrt(self.scaling)*math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_in))
+                return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
             else:
                 return self._get_sigma_kaiming_normal(self.lora_C, mode="fan_out", nonlinearity=self.sigma)
                 
@@ -258,11 +258,11 @@ class LoRA(nn.Module):
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
                 if self.non_linearity == "leakyrelu":
-                    return  0.05 * math.sqrt(self.scaling)
+                    return  0.05
                 else:
                     return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_in))
             else:
-                return self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_out)
+                return self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
         elif isinstance(self.sigma, float) or isinstance(self.sigma, int):
             return float(self.sigma) if self.sigma > 0 else 0.0
         else:
@@ -329,7 +329,7 @@ class LoRA(nn.Module):
         """
         for layer in layers:
             if isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=self._get_neg_slope(self.non_linearity))
+                nn.init.kaiming_normal_(layer.weight, mode="fan_in", a=self._get_neg_slope(self.non_linearity))
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
         
