@@ -233,8 +233,8 @@ class LoRA(nn.Module):
         Sets up the basic calculation mode by initializing scaling parameters.
         """
         self.lora_C = nn.Parameter(torch.zeros(self.connections_out, 1, dtype=torch.float32))
-        self.scalar_scaler = nn.Parameter(torch.tensor(self.eps * self.lora_alpha, dtype=torch.float32))
-        self.sigma = self._estimate_scaling_sigma()
+        self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
+        self.sigma = self._estimate_scaling_sigma() if self.mode == "dense_fan_out" else 1e-2
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
 
     def _estimate_scaling_sigma(self):
