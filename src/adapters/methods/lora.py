@@ -289,7 +289,6 @@ class LoRA(nn.Module):
         self.f = self._get_autoencoder_architecture("NLbLN")
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-        self.sigma = self._estimate_attn_sigma()
         
 
     def _setup_lora_matrices(self, lora_A_shape, lora_B_shape):
@@ -346,6 +345,7 @@ class LoRA(nn.Module):
                     nn.init.zeros_(layer.bias)
                 nn.init.kaiming_normal_(layer.weight, a=self._get_neg_slope(self.non_linearity), mode="fan_out", nonlinearity="leaky_relu")
                 
+                self.sigma = self._calculate_std(gain, fan_in+fan_out)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
         
