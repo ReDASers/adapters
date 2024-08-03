@@ -113,8 +113,7 @@ class LoRA(nn.Module):
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
-        self.n_batches = 0 # have not trained yet
-        
+        self.n_batches = 0 # have not trained yet   
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         if batch_size is not None and training_set_size is not None:
@@ -128,7 +127,6 @@ class LoRA(nn.Module):
                         This may lead to incorrect rescaling and suboptimal performance.")
         return 1
             
-
     def _is_valid_location_key(self, config, location_key):
         """
         Checks if the given location key is valid based on the config.
@@ -165,7 +163,6 @@ class LoRA(nn.Module):
                 return "dense_fan_in"
             case _:
                 return "noop"
-
     
     def _layer_specific_setup(self, lora_A_shape, lora_B_shape):
          # Determine calculation mode and setup accordingly
@@ -196,7 +193,6 @@ class LoRA(nn.Module):
             case _:
                 return 0.0
 
-
     def _calculate_gain(self, nonlinearity: str):
         match nonlinearity:
             case "leaky_relu" | "leakyrelu" | "prelu":
@@ -220,7 +216,6 @@ class LoRA(nn.Module):
             
     def _calculate_std(self, gain, fan):
         return gain / math.sqrt(float(fan))
-
             
     def _setup_gating_maybe(self, gating_heads: int):
         """
@@ -278,10 +273,8 @@ class LoRA(nn.Module):
         """
         self.lora_A = nn.Parameter(torch.randn(lora_A_shape))
         self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
-        self.m = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
         self._initialize_lora_matrices()
         
-
     def _initialize_lora_matrices(self):
         """
         Initializes the LoRA matrices A and B.
@@ -291,8 +284,6 @@ class LoRA(nn.Module):
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
         nn.init.kaiming_uniform_(self.m, a=math.sqrt(5))
-        self.m_sigma = self._estimate_scaling_sigma()
-        nn.init.normal_(self.m, mean=1.0, std=self.m_sigma)
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
         """
@@ -335,7 +326,6 @@ class LoRA(nn.Module):
         except KeyError:
             raise ValueError(f"Unknown autoencoder architecture: {arch}")
         
-
     @property
     def delta_w(self) -> torch.Tensor:
         """Placeholder for delta_w calculation."""
@@ -372,13 +362,11 @@ class LoRA(nn.Module):
         """
         Rescale the lora_A and lora_B weights based on the current configuration.
         """
-        
         if self.mode in ["dense_fan_in", "dense_fan_out"] and self.batches_per_epoch >= 1:
             self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
         elif self.mode == "attention":
             self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
             self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
-            self.m.data = self.rescale(self.m.data, sigma=self.m_sigma)
             self._rescale_autoencoder_weights()
             
     def _rescale_autoencoder_weights(self):
@@ -389,7 +377,7 @@ class LoRA(nn.Module):
             if isinstance(layer, nn.Linear):
                 layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
                 if layer.bias is not None:
-                    layer.bias.data = nn.init.zeros_(layer.bias)
+                    layer.bias.data = self.rescale(layer.bias.data, sigma=0.0)
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0.0:
@@ -442,8 +430,7 @@ class LoRA(nn.Module):
                 return weights / (added * self.scaling)
             case _:
                 return weights
-
-        
+   
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         """Forward pass of the LoRA module.
     
@@ -454,20 +441,10 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-
-        # Rescale weights if required
-        #
-        # Rescaling after the update to the gradients at the
-        # end of the epoch is the correct way to do it, but
-        # to keep the code within the adapter module, we do it here.
-        # So we update the weights in the beginning of the first
-        # training step of the next epoch.
-        #
         if self._do_rescale():
             self._rescale_weights()
 
         if self.mode == "attention":
-            magnitude = torch.nan_to_num(self.m.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
@@ -477,8 +454,7 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True)
             dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
-            dw_normed = dw / dw_norm
-            hidden_states = magnitude * dw_normed
+            hidden_states = dw / dw_norm
             
         # Alternative calculation mode
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
