@@ -322,7 +322,7 @@ class LoRA(nn.Module):
                 
                 self.autoencoder_sigmas.append(sigma)
                 if layer.bias is not None:
-                    nn.init.constant_(layer.bias, self.eps)
+                    nn.init.constant_(layer.bias, math.sqrt(self.eps))
 
     def _get_autoencoder_architecture(self, arch: str = "NLbLN"):
         """
