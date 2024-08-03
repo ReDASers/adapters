@@ -283,7 +283,7 @@ class LoRA(nn.Module):
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
         # nn.init.zeros_(self.lora_B)
         nn.init.kaiming_uniform_(self.lora_B, a=math.sqrt(5))
-        self.B_sigma = self._estimate_attn_sigma(self.lora_B.data, mode="fan_in")
+        self.B_sigma = self._estimate_attn_sigma(self.lora_B.data, mode="fan_out")
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
         """
