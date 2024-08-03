@@ -311,6 +311,7 @@ class LoRA(nn.Module):
         self.lora_A = nn.Parameter(torch.randn(lora_A_shape))
         self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
         self._initialize_lora_matrices()
+        self.sigma = 0.05
 
     def _initialize_lora_matrices(self):
         """
@@ -453,7 +454,7 @@ class LoRA(nn.Module):
         match self.mode:
             case "attention":
                 # return weights + (self.rescale(added, sigma=self.sigma) * scaling)
-                return weights + (added * scaling)
+                return weights + (self.rescale(added, self.sigma) * scaling)
             case "dense_fan_in" | "dense_fan_out": 
                 return weights * (added * scaling)
             case _:
