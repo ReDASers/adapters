@@ -365,7 +365,7 @@ class LoRA(nn.Module):
             self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
         elif self.mode == "attention":
             self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
-            self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
+            self.lora_B.data = nn.init.zeros_(self.lora_B)
             self._rescale_autoencoder_weights()
             
     def _rescale_autoencoder_weights(self):
@@ -376,7 +376,7 @@ class LoRA(nn.Module):
             if isinstance(layer, nn.Linear):
                 layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
                 if layer.bias is not None:
-                    layer.bias.data = self.rescale(layer.bias.data, sigma=0.0)
+                    layer.bias.data = nn.init.zeros_(layer.bias)
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0.0:
