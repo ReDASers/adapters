@@ -198,10 +198,25 @@ class LoRA(nn.Module):
             
     def _calculate_std(self, gain, fan):
         return gain / math.sqrt(float(fan))
+    
+    def _get_sigma_xavier_normal(self, layers, nonlinearity: str = "leakyrelu"):
+        sigma = 0.0
+        for i, layer in enumerate(layers):
+            if isinstance(layer, nn.Linear):
+                if i < len(layers) - 1:
+                    if not isinstance(layers[i + 1], nn.Linear):
+                        gain = self._calculate_gain(nonlinearity)
+                    else:
+                        gain = 1.0
+                else:
+                    gain = 1.0
+                fan_in, fan_out = nn.init._calculate_fan_in_and_fan_out(layer.weight)
+                sigma = gain * math.sqrt(2.0 / float(fan_in + fan_out))
+        return sigma
 
     def _get_sigma_kaiming_normal(self, 
                                   weights, 
-                                  nonlinearity: str = "gelu", 
+                                  nonlinearity: str = "leakyrelu", 
                                   mode: Literal["fan_in", "fan_out"] = "fan_in"):
         """
         Calculates the sigma value for Kaiming normal initialization.
@@ -247,9 +262,12 @@ class LoRA(nn.Module):
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
                 return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
+            elif self.sigma == "bert":
+                return 0.02
+            elif self.sigma == "ia3":
+                return 0.0
             else:
-                return self._get_sigma_kaiming_normal(self.lora_C, mode="fan_out", nonlinearity=self.sigma)
-                
+                raise ValueError(f"Unknown sigma type: {self.sigma}")
         elif isinstance(self.sigma, float) or isinstance(self.sigma, int):
             return float(self.sigma) if self.sigma > 0 else 0.0
         else:
@@ -258,15 +276,16 @@ class LoRA(nn.Module):
 
     def _estimate_attn_sigma(self):
         if self.sigma is None:
-            return self._calculate_std(self._calculate_gain("loria"), self.connections_out)
+            return self._get_sigma_kaiming_normal(self.lora_B, mode="fan_out", nonlinearity=self.non_linearity)
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
-                if self.non_linearity == "leakyrelu":
-                    return self._calculate_std(self._calculate_gain("loria"), self.connections_in)
-                else:
-                    return math.sqrt(2 / ((1 + (math.sqrt(5) ** 2) * self.connections_in)))
+                return self._get_sigma_xavier_normal(self.f, nonlinearity=self.non_linearity)
+            elif self.sigma == "bert":
+                return 0.02
+            elif self.sigma == "ia3":
+                return 0.0
             else:
-                return self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
+                raise ValueError(f"Unknown sigma type: {self.sigma}")
         elif isinstance(self.sigma, float) or isinstance(self.sigma, int):
             return float(self.sigma) if self.sigma > 0 else 0.0
         else:
@@ -331,9 +350,16 @@ class LoRA(nn.Module):
         Args:
             layers (nn.Sequential): Sequential model containing the layers.
         """
-        for layer in layers:
+        for i, layer in enumerate(layers):
             if isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
+                if i < len(layers) - 1:
+                    if not isinstance(layers[i + 1], nn.Linear):
+                        gain = self._calculate_gain(self.non_linearity)
+                    else:
+                        gain = 1.0
+                else:
+                    gain = 1.0
+                nn.init.xavier_normal_(layer.weight, gain=gain)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
         
