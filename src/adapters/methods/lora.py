@@ -189,8 +189,12 @@ class LoRA(nn.Module):
                 return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
             case "gelu":
                 return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
+            case "relu":
+                return nn.init.calculate_gain("relu")
+            case "relu6" | "elu":
+                return math.sqrt(2.0)
             case _:
-                return math.sqrt(2.0) # default value
+                return nn.init.calculate_gain("leaky_relu", math.sqrt(5))
             
     def _calculate_std(self, gain, fan):
         return gain / math.sqrt(float(fan))
@@ -234,7 +238,7 @@ class LoRA(nn.Module):
         """
         self.lora_C = nn.Parameter(torch.zeros(self.connections_out, 1, dtype=torch.float32))
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
-        self.sigma = self._estimate_scaling_sigma() if self.mode == "dense_fan_in" else 1e-2
+        self.sigma = self._estimate_scaling_sigma()
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
 
     def _estimate_scaling_sigma(self):
@@ -254,13 +258,13 @@ class LoRA(nn.Module):
 
     def _estimate_attn_sigma(self):
         if self.sigma is None:
-            return self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
+            return self._calculate_std(self._calculate_gain("loria"), self.connections_in)
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
                 if self.non_linearity == "leakyrelu":
-                    return  0.05
+                    return  0.01
                 else:
-                    return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_in))
+                    return math.sqrt(2 / ((1 + (math.sqrt(5) ** 2) * self.connections_in)))
             else:
                 return self._calculate_std(self._calculate_gain(self.non_linearity), self.connections_in)
         elif isinstance(self.sigma, float) or isinstance(self.sigma, int):
@@ -329,7 +333,7 @@ class LoRA(nn.Module):
         """
         for layer in layers:
             if isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight, mode="fan_in", a=self._get_neg_slope(self.non_linearity))
+                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
         
