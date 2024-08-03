@@ -291,38 +291,12 @@ class LoRA(nn.Module):
         """
         for i, layer in enumerate(layers):
             if isinstance(layer, nn.Linear):
-                if self.init_weights == "normal":
-                    nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
-                    sigma = self._estimate_attn_sigma(layer.weight, mode="fan_out")
-                elif self.init_weights == "uniform":
-                    nn.init.kaiming_uniform_(layer.weight, mode="fan_out", a=math.sqrt(5))
-                    sigma = self._estimate_attn_sigma(layer.weight, mode="fan_out")
-                elif self.init_weights == "uniform_fan_in":
-                    nn.init.kaiming_uniform_(layer.weight, mode="fan_in", a=math.sqrt(5))
-                    sigma = self._estimate_attn_sigma(layer.weight, mode="fan_in")
-                elif self.init_weights == "normal_fan_in":
-                    nn.init.kaiming_normal_(layer.weight, mode="fan_in", a=math.sqrt(5))
-                    sigma = self._estimate_attn_sigma(layer.weight, mode="fan_in")
-                elif self.init_weights == "normal_in_out":
-                    if i < len(layers) / 2:
-                        nn.init.kaiming_normal_(layer.weight, mode="fan_in", a=math.sqrt(5))
-                        sigma = self._estimate_attn_sigma(layer.weight, mode="fan_in")
-                    else:
-                        nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
-                        sigma = self._estimate_attn_sigma(layer.weight, mode="fan_out")
-                elif self.init_weights == "uniform_in_out":
-                    if i < len(layers) / 2:
-                        nn.init.kaiming_uniform_(layer.weight, mode="fan_in", a=math.sqrt(5))
-                        sigma = self._estimate_attn_sigma(layer.weight, mode="fan_in")
-                    else:
-                        nn.init.kaiming_uniform_(layer.weight, mode="fan_out", a=math.sqrt(5))
-                        sigma = self._estimate_attn_sigma(layer.weight, mode="fan_out")
-                else:
-                    raise ValueError(f"Unknown init_weights type: {self.init_weights}")
-                
+                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
+                sigma = self._estimate_attn_sigma(layer.weight, mode="fan_out")
                 self.autoencoder_sigmas.append(sigma)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
+
 
     def _get_autoencoder_architecture(self, arch: str = "NLbLN"):
         """
