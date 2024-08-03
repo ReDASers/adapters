@@ -261,7 +261,7 @@ class LoRA(nn.Module):
             return self._get_sigma_kaiming_normal(self.lora_C, mode="fan_out", nonlinearity=self.non_linearity)
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
-                return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
+                return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_in))
             elif self.sigma == "bert":
                 return 0.02
             elif self.sigma == "ia3":
