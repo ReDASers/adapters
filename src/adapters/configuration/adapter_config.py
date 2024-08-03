@@ -511,6 +511,8 @@ class LoRAConfig(AdapterConfig):
 
     sigma: Optional[float | str] = "loria"
 
+    init_weights: str = "normal"
+
 
 
 
