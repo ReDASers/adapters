@@ -275,6 +275,7 @@ class LoRA(nn.Module):
        
 
     def _estimate_attn_sigma(self):
+        raise NotImplementedError("Not implemented yet.")
         if self.sigma is None:
             return self._get_sigma_kaiming_normal(self.lora_B, mode="fan_out", nonlinearity=self.non_linearity)
         elif isinstance(self.sigma, str):
