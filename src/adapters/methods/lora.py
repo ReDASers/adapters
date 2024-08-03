@@ -454,7 +454,7 @@ class LoRA(nn.Module):
         match self.mode:
             case "attention":
                 # return weights + (self.rescale(added, sigma=self.sigma) * scaling)
-                return weights + (self.rescale(added, self.sigma) * scaling)
+                return weights + (self.rescale(added, 2*self.sigma) * scaling)
             case "dense_fan_in" | "dense_fan_out": 
                 return weights * (added * scaling)
             case _:
