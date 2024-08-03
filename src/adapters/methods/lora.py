@@ -379,6 +379,8 @@ class LoRA(nn.Module):
                     layer.bias.data = nn.init.zeros_(layer.bias)
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
+        if sigma == 0:
+            return weights
         w = torch.nan_to_num(weights)
         u = torch.mean(w, dtype=dtype)
         stddev = torch.std(w)
