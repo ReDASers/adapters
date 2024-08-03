@@ -97,6 +97,7 @@ class LoRA(nn.Module):
         self.bottleneck_size = int(beta * self.r)  
         self.autoencoder_sigmas = []
         self.A_sigma = None
+        self.B_sigma = 0.0
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
@@ -104,7 +105,7 @@ class LoRA(nn.Module):
         self.sigma = config.sigma
         self.eps = config.eps
         self._delta_w = None  # Placeholder for delta weights
-        self.init_weights = config.init_weights
+
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
@@ -281,6 +282,7 @@ class LoRA(nn.Module):
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
         nn.init.zeros_(self.lora_B)
+        self.B_sigma = 0.0
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
         """
@@ -289,14 +291,13 @@ class LoRA(nn.Module):
         Args:
             layers (nn.Sequential): Sequential model containing the layers.
         """
-        for i, layer in enumerate(layers):
+        for layer in layers:
             if isinstance(layer, nn.Linear):
                 nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
                 sigma = self._estimate_attn_sigma(layer.weight, mode="fan_out")
                 self.autoencoder_sigmas.append(sigma)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
-
 
     def _get_autoencoder_architecture(self, arch: str = "NLbLN"):
         """
@@ -364,6 +365,7 @@ class LoRA(nn.Module):
             self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
         elif self.mode == "attention":
             self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
+            self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
             self._rescale_autoencoder_weights()
             
     def _rescale_autoencoder_weights(self):
@@ -374,7 +376,7 @@ class LoRA(nn.Module):
             if isinstance(layer, nn.Linear):
                 layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
                 if layer.bias is not None:
-                    layer.bias.data = nn.init.constant_(layer.bias.data, self.eps)
+                    layer.bias.data = nn.init.zeros_(layer.bias)
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
