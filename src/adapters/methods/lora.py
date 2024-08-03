@@ -279,7 +279,7 @@ class LoRA(nn.Module):
         """
         Initializes the LoRA matrices A and B.
         """
-        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+        nn.init.kaiming_normal_(self.lora_A, a=math.sqrt(5))
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
@@ -293,7 +293,7 @@ class LoRA(nn.Module):
         """
         for layer in layers:
             if isinstance(layer, nn.Linear):
-                nn.init.kaiming_uniform_(layer.weight, mode="fan_out", a=math.sqrt(5))
+                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
                 sigma = self._estimate_attn_sigma(layer.weight, mode="fan_out")
                 self.autoencoder_sigmas.append(sigma)
                 if layer.bias is not None:
