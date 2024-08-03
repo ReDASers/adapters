@@ -370,9 +370,9 @@ class LoRA(nn.Module):
         """
         
         if self.mode in ["dense_fan_in", "dense_fan_out"] and self.batches_per_epoch >= 1:
-            self.lora_C.data = self.rescale(self.lora_C.data, sigma=2*self.sigma, dtype=torch.float32)    
+            self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
         elif self.mode == "attention":
-            self.lora_A.data = self.rescale(self.lora_A.data, sigma=2*self.A_sigma)
+            self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
             self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
             self._rescale_autoencoder_weights()
             
@@ -471,7 +471,7 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True)
             dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
-            hidden_states = dw / dw_norm
+            hidden_states = (dw / dw_norm) * self.scaling
             
         # Alternative calculation mode
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
