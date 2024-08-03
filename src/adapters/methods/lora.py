@@ -95,7 +95,9 @@ class LoRA(nn.Module):
         self.scaling = float(self.lora_alpha / self.r) if self.lora_alpha > 1.0 else 1.0
         beta = config.beta if config.beta is not None else int(self.r * 1.5)
         self.bottleneck_size = int(beta * self.r)  
-        
+        self.autoencoder_sigmas = []
+        self.A_sigma = None
+        self.B_sigma = 0.0
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
@@ -175,6 +177,27 @@ class LoRA(nn.Module):
             case _:
                 pass
 
+    
+    def _get_neg_slope(self, non_linearity: str = "leakyrelu"):
+        """
+        Retruns the negative slope for various activation functions.
+
+        Returns:
+            float: Negative slope value.
+        """
+        match non_linearity:
+            case "leakyrelu" | "leaky_relu" | "prelu":
+                return 1e-2
+            case "mish":
+                return 3e-4
+            case "gelu":
+                return 5.1e-4
+            case "linear":
+                return 1.0
+            case _:
+                return 0.0
+
+
     def _calculate_gain(self, nonlinearity: str):
         match nonlinearity:
             case "leaky_relu" | "leakyrelu" | "prelu":
@@ -198,26 +221,11 @@ class LoRA(nn.Module):
             
     def _calculate_std(self, gain, fan):
         return gain / math.sqrt(float(fan))
-    
-    def _get_sigma_xavier_normal(self, layers, nonlinearity: str = "leakyrelu"):
-        sigma = 0.0
-        for i, layer in enumerate(layers):
-            if isinstance(layer, nn.Linear):
-                if i < len(layers) - 1:
-                    if not isinstance(layers[i + 1], nn.Linear):
-                        gain = self._calculate_gain(nonlinearity)
-                    else:
-                        gain = 1.0
-                else:
-                    gain = 1.0
-                fan_in, fan_out = nn.init._calculate_fan_in_and_fan_out(layer.weight)
-                sigma = gain * math.sqrt(2.0 / float(fan_in + fan_out))
-        return sigma
 
-    def _get_sigma_kaiming_normal(self, 
-                                  weights, 
-                                  nonlinearity: str = "leakyrelu", 
-                                  mode: Literal["fan_in", "fan_out"] = "fan_in"):
+    def _get_sigma_kaiming(self, 
+                           weights, 
+                           nonlinearity: str = "leakyrelu", 
+                           mode: Literal["fan_in", "fan_out"] = "fan_in"):
         """
         Calculates the sigma value for Kaiming normal initialization.
 
@@ -262,7 +270,7 @@ class LoRA(nn.Module):
 
     def _estimate_attn_sigma(self):
         if self.sigma is None:
-            return self._get_sigma_kaiming_normal(self.lora_B, mode="fan_out", nonlinearity=self.non_linearity)
+            return self._get_sigma_kaiming(self.lora_B, mode="fan_out", nonlinearity=self.non_linearity)
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
                 return self._calculate_std(self._calculate_gain("loria"), self.connections_in)
@@ -289,7 +297,7 @@ class LoRA(nn.Module):
         self.f = self._get_autoencoder_architecture("NLbLN")
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-        self.sigma = 0.05
+        self.sigma = None
         
 
     def _setup_lora_matrices(self, lora_A_shape, lora_B_shape):
@@ -309,26 +317,11 @@ class LoRA(nn.Module):
         Initializes the LoRA matrices A and B.
         """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+        fan = nn.init._calculate_correct_fan(self.lora_A.data, mode="fan_in")
+        gain = nn.init.calculate_gain("leaaky_relu", param=math.sqrt(5))
+        self.A_sigma =  gain * math.sqrt(2.0 / float(fan))
         nn.init.zeros_(self.lora_B)
-
-    def _get_neg_slope(self, non_linearity: str = "leakyrelu"):
-        """
-        Retruns the negative slope for various activation functions.
-
-        Returns:
-            float: Negative slope value.
-        """
-        match non_linearity:
-            case "leakyrelu" | "leaky_relu" | "prelu":
-                return 1e-2
-            case "mish":
-                return 3e-4
-            case "gelu":
-                return 5.1e-4
-            case "linear":
-                return 1.0
-            case _:
-                return 0.0
+        self.B_sigma = 0.0
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
         """
@@ -337,16 +330,26 @@ class LoRA(nn.Module):
         Args:
             layers (nn.Sequential): Sequential model containing the layers.
         """
-
-
         for layer in layers:
             if isinstance(layer, nn.Linear):
-
                 #nn.init.kaiming_normal_(layer.weight, a=self._get_neg_slope(self.non_linearity), mode="fan_out", nonlinearity="leaky_relu")
                 nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
-                
+                fan = nn.init._calculate_correct_fan(layer.weight, mode="fan_out")
+                gain = nn.init.calculate_gain("leaaky_relu", param=math.sqrt(5))
+                sigma = gain * math.sqrt(2.0 / float(fan))
+                self.autoencoder_sigmas.append(sigma)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
+
+    def rescale_autoencoder_weights(self):
+        """
+        Rescales the weights of the autoencoder.
+        """
+        for layer, sigma in zip(self.f, self.autoencoder_sigmas):
+            if isinstance(layer, nn.Linear):
+                layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
+                if layer.bias is not None:
+                    layer.bias.data = nn.init.zeros_(layer.bias)
         
 
     def _get_autoencoder_architecture(self, arch: str = "NLbLN"):
@@ -415,6 +418,11 @@ class LoRA(nn.Module):
         
         if self.mode in ["dense_fan_in", "dense_fan_out"] and self.batches_per_epoch >= 1:
             self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
+        elif self.mode == "attention":
+            self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
+            self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
+            self.rescale_autoencoder_weights()
+            
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0.0:
@@ -444,7 +452,8 @@ class LoRA(nn.Module):
 
         match self.mode:
             case "attention":
-                return weights + (self.rescale(added, sigma=self.sigma) * scaling)
+                # return weights + (self.rescale(added, sigma=self.sigma) * scaling)
+                return weights + (added * scaling)
             case "dense_fan_in" | "dense_fan_out": 
                 return weights * (added * scaling)
             case _:
