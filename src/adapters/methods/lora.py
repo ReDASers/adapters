@@ -359,7 +359,7 @@ class LoRA(nn.Module):
                         gain = 1.0
                 else:
                     gain = 1.0
-                nn.init.kaiming_normal_(layer.weight, a=self._get_neg_slope(self.non_linearity), mode="fan_in", nonlinearity=self.non_linearity)
+                nn.init.kaiming_normal_(layer.weight, a=self._get_neg_slope(self.non_linearity), mode="fan_in", nonlinearity="leaky_relu")
                 fan_in, fan_out = nn.init._calculate_fan_in_and_fan_out(layer.weight)
                 self.sigma = self._calculate_std(gain, fan_in+fan_out)
                 if layer.bias is not None:
