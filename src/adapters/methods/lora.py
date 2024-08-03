@@ -278,6 +278,7 @@ class LoRA(nn.Module):
         """
         self.lora_A = nn.Parameter(torch.randn(lora_A_shape))
         self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
+        self.m = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
         self._initialize_lora_matrices()
         
 
@@ -289,6 +290,9 @@ class LoRA(nn.Module):
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
+        nn.init.kaiming_uniform_(self.m, a=math.sqrt(5))
+        self.m_sigma = self._estimate_scaling_sigma()
+        nn.init.normal_(self.m, mean=1.0, std=self.m_sigma)
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
         """
@@ -374,6 +378,7 @@ class LoRA(nn.Module):
         elif self.mode == "attention":
             self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
             self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
+            self.m.data = self.rescale(self.m.data, sigma=self.m_sigma)
             self._rescale_autoencoder_weights()
             
     def _rescale_autoencoder_weights(self):
@@ -462,6 +467,7 @@ class LoRA(nn.Module):
             self._rescale_weights()
 
         if self.mode == "attention":
+            magnitude = torch.nan_to_num(self.m.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
@@ -471,7 +477,8 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True)
             dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
-            hidden_states = dw / dw_norm
+            dw_normed = dw / dw_norm
+            hidden_states = magnitude * dw_normed
             
         # Alternative calculation mode
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
