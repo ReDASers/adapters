@@ -258,11 +258,11 @@ class LoRA(nn.Module):
 
     def _estimate_attn_sigma(self):
         if self.sigma is None:
-            return self._calculate_std(self._calculate_gain("loria"), self.connections_in)
+            return self._calculate_std(self._calculate_gain("loria"), self.connections_out)
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
                 if self.non_linearity == "leakyrelu":
-                    return  0.01
+                    return self._calculate_std(self._calculate_gain("loria"), self.connections_in)
                 else:
                     return math.sqrt(2 / ((1 + (math.sqrt(5) ** 2) * self.connections_in)))
             else:
