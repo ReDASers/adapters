@@ -257,30 +257,15 @@ class LoRA(nn.Module):
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
 
     def _estimate_scaling_sigma(self):
-        if self.sigma is None:
-            return self._get_sigma_kaiming_normal(self.lora_C, mode="fan_out", nonlinearity=self.non_linearity)
-        elif isinstance(self.sigma, str):
-            if self.sigma == "loria":
-                return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_in))
-            elif self.sigma == "bert":
-                return 0.02
-            elif self.sigma == "ia3":
-                return 0.0
-            else:
-                raise ValueError(f"Unknown sigma type: {self.sigma}")
-        elif isinstance(self.sigma, float) or isinstance(self.sigma, int):
-            return float(self.sigma) if self.sigma > 0 else 0.0
-        else:
-            raise ValueError(f"Unknown sigma type: {self.sigma}")
+        return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_in))
        
 
     def _estimate_attn_sigma(self):
-        raise NotImplementedError("Not implemented yet.")
         if self.sigma is None:
             return self._get_sigma_kaiming_normal(self.lora_B, mode="fan_out", nonlinearity=self.non_linearity)
         elif isinstance(self.sigma, str):
             if self.sigma == "loria":
-                return self._get_sigma_xavier_normal(self.f, nonlinearity=self.non_linearity)
+                return 0.05
             elif self.sigma == "bert":
                 return 0.02
             elif self.sigma == "ia3":
@@ -304,6 +289,7 @@ class LoRA(nn.Module):
         self.f = self._get_autoencoder_architecture("NLbLN")
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
+        self.sigma = self._estimate_attn_sigma()
         
 
     def _setup_lora_matrices(self, lora_A_shape, lora_B_shape):
@@ -351,18 +337,15 @@ class LoRA(nn.Module):
         Args:
             layers (nn.Sequential): Sequential model containing the layers.
         """
-        for i, layer in enumerate(layers):
+
+
+        for layer in layers:
             if isinstance(layer, nn.Linear):
-                if i < len(layers) - 1:
-                    if not isinstance(layers[i + 1], nn.Linear):
-                        gain = self._calculate_gain(self.non_linearity)
-                    else:
-                        gain = 1.0
-                else:
-                    gain = 1.0
+                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=self._get_neg_slope(self.non_linearity))
+                if layer.bias is not None:
+                    nn.init.zeros_(layer.bias)
                 nn.init.kaiming_normal_(layer.weight, a=self._get_neg_slope(self.non_linearity), mode="fan_out", nonlinearity="leaky_relu")
-                fan_in, fan_out = nn.init._calculate_fan_in_and_fan_out(layer.weight)
-                self.sigma = self._calculate_std(gain, fan_in+fan_out)
+                
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
         
