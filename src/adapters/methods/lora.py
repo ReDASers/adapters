@@ -376,7 +376,7 @@ class LoRA(nn.Module):
             if isinstance(layer, nn.Linear):
                 layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
                 if layer.bias is not None:
-                    layer.bias.data = nn.init.zeros_(layer.bias)
+                    layer.bias.data = nn.init.constant_(layer.bias, self.eps)
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
