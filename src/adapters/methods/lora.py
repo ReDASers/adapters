@@ -293,11 +293,11 @@ class LoRA(nn.Module):
         """
         for layer in layers:
             if isinstance(layer, nn.Linear):
-                nn.init.kaiming_uniform_(layer.weight, mode="fan_out", a=math.sqrt(5))
+                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
                 sigma = self._estimate_attn_sigma(layer.weight, mode="fan_out")
                 self.autoencoder_sigmas.append(sigma)
                 if layer.bias is not None:
-                    nn.init.zeros_(layer.bias)
+                    nn.init.constant_(layer.bias, self.eps)
 
     def _get_autoencoder_architecture(self, arch: str = "NLbLN"):
         """
@@ -376,7 +376,7 @@ class LoRA(nn.Module):
             if isinstance(layer, nn.Linear):
                 layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
                 if layer.bias is not None:
-                    layer.bias.data = nn.init.constant_(layer.bias, self.eps)
+                    layer.bias.data = nn.init.zeros_(layer.bias)
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
