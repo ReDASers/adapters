@@ -345,7 +345,7 @@ class LoRA(nn.Module):
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
                 #nn.init.kaiming_normal_(layer.weight, a=self._get_neg_slope(self.non_linearity), mode="fan_out", nonlinearity="leaky_relu")
-                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
+                nn.init.kaiming_normal_(layer.weight, mode="fan_in", a=math.sqrt(5))
                 
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
