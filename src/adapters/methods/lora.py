@@ -318,7 +318,7 @@ class LoRA(nn.Module):
         """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         fan = nn.init._calculate_correct_fan(self.lora_A.data, mode="fan_in")
-        gain = nn.init.calculate_gain("leaaky_relu", param=math.sqrt(5))
+        gain = nn.init.calculate_gain("leaky_relu", param=math.sqrt(5))
         self.A_sigma =  gain * math.sqrt(2.0 / float(fan))
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
@@ -335,7 +335,7 @@ class LoRA(nn.Module):
                 #nn.init.kaiming_normal_(layer.weight, a=self._get_neg_slope(self.non_linearity), mode="fan_out", nonlinearity="leaky_relu")
                 nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
                 fan = nn.init._calculate_correct_fan(layer.weight, mode="fan_out")
-                gain = nn.init.calculate_gain("leaaky_relu", param=math.sqrt(5))
+                gain = nn.init.calculate_gain("leaky_relu", param=math.sqrt(5))
                 sigma = gain * math.sqrt(2.0 / float(fan))
                 self.autoencoder_sigmas.append(sigma)
                 if layer.bias is not None:
