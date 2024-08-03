@@ -293,7 +293,7 @@ class LoRA(nn.Module):
         """
         for layer in layers:
             if isinstance(layer, nn.Linear):
-                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
+                nn.init.kaiming_uniform_(layer.weight, mode="fan_out", a=math.sqrt(5))
                 sigma = self._estimate_attn_sigma(layer.weight, mode="fan_out")
                 self.autoencoder_sigmas.append(sigma)
                 if layer.bias is not None:
