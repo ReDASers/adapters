@@ -97,7 +97,6 @@ class LoRA(nn.Module):
         self.bottleneck_size = int(beta * self.r)  
         self.autoencoder_sigmas = []
         self.A_sigma = None
-        self.B_sigma = 0.0
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
@@ -281,9 +280,7 @@ class LoRA(nn.Module):
         """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
-        # nn.init.zeros_(self.lora_B)
-        nn.init.kaiming_uniform_(self.lora_B, a=math.sqrt(5))
-        self.B_sigma = self._estimate_attn_sigma(self.lora_B.data, mode="fan_out")
+        nn.init.zeros_(self.lora_B)
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
         """
