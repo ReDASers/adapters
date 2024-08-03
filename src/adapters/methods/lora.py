@@ -279,7 +279,7 @@ class LoRA(nn.Module):
         """
         Initializes the LoRA matrices A and B.
         """
-        nn.init.kaiming_normal_(self.lora_A, a=math.sqrt(5))
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
@@ -379,8 +379,6 @@ class LoRA(nn.Module):
                     layer.bias.data = nn.init.zeros_(layer.bias)
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
-        if sigma == 0.0:
-            return weights
         w = torch.nan_to_num(weights)
         u = torch.mean(w, dtype=dtype)
         stddev = torch.std(w)
