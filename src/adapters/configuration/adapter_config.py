@@ -490,28 +490,12 @@ class LoRAConfig(AdapterConfig):
 
     dropout: float = 0.1
     
-    # Flag to determine if a trainable gating module should be included
-    use_gating: bool = False
-    
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu" 
-
-    # this is the initial value subtracted from the the scalar scaling factor
-    # the idea is that iif t will see a small improvement in results, th
-    # then it will learn to gradually decrease the scaling factor;
-    # if subtracting this is slightly detrimental, then the model is less likely to 
-    # attempt to decrease the scaling factor further and will try increasing it
-    # the main idea is tha it must be small enough to not matter and large enough to not
-    # be lost due to numerical precision issues or instability or quantization
-    eps: float = 1e-9
 
     training_set_size: Optional[int] = 100
 
     batch_size: Optional[int] = 32
-
-    sigma: Optional[float | str] = "loria"
-
-    init_weights: str = "normal"
 
 
 
