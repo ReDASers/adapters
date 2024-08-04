@@ -110,7 +110,7 @@ class LoRA(nn.Module):
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
-        # Setup gating mechanism if required
+        
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         self.n_batches = 0 # have not trained yet   
 
