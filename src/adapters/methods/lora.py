@@ -79,43 +79,39 @@ class LoRA(nn.Module):
         
         # Ensure the composition mode is 'add'
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
-        
-        self.fan_in = lora_A_shape[-1]
-        self.fan_out = lora_B_shape[0]
+        # Validate and set the location key
+        if self._is_valid_location_key(config, location_key) == False:
+            raise ValueError(f"Location key {self.location_key} is not enabled in config or invalid.")
+        # Initialize configuration parameters
+        self.location_key = location_key 
+        self.connections_in = lora_A_shape[-1]
+        self.connections_out = lora_B_shape[0]
         self.r = int(config.r)
-
+        
         assert self.r == lora_A_shape[0] == lora_B_shape[1], "r must match the first dimension of A and the second dimension of B."
-        
-        # Set up gating
-        self.use_gating = config.use_gating
-        self.gating_heads = gating_heads
-        if self.use_gating:
-            self.gate = nn.Linear(lora_A_shape[-1], gating_heads)
-            nn.init.normal_(self.gate.weight, std=0.02)
-        
-        self.location = self._validate_location(location_key.replace("_lora", ""), config)
-        
         # The following is for flexibility; normally, alpha is normally 1 for loria
         self.lora_alpha = float(config.alpha) if config.alpha > 0 else math.sqrt(self.r)
         #  scaling factor is also 1 for loria
         self.scaling = float(self.lora_alpha / self.r) if self.lora_alpha > 1.0 else 1.0
         beta = config.beta if config.beta is not None else int(self.r * 1.5)
         self.bottleneck_size = int(beta * self.r)  
-
-        self.composition_mode = config.composition_mode
-        self.attn_matrices = config.attn_matrices
-        self.non_linearity = config.non_linearity
-
         self.autoencoder_sigmas = []
-        self.sigma = None
         self.A_sigma = None
         self.B_sigma = 0.0
+        self.composition_mode = config.composition_mode
+        self.attn_matrices = config.attn_matrices
+        self.use_gating = config.use_gating
+        self.non_linearity = config.non_linearity 
+        self.sigma = config.sigma
+        self.eps = config.eps
         self._delta_w = None  # Placeholder for delta weights
 
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
+        self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
-        
+        # Setup gating mechanism if required
+        self._setup_gating_maybe(gating_heads)
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         self.n_batches = 0 # have not trained yet   
 
@@ -131,29 +127,52 @@ class LoRA(nn.Module):
                         This may lead to incorrect rescaling and suboptimal performance.")
         return 1
             
-    def _validate_location(self, location, config) -> str:
-        match location:
-            case "selfattn" if config.selfattn_lora and self.fan_in == self.fan_out:
-                return location
-                
-            case "intermediate" if config.intermediate_lora and self.fan_in < self.fan_out:
-                return location
-                
-            case "output" if config.output_lora and self.fan_in > self.fan_out:
-                return location
-                
+    def _is_valid_location_key(self, config, location_key):
+        """
+        Checks if the given location key is valid based on the config.
+
+        Args:
+            config (LoRAConfig): Configuration object for LoRA settings.
+
+        Returns:
+            bool: True if the location key is valid, False otherwise.
+        """
+        if location_key is None:
+            logging.warning("Location key must be provided, but is currently None.")
+            return False
+        if (config.selfattn_lora == False and location_key == "selfattn_lora") or \
+           (config.intermediate_lora == False and location_key == "intermediate_lora") or \
+           (config.output_lora == False and location_key == "output_lora"):
+            logging.warning(f"LoRIA module has location key {location_key} but is not enabled in config.")
+            return False
+        return True
+
+    def _calculation_mode(self):
+        """
+        Checks if advanced calculation is possible based on the current configuration.
+
+        Returns:
+            stromg: how adapter weights will be handled.
+        """
+        match self.location_key:
+            case "selfattn_lora" if self.connections_in == self.connections_out:
+                return "attention"
+            case "intermediate_lora" if self.connections_in < self.connections_out:
+                return "dense_fan_out"
+            case "output_lora" if self.connections_in > self.connections_out:
+                return "dense_fan_in"
             case _:
-                raise ValueError(f"LoRA module has location key {location} but is not enabled in config or condition does not match.")
+                return "noop"
     
     def _layer_specific_setup(self, lora_A_shape, lora_B_shape):
          # Determine calculation mode and setup accordingly
-        match self.location:
-            case "selfattn":
+        match self.mode:
+            case "attention":
                 self._setup_in_attn(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-            case "output" | "intermediate":
+            case "dense_fan_in" | "dense_fan_out":
                 self._setup_scaling()
             case _:
-                raise ValueError(f"Unknown location key: {self.location}")
+                pass
 
     def _get_neg_slope(self, non_linearity: str = "leakyrelu"):
         """
@@ -168,37 +187,55 @@ class LoRA(nn.Module):
             case "mish":
                 return 3e-4
             case "gelu":
-                return 1.7e-4
+                return 5.1e-4
             case "linear":
                 return 1.0
             case "relu":
                 return 0.0
-            case _:
+            case _: # for slope of sqrt(5), gain of leaky_relu is 1/sqrt(3) which is Euler's constant
                 return math.sqrt(5)
+            
+    def _setup_gating_maybe(self, gating_heads: int):
+        """
+        Sets up the gating mechanism if use_gating is enabled.
+
+        Args:
+            gating_heads (int): Number of gating heads.
+        """
+        if self.use_gating:
+            self.gate = nn.Linear(self.connections_in, gating_heads, dtype=torch.float32)
+            fan = nn.init._calculate_correct_fan(self.gate.weight, mode="fan_in")
+            gain = nn.init.calculate_gain("sigmoid")
+            std = self._calculate_std(gain, fan)
+            nn.init.normal_(self.gate.weight, std=std)
 
     def _setup_scaling(self):
         """
         Sets up the basic calculation mode by initializing scaling parameters.
         """
-        self.lora_C = nn.Parameter(torch.ones(self.fan_out, 1, dtype=torch.float32))
-        self.scalar_scaler = nn.Parameter(torch.tensor(1e-9, dtype=torch.float32))
+        self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
+        self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
         self.sigma = self._estimate_scaling_sigma()
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
 
     def _estimate_scaling_sigma(self):
-        return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.fan_out))
+        return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
+    
+    def _calculate_std(self, gain, fan):
+        """
+         # For He/Kaiming initialization, standard deviation is std=gain/sqrt(fan_in).
+         # It causes training to collapse in symmetric networks for some tasks (sts-b).
+         # Xavier/Glorot defines std=gain/sqrt(fan_in + fan_out) which is stable but
+         # not as performant as He for most tasks. We use a compromise between the two.
+         # This works because Xavier is a special case of He when fan_in == fan_out.
+        """
+        return gain * math.sqrt(2.0 / float(fan)) 
     
     def _estimate_attn_sigma(self, tensor: torch.Tensor, mode: Literal["fan_in", "fan_out"] = "fan_in"):
         fan = nn.init._calculate_correct_fan(tensor, mode=mode)
         gain = nn.init.calculate_gain("leaky_relu", param=math.sqrt(5))
-        """
-        # For He/Kaiming initialization, standard deviation is std=gain/sqrt(fan_in).
-        # It causes training to collapse in symmetric networks for some tasks (sts-b).
-        # Xavier/Glorot defines std=gain/sqrt(fan_in + fan_out) which is stable but
-        # not as performant as He for most tasks. We use a compromise between the two.
-        # This works because Xavier is a special case of He when fan_in == fan_out.
-        """
-        return gain * math.sqrt(2.0 / float(fan))
+        sigma = self._calculate_std(gain, fan)
+        return sigma
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
         """
@@ -211,7 +248,8 @@ class LoRA(nn.Module):
         self.f = self._get_autoencoder_architecture("NLbLN")
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-        self.sigma = self.A_sigma    
+        self.sigma = self.A_sigma
+        
 
     def _setup_lora_matrices(self, lora_A_shape, lora_B_shape):
         """
@@ -229,7 +267,7 @@ class LoRA(nn.Module):
         """
         Initializes the LoRA matrices A and B.
         """
-        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5)) # will produce gain of 1/sqrt(3) for leaky_relu
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
@@ -265,12 +303,12 @@ class LoRA(nn.Module):
         """
         architectures = {
             "NLbLN": [
-                nn.Linear(self.fan_in, self.r),
+                nn.Linear(self.connections_in, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.bottleneck_size),
                 nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.fan_in),
+                nn.Linear(self.r, self.connections_in),
             ],
         }
 
@@ -315,9 +353,9 @@ class LoRA(nn.Module):
         """
         Rescale the lora_A and lora_B weights based on the current configuration.
         """
-        if self.location in ["output", "intermediate"] and self.batches_per_epoch >= 1:
+        if self.mode in ["dense_fan_in", "dense_fan_out"] and self.batches_per_epoch >= 1:
             self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
-        elif self.location == "selfattn":
+        elif self.mode == "attention":
             self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
             self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
             self._rescale_autoencoder_weights()
@@ -358,10 +396,11 @@ class LoRA(nn.Module):
         if scaling is None:
             scaling = self.scaling
 
-        match self.location:
-            case "selfattn":
+        match self.mode:
+            case "attention": 
+                # rescale delta_w on every batch update in part because we never rescale self.lora_B
                 return weights + (self.rescale(added, self.sigma) * scaling)
-            case "output" | "intermediate": 
+            case "dense_fan_in" | "dense_fan_out": 
                 return weights * (added * scaling)
             case _:
                 return weights
@@ -376,56 +415,68 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Inverted weights.
         """
-        match self.location:
-            case "selfattn":
+        match self.mode:
+            case "attention":
                 return weights - (added * self.scaling)
-            case "output" | "intermediate":
+            case "dense_fan_in" | "dense_fan_out":
                 return weights / (added * self.scaling)
             case _:
                 return weights
-            
-    def _process_self_attention(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        """Process hidden states for self-attention mode."""
-        hidden_states = self.dropout(torch.nan_to_num(hidden_states))
-        dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
-        
-        # Normalize delta_w by its L2 norm
-        dw_norm = dw.norm(p=2, dim=1, keepdim=True)
-        dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
-        return dw / dw_norm
-
-    def _process_scaling(self, layer_input: torch.Tensor) -> torch.Tensor:
-        """Process hidden states for scaling modes."""
-        scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
-        return scaling_vector * (1.0 - self.scalar_scaler)
    
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
-        """
-        Forward pass of the LoRA module.
-
+        """Forward pass of the LoRA module.
+    
         Args:
             hidden_states (Optional[torch.Tensor]): Input tensor for hidden states.
             layer_input (torch.Tensor): Input tensor for the current layer.
-
+    
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-        # If hidden_states is None, use layer_input instead
-        if hidden_states is None:
-            hidden_states = layer_input
 
-        if self.location == "selfattn":
-            hidden_states = self._process_self_attention(hidden_states)
-        elif self.location in ["output", "intermediate"]:
-            hidden_states = self._process_scaling(layer_input)
-        
+        if self.mode == "attention":
+            # If hidden_states is None, use layer_input instead
+            if hidden_states is None:
+                hidden_states = layer_input
+           
+            hidden_states = self.dropout(torch.nan_to_num(hidden_states))
+            dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+            # Normalize delta_w by its L2 norm
+            dw_norm = dw.norm(p=2, dim=1, keepdim=True)
+            dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
+            hidden_states = dw / dw_norm
+            
+        # Alternative calculation mode
+        elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
+            # Create scaling vector from lora_C and repeat it across batch size
+            scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
+            # Apply scaling to the weights
+            hidden_states = scaling_vector * (1.0 - self.scalar_scaler)
+                  
+        # No operation mode
+        else:
+            # If hidden_states is None, use layer_input instead
+            if hidden_states is None:
+                hidden_states = layer_input
+
         self.delta_w = hidden_states
+        # Apply gating mechanism if use_gating is enabled
+        if self.use_gating:
+            # Compute gate values using a sigmoid function applied to the layer input
+            gate = torch.sigmoid(self.gate(layer_input))
+            # Average gate values across the second dimension and add a new dimension at the end
+            gate = torch.mean(gate, dim=1).unsqueeze(-1)
+            # Multiply hidden_states by the gate values
+            hidden_states = hidden_states * gate
+        else:
+            gate = None
 
+        # rescale at end of every epoch
         if self._do_rescale():
             self._rescale_weights()
-
-        return hidden_states, None
-
+        # Return the processed hidden_states and gate
+        return hidden_states, gate
+    
 
 class IA3(nn.Module):
     def __init__(
