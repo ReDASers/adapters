@@ -80,10 +80,8 @@ class LoRA(nn.Module):
         # Ensure the composition mode is 'add'
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
         # Validate and set the location key
-        if self._is_valid_location_key(config, location_key) == False:
-            raise ValueError(f"Location key {self.location_key} is not enabled in config or invalid.")
-        # Initialize configuration parameters
-        self.location_key = location_key 
+        self.location_key = self._match_location_key(location_key, config)
+        # LoRA parameters
         self.connections_in = lora_A_shape[-1]
         self.connections_out = lora_B_shape[0]
         self.r = int(config.r)
@@ -97,7 +95,6 @@ class LoRA(nn.Module):
         self.bottleneck_size = int(beta * self.r)  
         self.autoencoder_sigmas = []
         self.A_sigma = None
-        self.B_sigma = 0.0
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
@@ -127,7 +124,7 @@ class LoRA(nn.Module):
                         This may lead to incorrect rescaling and suboptimal performance.")
         return 1
             
-    def _is_valid_location_key(self, config, location_key):
+    def _match_location_key(self, config, location_key):
         """
         Checks if the given location key is valid based on the config.
 
@@ -137,16 +134,18 @@ class LoRA(nn.Module):
         Returns:
             bool: True if the location key is valid, False otherwise.
         """
-        if location_key is None:
-            logging.warning("Location key must be provided, but is currently None.")
-            return False
-        if (config.selfattn_lora == False and location_key == "selfattn_lora") or \
-           (config.intermediate_lora == False and location_key == "intermediate_lora") or \
-           (config.output_lora == False and location_key == "output_lora"):
-            logging.warning(f"LoRIA module has location key {location_key} but is not enabled in config.")
-            return False
-        return True
-
+        match location_key:
+            case None:
+                raise ValueError("Location key must be provided.")
+            case "selfattn_lora" if config.selfattn_lora:
+                return "attention"
+            case "intermediate_lora" if config.intermediate_lora:
+                return "dense_fan_out"
+            case "output_lora" if config.output_lora:
+                return "dense_fan_in"
+            case _:
+                raise ValueError(f"LoRIA module has location key {location_key} but is not enabled in config.")
+                
     def _calculation_mode(self):
         """
         Checks if advanced calculation is possible based on the current configuration.
