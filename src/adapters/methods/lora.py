@@ -225,7 +225,7 @@ class LoRA(nn.Module):
         Initializes the LoRA matrices A and B.
         """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
-        self.A_sigma = self._estimate_attn_sigma(self.lora_A, mode="fan_in")
+        self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
 
@@ -310,12 +310,11 @@ class LoRA(nn.Module):
         """
         Rescale the lora_A and lora_B weights based on the current configuration.
         """
-       
         if self.location in ["output", "intermediate"] and self.batches_per_epoch >= 1:
-            self.lora_C.copy_(self.rescale(self.lora_C, sigma=self.sigma, dtype=torch.float32))
+            self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
         elif self.location == "selfattn":
-            self.lora_A.copy_(self.rescale(self.lora_A, sigma=self.A_sigma))
-            self.lora_B.copy_(self.rescale(self.lora_B, sigma=self.B_sigma))
+            self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
+            self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
             self._rescale_autoencoder_weights()
             
     def _rescale_autoencoder_weights(self):
@@ -324,7 +323,7 @@ class LoRA(nn.Module):
         """
         for layer, sigma in zip(self.f, self.autoencoder_sigmas):
             if isinstance(layer, nn.Linear):
-                layer.weight.copy_(self.rescale(layer.weight.data, sigma=sigma))
+                layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
          
@@ -337,8 +336,7 @@ class LoRA(nn.Module):
         # calculate z-scores
         z = (w - u) / (stddev + 1e-12)
         # rescale to original range
-        rw = z * sigma + u
-        return rw.detach().clone()
+        return z * sigma + u
     
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
