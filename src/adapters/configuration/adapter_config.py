@@ -457,6 +457,9 @@ class LoRAConfig(AdapterConfig):
         non_linearity (Union[str, None], optional): Non-linearity to use. Defaults to "leakyrelu".
     """
 
+    training_set_size: Optional[int]
+
+    batch_size: Optional[int]
     # this implementation does not use alpha, it is the equivalent of setting alpha=r in the original paper
     alpha: int = 1
     # beta is usually in range r * [0.5, 1.0, 1.5, 2.0]
@@ -493,10 +496,6 @@ class LoRAConfig(AdapterConfig):
     
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu" 
-
-    training_set_size: int
-
-    batch_size: int
 
 
 
