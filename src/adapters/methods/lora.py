@@ -102,7 +102,8 @@ class LoRA(nn.Module):
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
         self.non_linearity = config.non_linearity 
-        self.sigma = None
+        self.sigma = "loria"
+        self.eps = 1e-9
         self._delta_w = None  # Placeholder for delta weights
 
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
@@ -189,10 +190,32 @@ class LoRA(nn.Module):
                 return 5.1e-4
             case "linear":
                 return 1.0
-            case "relu":
+            case _:
                 return 0.0
-            case _: # for slope of sqrt(5), gain of leaky_relu is 1/sqrt(3) which is Euler's constant
-                return math.sqrt(5)
+
+    def _calculate_gain(self, nonlinearity: str):
+        match nonlinearity:
+            case "leaky_relu" | "leakyrelu" | "prelu":
+                return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
+            case "linear" | "snselu"  | "sigmoid":
+                return 1.0
+            case "tanh":
+                return nn.init.calculate_gain("tanh")
+            case "selu":
+                return nn.init.calculate_gain("selu")
+            case "mish":
+                return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
+            case "gelu":
+                return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
+            case "relu":
+                return nn.init.calculate_gain("relu")
+            case "relu6" | "elu":
+                return math.sqrt(2.0)
+            case _:
+                return nn.init.calculate_gain("leaky_relu", math.sqrt(5))
+            
+    def _calculate_std(self, gain, fan):
+        return gain / math.sqrt(float(fan))
             
     def _setup_gating_maybe(self, gating_heads: int):
         """
@@ -204,7 +227,7 @@ class LoRA(nn.Module):
         if self.use_gating:
             self.gate = nn.Linear(self.connections_in, gating_heads, dtype=torch.float32)
             fan = nn.init._calculate_correct_fan(self.gate.weight, mode="fan_in")
-            gain = nn.init.calculate_gain("sigmoid")
+            gain = self._calculate_gain("sigmoid")
             std = self._calculate_std(gain, fan)
             nn.init.normal_(self.gate.weight, std=std)
 
@@ -213,27 +236,17 @@ class LoRA(nn.Module):
         Sets up the basic calculation mode by initializing scaling parameters.
         """
         self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
-        self.scalar_scaler = nn.Parameter(torch.tensor(1e-9, dtype=torch.float32))
+        self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
         self.sigma = self._estimate_scaling_sigma()
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
 
     def _estimate_scaling_sigma(self):
         return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
     
-    def _calculate_std(self, gain, fan):
-        """
-         # For He/Kaiming initialization, standard deviation is std=gain/sqrt(fan_in).
-         # It causes training to collapse in symmetric networks for some tasks (sts-b).
-         # Xavier/Glorot defines std=gain/sqrt(fan_in + fan_out) which is stable but
-         # not as performant as He for most tasks. We use a compromise between the two.
-         # This works because Xavier is a special case of He when fan_in == fan_out.
-        """
-        return gain * math.sqrt(2.0 / float(fan)) 
-    
     def _estimate_attn_sigma(self, tensor: torch.Tensor, mode: Literal["fan_in", "fan_out"] = "fan_in"):
         fan = nn.init._calculate_correct_fan(tensor, mode=mode)
         gain = nn.init.calculate_gain("leaky_relu", param=math.sqrt(5))
-        sigma = self._calculate_std(gain, fan)
+        sigma = gain * math.sqrt(2.0 / float(fan))
         return sigma
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
@@ -266,7 +279,7 @@ class LoRA(nn.Module):
         """
         Initializes the LoRA matrices A and B.
         """
-        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5)) # will produce gain of 1/sqrt(3) for leaky_relu
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
@@ -396,8 +409,7 @@ class LoRA(nn.Module):
             scaling = self.scaling
 
         match self.mode:
-            case "attention": 
-                # rescale delta_w on every batch update in part because we never rescale self.lora_B
+            case "attention":
                 return weights + (self.rescale(added, self.sigma) * scaling)
             case "dense_fan_in" | "dense_fan_out": 
                 return weights * (added * scaling)
@@ -470,7 +482,7 @@ class LoRA(nn.Module):
         else:
             gate = None
 
-        # rescale at end of every epoch
+ 
         if self._do_rescale():
             self._rescale_weights()
         # Return the processed hidden_states and gate
