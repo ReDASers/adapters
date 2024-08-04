@@ -494,9 +494,9 @@ class LoRAConfig(AdapterConfig):
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu" 
 
-    training_set_size: Optional[int] = 100
+    training_set_size: int
 
-    batch_size: Optional[int] = 32
+    batch_size: int
 
 
 
