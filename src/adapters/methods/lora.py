@@ -80,7 +80,9 @@ class LoRA(nn.Module):
         # Ensure the composition mode is 'add'
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
         # Validate and set the location key
-        self.location = self._validate_location(location_key, config)
+        if location_key is None:
+            raise ValueError("LoRA module requires a location key.")
+        self.location = self._validate_location(location_key.replace("_lora", ""), config)
         # Ensure gating is not enabled
         if config.gating:
             raise ValueError("LoRA module does not support gating.")
