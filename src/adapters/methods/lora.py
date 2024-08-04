@@ -115,16 +115,16 @@ class LoRA(nn.Module):
         self.n_batches = 0 # have not trained yet   
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
-        if batch_size is None or batch_size < 1:
-            logging.warn("Batch size is not provided. Cannot calculate batches per epoch.")
-            return 1
-        if training_set_size is None or training_set_size < 1:
-            logging.warn("Training set size is not provided. Cannot calculate batches per epoch.")
-            return 1
-        if batch_size > training_set_size: 
-            logging.warn("Batch size is larger than training set size. Cannot calculate batches per epoch.")
-            return 1
-        return training_set_size // batch_size
+        if batch_size is not None and training_set_size is not None:
+            batches_per_epoch = training_set_size // batch_size
+            if batches_per_epoch < 1:
+                logging.warning("Turning off rescaling...")
+            return batches_per_epoch
+        
+        logging.warning("Batch size or training set size is None. \
+                        Cannot calculate batches per epoch. Setting to 1. \
+                        This may lead to incorrect rescaling and suboptimal performance.")
+        return 1
             
     def _validate_location(self, location, config) -> str:
         match location:
