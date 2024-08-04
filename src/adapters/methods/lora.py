@@ -61,22 +61,12 @@ class LoRA(nn.Module):
         self,
         lora_A_shape,
         lora_B_shape,
-        config: LoRAConfig,
+        config,
         gating_heads: int = 1,
         location_key: str = None,
     ):
-        """
-        Initializes the LoRA module.
-
-        Args:
-            lora_A_shape (tuple): Shape of the A matrix in LoRA.
-            lora_B_shape (tuple): Shape of the B matrix in LoRA.
-            config (LoRAConfig): Configuration object for LoRA settings.
-            gating_heads (int, optional): Number of gating heads. Defaults to 1.
-            location_key (str, optional): Location key for LoRA. Defaults to None.
-        """
         super().__init__()
-        
+
         # Ensure the composition mode is 'add'
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
         # Ensure gating is not enabled
@@ -152,7 +142,7 @@ class LoRA(nn.Module):
 
     def _get_neg_slope(self, non_linearity: str = "leakyrelu"):
         """
-        Retruns the negative slope for various activation functions.
+        Returns the negative slope for various activation functions.
 
         Returns:
             float: Negative slope value.
@@ -178,7 +168,8 @@ class LoRA(nn.Module):
         self.lora_C = nn.Parameter(torch.ones(self.fan_out, 1, dtype=torch.float32))
         self.scalar_scaler = nn.Parameter(torch.tensor(1e-9, dtype=torch.float32))
         self.sigma = self._estimate_scaling_sigma()
-        nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
+        with torch.no_grad():
+            nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
 
     def _estimate_scaling_sigma(self):
         return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.fan_out))
@@ -224,10 +215,11 @@ class LoRA(nn.Module):
         """
         Initializes the LoRA matrices A and B.
         """
-        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
-        self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
-        nn.init.zeros_(self.lora_B)
-        self.B_sigma = 0.0
+        with torch.no_grad():
+            nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+            self.A_sigma = self._estimate_attn_sigma(self.lora_A, mode="fan_in")
+            nn.init.zeros_(self.lora_B)
+            self.B_sigma = 0.0
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
         """
@@ -238,15 +230,16 @@ class LoRA(nn.Module):
         """
         for i, layer in enumerate(layers):
             if isinstance(layer, nn.Linear):
-                if i < len(layers) / 2:
-                    mode = "fan_in"
-                else:
-                    mode = "fan_out"
-                nn.init.kaiming_uniform_(layer.weight, mode=mode, a=math.sqrt(5))
-                sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
-                self.autoencoder_sigmas.append(sigma)
-                if layer.bias is not None:
-                    nn.init.zeros_(layer.bias)
+                with torch.no_grad():
+                    if i < len(layers) / 2:
+                        mode = "fan_in"
+                    else:
+                        mode = "fan_out"
+                    nn.init.kaiming_uniform_(layer.weight, mode=mode, a=math.sqrt(5))
+                    sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
+                    self.autoencoder_sigmas.append(sigma)
+                    if layer.bias is not None:
+                        nn.init.zeros_(layer.bias)
 
     def _get_autoencoder_architecture(self, arch: str = "NLbLN"):
         """
@@ -310,22 +303,24 @@ class LoRA(nn.Module):
         """
         Rescale the lora_A and lora_B weights based on the current configuration.
         """
-        if self.location in ["output", "intermediate"] and self.batches_per_epoch >= 1:
-            self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
-        elif self.location == "selfattn":
-            self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
-            self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
-            self._rescale_autoencoder_weights()
+        with torch.no_grad():
+            if self.location in ["output", "intermediate"] and self.batches_per_epoch >= 1:
+                self.lora_C.copy_(self.rescale(self.lora_C, sigma=self.sigma, dtype=torch.float32))    
+            elif self.location == "selfattn":
+                self.lora_A.copy_(self.rescale(self.lora_A, sigma=self.A_sigma))
+                self.lora_B.copy_(self.rescale(self.lora_B, sigma=self.B_sigma))
+                self._rescale_autoencoder_weights()
             
     def _rescale_autoencoder_weights(self):
         """
         Rescales the weights of the autoencoder.
         """
-        for layer, sigma in zip(self.f, self.autoencoder_sigmas):
-            if isinstance(layer, nn.Linear):
-                layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
-                if layer.bias is not None:
-                    nn.init.zeros_(layer.bias)
+        with torch.no_grad():
+            for layer, sigma in zip(self.f, self.autoencoder_sigmas):
+                if isinstance(layer, nn.Linear):
+                    layer.weight.copy_(self.rescale(layer.weight, sigma=sigma))
+                    if layer.bias is not None:
+                        nn.init.zeros_(layer.bias)
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
@@ -420,6 +415,7 @@ class LoRA(nn.Module):
             self._rescale_weights()
 
         return hidden_states, None
+
 
 
 class IA3(nn.Module):
