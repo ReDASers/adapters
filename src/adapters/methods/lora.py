@@ -310,22 +310,21 @@ class LoRA(nn.Module):
         """
         Rescale the lora_A and lora_B weights based on the current configuration.
         """
-        with torch.no_grad():
-            if self.location in ["output", "intermediate"] and self.batches_per_epoch >= 1:
-                self.lora_C.copy_(self.rescale(self.lora_C, sigma=self.sigma, dtype=torch.float32))
-            elif self.location == "selfattn":
-                self.lora_A.copy_(self.rescale(self.lora_A, sigma=self.A_sigma))
-                self.lora_B.copy_(self.rescale(self.lora_B, sigma=self.B_sigma))
-                self._rescale_autoencoder_weights()
+       
+        if self.location in ["output", "intermediate"] and self.batches_per_epoch >= 1:
+            self.lora_C.copy_(self.rescale(self.lora_C, sigma=self.sigma, dtype=torch.float32))
+        elif self.location == "selfattn":
+            self.lora_A.copy_(self.rescale(self.lora_A, sigma=self.A_sigma))
+            self.lora_B.copy_(self.rescale(self.lora_B, sigma=self.B_sigma)
+            self._rescale_autoencoder_weights()
             
     def _rescale_autoencoder_weights(self):
         """
         Rescales the weights of the autoencoder.
         """
-        
         for layer, sigma in zip(self.f, self.autoencoder_sigmas):
             if isinstance(layer, nn.Linear):
-                layer.weight = self.rescale(layer.weight, sigma=sigma)
+                layer.weight.copy_(self.rescale(layer.weight.data, sigma=sigma))
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
          
@@ -338,7 +337,8 @@ class LoRA(nn.Module):
         # calculate z-scores
         z = (w - u) / (stddev + 1e-12)
         # rescale to original range
-        return z * sigma + u
+        rw = z * sigma + u
+        return rw.detach().clone()
     
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
