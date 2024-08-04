@@ -55,26 +55,81 @@ mean_seed: 638.0 std_seed: 784.8885271170677
 ****************************************************************
 SUMMARY ROUNDED RESULT FOR GLUE sst-2, K=100: accuracy: 83.7 std_accuracy: 1.50
 '''
+class TrackingLinear(nn.Linear):
+    def __init__(self, in_features, out_features, num_batches_per_epoch, bias=True):
+        super().__init__(in_features, out_features, bias)
+        
+        # Record initial statistics
+        with torch.no_grad():
+            self.initial_mean = self.weight.mean().item()
+            self.initial_std = self.weight.std().item()
+        
+        # Initialize current mean and std with initial values
+        self.current_mean = self.initial_mean
+        self.current_std = self.initial_std
+        
+        # List to keep track of the evolution of mean and std
+        self.history = [(self.current_mean, self.current_std)]
+        
+        # Track batch count
+        self.batch_count = 0
+        self.num_batches_per_epoch = num_batches_per_epoch
+
+    def forward(self, input):
+        # Before forwarding, update the current mean and std
+        with torch.no_grad():
+            self.current_mean = self.weight.mean().item()
+            self.current_std = self.weight.std().item()
+        
+        # Record the current state
+        self.history.append((self.current_mean, self.current_std))
+        
+        # Increment batch count and rescale if end of epoch
+        self.batch_count += 1
+        if self.batch_count >= self.num_batches_per_epoch:
+            self.rescale_weights()
+            self.batch_count = 0  # Reset for the next epoch
+
+        return super().forward(input)
+    
+    def get_initial_stats(self):
+        """Return the initial mean and std of the weights."""
+        return self.initial_mean, self.initial_std
+    
+    def get_current_stats(self):
+        """Return the current mean and std of the weights."""
+        return self.current_mean, self.current_std
+    
+    def get_history(self):
+        """Return the history of mean and std of the weights."""
+        return self.history
+    
+    def rescale_weights(self):
+        """Rescale the weights to match the initial z-score distribution."""
+        with torch.no_grad():
+            # Compute current z-scores
+            z_scores = (self.weight - self.current_mean) / self.current_std
+            
+            # Rescale to initial distribution
+            self.weight.copy_(z_scores * self.initial_std + self.initial_mean)
+            
+            # Update current mean and std
+            self.current_mean = self.weight.mean().item()
+            self.current_std = self.weight.std().item()
+            
+            # Record the rescaling
+            self.history.append((self.current_mean, self.current_std))
+            print(f"Rescaled Weights: Mean: {self.current_mean}, Std: {self.current_std}")
 
 class LoRA(nn.Module):
     def __init__(
         self,
         lora_A_shape,
         lora_B_shape,
-        config: LoRAConfig,
+        config,
         gating_heads: int = 1,
         location_key: str = None,
     ):
-        """
-        Initializes the LoRA module.
-
-        Args:
-            lora_A_shape (tuple): Shape of the A matrix in LoRA.
-            lora_B_shape (tuple): Shape of the B matrix in LoRA.
-            config (LoRAConfig): Configuration object for LoRA settings.
-            gating_heads (int, optional): Number of gating heads. Defaults to 1.
-            location_key (str, optional): Location key for LoRA. Defaults to None.
-        """
         super().__init__()
         
         # Ensure the composition mode is 'add'
@@ -152,7 +207,7 @@ class LoRA(nn.Module):
 
     def _get_neg_slope(self, non_linearity: str = "leakyrelu"):
         """
-        Retruns the negative slope for various activation functions.
+        Returns the negative slope for various activation functions.
 
         Returns:
             float: Negative slope value.
@@ -225,7 +280,7 @@ class LoRA(nn.Module):
         Initializes the LoRA matrices A and B.
         """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
-        self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
+        self.A_sigma = self._estimate_attn_sigma(self.lora_A, mode="fan_in")
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
 
@@ -237,7 +292,7 @@ class LoRA(nn.Module):
             layers (nn.Sequential): Sequential model containing the layers.
         """
         for i, layer in enumerate(layers):
-            if isinstance(layer, nn.Linear):
+            if isinstance(layer, TrackingLinear):
                 if i < len(layers) / 2:
                     mode = "fan_in"
                 else:
@@ -260,12 +315,12 @@ class LoRA(nn.Module):
         """
         architectures = {
             "NLbLN": [
-                nn.Linear(self.fan_in, self.r),
+                TrackingLinear(self.fan_in, self.r, self.batches_per_epoch),
                 Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.bottleneck_size),
-                nn.Linear(self.bottleneck_size, self.r),
+                TrackingLinear(self.r, self.bottleneck_size, self.batches_per_epoch),
+                TrackingLinear(self.bottleneck_size, self.r, self.batches_per_epoch),
                 Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.fan_in),
+                TrackingLinear(self.r, self.fan_in, self.batches_per_epoch),
             ],
         }
 
@@ -315,18 +370,9 @@ class LoRA(nn.Module):
         elif self.location == "selfattn":
             self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
             self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
-            self._rescale_autoencoder_weights()
+            # Remove this line as TrackingLinear now handles rescaling automatically
+            # self._rescale_autoencoder_weights()
             
-    def _rescale_autoencoder_weights(self):
-        """
-        Rescales the weights of the autoencoder.
-        """
-        for layer, sigma in zip(self.f, self.autoencoder_sigmas):
-            if isinstance(layer, nn.Linear):
-                layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
-                if layer.bias is not None:
-                    nn.init.zeros_(layer.bias)
-         
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
             return weights
