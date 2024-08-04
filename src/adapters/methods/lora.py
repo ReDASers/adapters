@@ -80,8 +80,10 @@ class LoRA(nn.Module):
         # Ensure the composition mode is 'add'
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
         # Validate and set the location key
-        self.location_key = self._match_location_key(location_key, config)
-        # LoRA parameters
+        if self._is_valid_location_key(config, location_key) == False:
+            raise ValueError(f"Location key {self.location_key} is not enabled in config or invalid.")
+        # Initialize configuration parameters
+        self.location_key = location_key 
         self.connections_in = lora_A_shape[-1]
         self.connections_out = lora_B_shape[0]
         self.r = int(config.r)
@@ -95,6 +97,7 @@ class LoRA(nn.Module):
         self.bottleneck_size = int(beta * self.r)  
         self.autoencoder_sigmas = []
         self.A_sigma = None
+        self.B_sigma = 0.0
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
@@ -124,7 +127,7 @@ class LoRA(nn.Module):
                         This may lead to incorrect rescaling and suboptimal performance.")
         return 1
             
-    def _match_location_key(self, location_key, config):
+    def _is_valid_location_key(self, config, location_key):
         """
         Checks if the given location key is valid based on the config.
 
@@ -134,18 +137,16 @@ class LoRA(nn.Module):
         Returns:
             bool: True if the location key is valid, False otherwise.
         """
-        match location_key:
-            case None:
-                raise ValueError("Location key must be provided.")
-            case "selfattn_lora" if config.selfattn_lora:
-                return "attention"
-            case "intermediate_lora" if config.intermediate_lora:
-                return "dense_fan_out"
-            case "output_lora" if config.output_lora:
-                return "dense_fan_in"
-            case _:
-                raise ValueError(f"LoRIA module has location key {location_key} but is not enabled in config.")
-                
+        if location_key is None:
+            logging.warning("Location key must be provided, but is currently None.")
+            return False
+        if (config.selfattn_lora == False and location_key == "selfattn_lora") or \
+           (config.intermediate_lora == False and location_key == "intermediate_lora") or \
+           (config.output_lora == False and location_key == "output_lora"):
+            logging.warning(f"LoRIA module has location key {location_key} but is not enabled in config.")
+            return False
+        return True
+
     def _calculation_mode(self):
         """
         Checks if advanced calculation is possible based on the current configuration.
@@ -186,12 +187,12 @@ class LoRA(nn.Module):
             case "mish":
                 return 3e-4
             case "gelu":
-                return 5.1e-4
+                return 1.7e-4
             case "linear":
                 return 1.0
             case "relu":
                 return 0.0
-            case _: # for slope of sqrt(5), gain of leaky_relu is 1/sqrt(3) which is Euler's constant
+            case _:
                 return math.sqrt(5)
             
     def _setup_gating_maybe(self, gating_heads: int):
@@ -228,12 +229,12 @@ class LoRA(nn.Module):
          # not as performant as He for most tasks. We use a compromise between the two.
          # This works because Xavier is a special case of He when fan_in == fan_out.
         """
-        return gain * math.sqrt(2.0 / float(fan)) 
+        return gain * math.sqrt(2.0 / float(fan))
     
     def _estimate_attn_sigma(self, tensor: torch.Tensor, mode: Literal["fan_in", "fan_out"] = "fan_in"):
         fan = nn.init._calculate_correct_fan(tensor, mode=mode)
         gain = nn.init.calculate_gain("leaky_relu", param=math.sqrt(5))
-        sigma = self._calculate_std(gain, fan)
+        sigma = self._calculate_std(gain, fan)# 
         return sigma
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
@@ -266,7 +267,7 @@ class LoRA(nn.Module):
         """
         Initializes the LoRA matrices A and B.
         """
-        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5)) # will produce gain of 1/sqrt(3) for leaky_relu
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
@@ -396,8 +397,7 @@ class LoRA(nn.Module):
             scaling = self.scaling
 
         match self.mode:
-            case "attention": 
-                # rescale delta_w on every batch update in part because we never rescale self.lora_B
+            case "attention":
                 return weights + (self.rescale(added, self.sigma) * scaling)
             case "dense_fan_in" | "dense_fan_out": 
                 return weights * (added * scaling)
@@ -470,7 +470,7 @@ class LoRA(nn.Module):
         else:
             gate = None
 
-        # rescale at end of every epoch
+ 
         if self._do_rescale():
             self._rescale_weights()
         # Return the processed hidden_states and gate
