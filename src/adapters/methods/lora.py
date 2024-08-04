@@ -124,7 +124,7 @@ class LoRA(nn.Module):
                         This may lead to incorrect rescaling and suboptimal performance.")
         return 1
             
-    def _match_location_key(self, config, location_key):
+    def _match_location_key(self, location_key, config):
         """
         Checks if the given location key is valid based on the config.
 
