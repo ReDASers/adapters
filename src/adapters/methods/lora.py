@@ -62,7 +62,7 @@ class LoRA(nn.Module):
         lora_A_shape,
         lora_B_shape,
         config: LoRAConfig,
-        gating_heads: int = 1,
+        gating_heads: int = 0,
         location_key: str = None,
     ):
         """
@@ -81,6 +81,11 @@ class LoRA(nn.Module):
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
         # Validate and set the location key
         self.location = self._validate_location(location_key, config)
+        # Ensure gating is not enabled
+        if config.gating:
+            raise ValueError("LoRA module does not support gating.")
+        self.gating = 0
+        self.gating_heads = gating_heads
         self.connections_in = lora_A_shape[-1]
         self.connections_out = lora_B_shape[0]
         self.r = int(config.r)
@@ -96,7 +101,7 @@ class LoRA(nn.Module):
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.non_linearity = config.non_linearity
-         
+
         self.sigma = None
         self.A_sigma = None
         self.B_sigma = 0.0

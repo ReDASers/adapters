@@ -465,7 +465,8 @@ class LoRAConfig(AdapterConfig):
     # Default architecture type for the LoRA configuration
     architecture: Optional[str] = "lora"
 
-    # autoencoder: Literal["NLbLN", "NLbNLN"] = "NLbLN"
+    # we will not use gating
+    use_gathing: bool = False
     
     # Flag to determine if LoRA should be applied to self-attention weights
     selfattn_lora: bool = True
