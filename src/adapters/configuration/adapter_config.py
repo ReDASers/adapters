@@ -499,8 +499,6 @@ class LoRAConfig(AdapterConfig):
     batch_size: Optional[int] = None
 
 
-
-
 @dataclass(eq=False)
 class IA3Config(LoRAConfig):
     """
