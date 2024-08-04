@@ -62,7 +62,7 @@ class LoRA(nn.Module):
         lora_A_shape,
         lora_B_shape,
         config: LoRAConfig,
-        gating_heads: int = 0,
+        gating_heads: int = 1,
         location_key: str = None,
     ):
         """
@@ -80,9 +80,9 @@ class LoRA(nn.Module):
         # Ensure the composition mode is 'add'
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
         # Ensure gating is not enabled
-        if config.gating:
+        if config.use_gating == True:
             raise ValueError("LoRA module does not support gating.")
-        self.gating = 0
+        self.use_gating = False
         self.gating_heads = gating_heads
         self.fan_in = lora_A_shape[-1]
         self.fan_out = lora_B_shape[0]
