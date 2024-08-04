@@ -194,25 +194,6 @@ class LoRA(nn.Module):
                 return 0.0
             case _:
                 return math.sqrt(5)
-
-    def _calculate_gain(self, nonlinearity: str):
-        match nonlinearity:
-            case "leaky_relu" | "leakyrelu" | "prelu":
-                return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
-            case "linear" | "snselu"  | "sigmoid":
-                return 1.0
-            case "tanh":
-                return nn.init.calculate_gain("tanh")
-            case "selu":
-                return nn.init.calculate_gain("selu")
-            case "mish":
-                return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
-            case "gelu":
-                return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
-            case "relu" | "relu6" | "elu":
-                return nn.init.calculate_gain("relu")
-            case _:
-                return nn.init.calculate_gain("leaky_relu", math.sqrt(5))
             
     def _setup_gating_maybe(self, gating_heads: int):
         """
@@ -241,12 +222,19 @@ class LoRA(nn.Module):
         return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
     
     def _calculate_std(self, gain, fan):
-        return gain / math.sqrt(float(fan))
+        """
+         # For He/Kaiming initialization, standard deviation is std=gain/sqrt(fan_in).
+         # It causes training to collapse in symmetric networks for some tasks (sts-b).
+         # Xavier/Glorot defines std=gain/sqrt(fan_in + fan_out) which is stable but
+         # not as performant as He for most tasks. We use a compromise between the two.
+         # This works because Xavier is a special case of He when fan_in == fan_out.
+        """
+        return gain * math.sqrt(2.0 / float(fan)) 
     
     def _estimate_attn_sigma(self, tensor: torch.Tensor, mode: Literal["fan_in", "fan_out"] = "fan_in"):
         fan = nn.init._calculate_correct_fan(tensor, mode=mode)
         gain = nn.init.calculate_gain("leaky_relu", param=math.sqrt(5))
-        sigma = self._calculate_std(gain, fan)# gain * math.sqrt(2.0 / float(fan))
+        sigma = self._calculate_std(gain, fan)
         return sigma
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
