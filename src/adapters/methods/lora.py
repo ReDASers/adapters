@@ -205,8 +205,8 @@ class LoRA(nn.Module):
         """
         self.f = self._get_autoencoder_architecture("NLbLN")
         self._initialize_autoencoder_weights(self.f)
-        self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-        self.sigma = self.A_sigma    
+        # self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
+        self.sigma = self.autoencoder_sigmas[-1]    
 
     def _setup_lora_matrices(self, lora_A_shape, lora_B_shape):
         """
@@ -266,6 +266,8 @@ class LoRA(nn.Module):
                 nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.fan_in),
+                nn.Linear(self.fan_in, self.r),
+                nn.Linear(self.r, self.fan_in),
             ],
         }
 
@@ -313,8 +315,8 @@ class LoRA(nn.Module):
         if self.location in ["output", "intermediate"] and self.batches_per_epoch >= 1:
             self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
         elif self.location == "selfattn":
-            self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
-            self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
+            #self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
+            #self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
             self._rescale_autoencoder_weights()
             
     def _rescale_autoencoder_weights(self):
@@ -381,8 +383,8 @@ class LoRA(nn.Module):
             
     def _process_self_attention(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Process hidden states for self-attention mode."""
-        hidden_states = self.dropout(torch.nan_to_num(hidden_states))
-        dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+        x = self.dropout(torch.nan_to_num(hidden_states))
+        dw = self.f(x)# @ torch.t(self.lora_A) @ torch.t(self.lora_B)
         
         # Normalize delta_w by its L2 norm
         dw_norm = dw.norm(p=2, dim=1, keepdim=True)
