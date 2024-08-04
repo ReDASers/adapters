@@ -190,8 +190,10 @@ class LoRA(nn.Module):
                 return 5.1e-4
             case "linear":
                 return 1.0
-            case _:
+            case "relu":
                 return 0.0
+            case _:
+                return math.sqrt(5)
 
     def _calculate_gain(self, nonlinearity: str):
         match nonlinearity:
@@ -207,15 +209,10 @@ class LoRA(nn.Module):
                 return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
             case "gelu":
                 return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
-            case "relu":
+            case "relu" | "relu6" | "elu":
                 return nn.init.calculate_gain("relu")
-            case "relu6" | "elu":
-                return math.sqrt(2.0)
             case _:
                 return nn.init.calculate_gain("leaky_relu", math.sqrt(5))
-            
-    def _calculate_std(self, gain, fan):
-        return gain / math.sqrt(float(fan))
             
     def _setup_gating_maybe(self, gating_heads: int):
         """
@@ -227,7 +224,7 @@ class LoRA(nn.Module):
         if self.use_gating:
             self.gate = nn.Linear(self.connections_in, gating_heads, dtype=torch.float32)
             fan = nn.init._calculate_correct_fan(self.gate.weight, mode="fan_in")
-            gain = self._calculate_gain("sigmoid")
+            gain = nn.init.calculate_gain("sigmoid")
             std = self._calculate_std(gain, fan)
             nn.init.normal_(self.gate.weight, std=std)
 
@@ -243,10 +240,13 @@ class LoRA(nn.Module):
     def _estimate_scaling_sigma(self):
         return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
     
+    def _calculate_std(self, gain, fan):
+        return gain / math.sqrt(float(fan))
+    
     def _estimate_attn_sigma(self, tensor: torch.Tensor, mode: Literal["fan_in", "fan_out"] = "fan_in"):
         fan = nn.init._calculate_correct_fan(tensor, mode=mode)
         gain = nn.init.calculate_gain("leaky_relu", param=math.sqrt(5))
-        sigma = gain * math.sqrt(2.0 / float(fan))
+        sigma = self._calculate_std(gain, fan)# gain * math.sqrt(2.0 / float(fan))
         return sigma
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
