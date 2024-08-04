@@ -315,7 +315,7 @@ class LoRA(nn.Module):
             self.lora_C.copy_(self.rescale(self.lora_C, sigma=self.sigma, dtype=torch.float32))
         elif self.location == "selfattn":
             self.lora_A.copy_(self.rescale(self.lora_A, sigma=self.A_sigma))
-            self.lora_B.copy_(self.rescale(self.lora_B, sigma=self.B_sigma)
+            self.lora_B.copy_(self.rescale(self.lora_B, sigma=self.B_sigma))
             self._rescale_autoencoder_weights()
             
     def _rescale_autoencoder_weights(self):
