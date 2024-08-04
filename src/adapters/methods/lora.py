@@ -79,18 +79,20 @@ class LoRA(nn.Module):
         
         # Ensure the composition mode is 'add'
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
-        # Validate and set the location key
-        if location_key is None:
-            raise ValueError("LoRA module requires a location key.")
-        self.location = self._validate_location(location_key.replace("_lora", ""), config)
         # Ensure gating is not enabled
         if config.gating:
             raise ValueError("LoRA module does not support gating.")
         self.gating = 0
         self.gating_heads = gating_heads
-        self.connections_in = lora_A_shape[-1]
-        self.connections_out = lora_B_shape[0]
+        self.fan_in = lora_A_shape[-1]
+        self.fan_out = lora_B_shape[0]
         self.r = int(config.r)
+
+        # Validate and set the location key
+        if location_key is None:
+            raise ValueError("LoRA module requires a location key.")
+        self.location = self._validate_location(location_key.replace("_lora", ""), config)
+        
         
         assert self.r == lora_A_shape[0] == lora_B_shape[1], "r must match the first dimension of A and the second dimension of B."
         # The following is for flexibility; normally, alpha is normally 1 for loria
@@ -130,13 +132,13 @@ class LoRA(nn.Module):
             
     def _validate_location(self, location, config) -> str:
         match location:
-            case "selfattn" if config.selfattn_lora and self.connections_in == self.connections_out:
+            case "selfattn" if config.selfattn_lora and self.fan_in == self.fan_out:
                 return location
                 
-            case "intermediate" if config.intermediate_lora and self.connections_in < self.connections_out:
+            case "intermediate" if config.intermediate_lora and self.fan_in < self.fan_out:
                 return location
                 
-            case "output" if config.output_lora and self.connections_in > self.connections_out:
+            case "output" if config.output_lora and self.fan_in > self.fan_out:
                 return location
                 
             case _:
@@ -177,13 +179,13 @@ class LoRA(nn.Module):
         """
         Sets up the basic calculation mode by initializing scaling parameters.
         """
-        self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
+        self.lora_C = nn.Parameter(torch.ones(self.fan_out, 1, dtype=torch.float32))
         self.scalar_scaler = nn.Parameter(torch.tensor(1e-9, dtype=torch.float32))
         self.sigma = self._estimate_scaling_sigma()
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
 
     def _estimate_scaling_sigma(self):
-        return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
+        return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.fan_out))
     
     def _calculate_std(self, gain, fan):
         """
@@ -267,12 +269,12 @@ class LoRA(nn.Module):
         """
         architectures = {
             "NLbLN": [
-                nn.Linear(self.connections_in, self.r),
+                nn.Linear(self.fan_in, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
                 nn.Linear(self.r, self.bottleneck_size),
                 nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.connections_in),
+                nn.Linear(self.r, self.fan_in),
             ],
         }
 
