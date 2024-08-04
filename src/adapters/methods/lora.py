@@ -55,6 +55,27 @@ mean_seed: 638.0 std_seed: 784.8885271170677
 ****************************************************************
 SUMMARY ROUNDED RESULT FOR GLUE sst-2, K=100: accuracy: 83.7 std_accuracy: 1.50
 '''
+import torch
+import torch.nn as nn
+import math
+from typing import Optional, Literal
+
+class Activation_Function_Class(nn.Module):
+    def __init__(self, activation_function: str):
+        super().__init__()
+        self.activation_function = activation_function.lower()
+
+    def forward(self, x):
+        if self.activation_function == "relu":
+            return nn.functional.relu(x)
+        elif self.activation_function == "leakyrelu":
+            return nn.functional.leaky_relu(x)
+        elif self.activation_function == "gelu":
+            return nn.functional.gelu(x)
+        elif self.activation_function == "linear":
+            return x
+        else:
+            raise ValueError(f"Unknown activation function: {self.activation_function}")
 
 class LoRA(nn.Module):
     def __init__(
@@ -325,13 +346,14 @@ class LoRA(nn.Module):
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
             return weights
-        w = torch.nan_to_num(weights)
-        u = torch.mean(w, dtype=dtype)
-        stddev = torch.std(w)
-        # calculate z-scores
-        z = (w - u) / (stddev + 1e-12)
-        # rescale to original range
-        return z * sigma + u
+        with torch.no_grad():
+            w = torch.nan_to_num(weights)
+            u = torch.mean(w, dtype=dtype)
+            stddev = torch.std(w)
+            # calculate z-scores
+            z = (w - u) / (stddev + 1e-12)
+            # rescale to original range
+            return z * sigma + u
     
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
@@ -377,9 +399,13 @@ class LoRA(nn.Module):
     def _process_self_attention(self, hidden_states: torch.Tensor) -> torch.Tensor:
         """Process hidden states for self-attention mode."""
         hidden_states = self.dropout(torch.nan_to_num(hidden_states))
-        dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+        f_out = self.f(hidden_states)
         
-        # Normalize delta_w by its L2 norm
+        # Perform matrix multiplication carefully to avoid in-place operations
+        dw = torch.matmul(f_out, self.lora_A.t())
+        dw = torch.matmul(dw, self.lora_B.t())
+
+        # Normalize delta_w by its L2 norm without in-place operation
         dw_norm = dw.norm(p=2, dim=1, keepdim=True)
         dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
         return dw / dw_norm
@@ -415,6 +441,7 @@ class LoRA(nn.Module):
             self._rescale_weights()
 
         return hidden_states, None
+
 
 
 
