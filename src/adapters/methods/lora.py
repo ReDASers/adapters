@@ -73,7 +73,7 @@ class TrackingLinear(nn.Linear):
         
         # Track batch count
         self.batch_count = 0
-        self.num_batches_per_epoch = num_batches_per_epoch
+        self.batches_per_epoch = num_batches_per_epoch
 
     def forward(self, input):
         # Before forwarding, update the current mean and std
@@ -86,7 +86,7 @@ class TrackingLinear(nn.Linear):
         
         # Increment batch count and rescale if end of epoch
         self.batch_count += 1
-        if self.batch_count >= self.num_batches_per_epoch:
+        if self.batch_count >= self.batches_per_epoch:
             self.rescale_weights()
             self.batch_count = 0  # Reset for the next epoch
 
