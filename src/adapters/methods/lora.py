@@ -102,7 +102,7 @@ class LoRA(nn.Module):
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
         self.non_linearity = config.non_linearity 
-        self.sigma = config.sigma
+        self.sigma = None
         self.eps = config.eps
         self._delta_w = None  # Placeholder for delta weights
 
