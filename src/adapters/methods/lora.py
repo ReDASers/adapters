@@ -192,7 +192,7 @@ class LoRA(nn.Module):
                 return 1.0
             case "relu":
                 return 0.0
-            case _:
+            case _: # for slope of sqrt(5), gain of leaky_relu is 1/sqrt(3) which is Euler's constant
                 return math.sqrt(5)
             
     def _setup_gating_maybe(self, gating_heads: int):
@@ -267,7 +267,7 @@ class LoRA(nn.Module):
         """
         Initializes the LoRA matrices A and B.
         """
-        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
+        nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5)) # will produce gain of 1/sqrt(3) for leaky_relu
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
@@ -397,7 +397,8 @@ class LoRA(nn.Module):
             scaling = self.scaling
 
         match self.mode:
-            case "attention":
+            case "attention": 
+                # rescale delta_w on every batch update in part because we never rescale self.lora_B
                 return weights + (self.rescale(added, self.sigma) * scaling)
             case "dense_fan_in" | "dense_fan_out": 
                 return weights * (added * scaling)
@@ -470,7 +471,7 @@ class LoRA(nn.Module):
         else:
             gate = None
 
- 
+        # rescale at end of every epoch
         if self._do_rescale():
             self._rescale_weights()
         # Return the processed hidden_states and gate
