@@ -193,7 +193,7 @@ class LoRA(nn.Module):
         # not as performant as He for most tasks. We use a compromise between the two.
         # This works because Xavier is a special case of He when fan_in == fan_out.
         """
-        return gain * math.sqrt(2.0 / float(fan))
+        return gain * math.sqrt(1.0 / float(fan))
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
         """
@@ -236,10 +236,11 @@ class LoRA(nn.Module):
         Args:
             layers (nn.Sequential): Sequential model containing the layers.
         """
-        for i, layer in enumerate(layers):
+        fans = ["fan_in", "fan_out", "fan_in", "fan_out"]
+        for layer in enumerate(layers):
             if isinstance(layer, nn.Linear):
-                if i < len(layers) / 2:
-                    mode = "fan_in"
+                if len(fans) > 0:
+                    mode = fans.pop(0)
                 else:
                     mode = "fan_out"
                 nn.init.kaiming_uniform_(layer.weight, mode=mode, a=math.sqrt(5))
