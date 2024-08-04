@@ -310,17 +310,19 @@ class LoRA(nn.Module):
         """
         Rescale the lora_A and lora_B weights based on the current configuration.
         """
-        if self.location in ["output", "intermediate"] and self.batches_per_epoch >= 1:
-            self.lora_C = self.rescale(self.lora_C, sigma=self.sigma, dtype=torch.float32)    
-        elif self.location == "selfattn":
-            self.lora_A = self.rescale(self.lora_A, sigma=self.A_sigma)
-            self.lora_B = self.rescale(self.lora_B, sigma=self.B_sigma)
-            self._rescale_autoencoder_weights()
+        with torch.no_grad():
+            if self.location in ["output", "intermediate"] and self.batches_per_epoch >= 1:
+                self.lora_C.copy_(self.rescale(self.lora_C, sigma=self.sigma, dtype=torch.float32))
+            elif self.location == "selfattn":
+                self.lora_A.copy_(self.rescale(self.lora_A, sigma=self.A_sigma))
+                self.lora_B.copy_(self.rescale(self.lora_B, sigma=self.B_sigma))
+                self._rescale_autoencoder_weights()
             
     def _rescale_autoencoder_weights(self):
         """
         Rescales the weights of the autoencoder.
         """
+        
         for layer, sigma in zip(self.f, self.autoencoder_sigmas):
             if isinstance(layer, nn.Linear):
                 layer.weight = self.rescale(layer.weight, sigma=sigma)
