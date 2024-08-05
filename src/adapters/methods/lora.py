@@ -207,10 +207,7 @@ class LoRA(nn.Module):
         self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
         self.sigma = self._estimate_scaling_sigma()
-        # nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
-        nn.init.uniform_(self.lora_C, 
-                         a = 1.0 - math.sqrt(3) * self.sigma, 
-                         b = 1.0 + math.sqrt(3) * self.sigma)
+        nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
 
     def _estimate_scaling_sigma(self):
         return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
@@ -269,7 +266,7 @@ class LoRA(nn.Module):
                     mode = "fan_in"
                 else:
                     mode = "fan_out"
-                nn.init.kaiming_uniform_(layer.weight, mode=mode, a=math.sqrt(5))
+                nn.init.kaiming_normal_(layer.weight, mode=mode, a=math.sqrt(5))
                 sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
                 self.autoencoder_sigmas.append(sigma)
                 if layer.bias is not None:
