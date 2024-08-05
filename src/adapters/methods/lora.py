@@ -323,6 +323,9 @@ class LoRA(nn.Module):
         if self.batches_per_epoch < 1:
             return False
         
+        if not self.training:
+            return False
+        
         self.n_batches += 1
         self.batch_number += 1
         
