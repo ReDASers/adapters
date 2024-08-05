@@ -260,10 +260,10 @@ class LoRA(nn.Module):
         Args:
             layers (nn.Sequential): Sequential model containing the layers.
         """
-        n = 0
+        
         for i, layer in enumerate(layers):
             if isinstance(layer, nn.Linear):
-                if n % 2 == 0:
+                if i < len(layers) / 2:
                     mode = "fan_in"
                 else:
                     mode = "fan_out"
