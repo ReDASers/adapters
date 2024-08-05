@@ -326,9 +326,6 @@ class LoRA(nn.Module):
         if not self.training:
             return False
         
-        if self.n_batches == 0:
-            return True 
-        
         self.n_batches += 1
         self.batch_number += 1
         
