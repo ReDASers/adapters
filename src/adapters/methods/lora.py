@@ -325,21 +325,13 @@ class LoRA(nn.Module):
         if self.batches_per_epoch < 1:
             return False
         
-        self.step += 1
-        self.mirror_n_batches += 1
-
-        if self.mirror_n_batches > self.batches_per_epoch:
-            self.mirror_n_batches = 0
-            print(f"Eval n_batches {self.n_batches} Step: {self.step}, Training Step: {self.training_step}")
         if not self.training:
             return False
         
         
-        self.training_step += 1
         self.n_batches += 1
         
         if self.n_batches > self.batches_per_epoch:
-            print(f"Train n_batches {self.n_batches} Step: {self.step}, Training Step: {self.training_step}")
             self.n_batches = 1
             return True
         return False
@@ -440,8 +432,10 @@ class LoRA(nn.Module):
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
-            
-            hidden_states = self.dropout(torch.nan_to_num(hidden_states))
+            hidden_states = torch.nan_to_num(hidden_states)
+            if self.training:
+                self._rescale_weights()
+                hidden_states = self.dropout(hidden_states)
             dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True)
@@ -452,7 +446,6 @@ class LoRA(nn.Module):
         else:
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
-
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler)
 
         self.delta_w = hidden_states
