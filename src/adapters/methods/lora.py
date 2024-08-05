@@ -421,6 +421,7 @@ class LoRA(nn.Module):
         """
         if self._do_rescale():
             self._rescale_weights()
+            
         if self.mode == "attention":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
