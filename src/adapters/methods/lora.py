@@ -207,7 +207,10 @@ class LoRA(nn.Module):
         self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
         self.sigma = self._estimate_scaling_sigma()
-        nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
+        # nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
+        nn.init.uniform_(self.lora_C, 
+                         a = 1.0 - math.sqrt(3) * self.sigma, 
+                         b = 1.0 + math.sqrt(3) * self.sigma)
 
     def _estimate_scaling_sigma(self):
         return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
@@ -345,18 +348,7 @@ class LoRA(nn.Module):
         if self.n_batches == self.batches_per_epoch:
             return True
         return False
-            
-    def _rescale_weights(self):
-        """
-        Rescale the lora_A and lora_B weights based on the current configuration.
-        """
-        if self.mode in ["dense_fan_in", "dense_fan_out"] and self.batches_per_epoch >= 1:
-            self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
-        elif self.mode == "attention":
-            self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
-            self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
-            self._rescale_autoencoder_weights()
-            
+    
     def _rescale_autoencoder_weights(self):
         """
         Rescales the weights of the autoencoder.
@@ -366,6 +358,22 @@ class LoRA(nn.Module):
                 layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
+            
+    def rescale_weights(self):
+        """
+        Rescale the weights based on the current configuration.
+        """
+        if not self.training:
+            logger.warning("Weight rescaling is only supported during training.")
+            return
+        if self.mode in ["dense_fan_in", "dense_fan_out"] and self.batches_per_epoch >= 1:
+            self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
+        elif self.mode == "attention":
+            self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
+            self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
+            self._rescale_autoencoder_weights()
+            
+    
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
@@ -437,7 +445,7 @@ class LoRA(nn.Module):
         """
         self._increment_training_step_maybe()
         if self._epoch_start():
-            pass
+            self.rescale_weights()
             
 
         if self.mode == "attention":
@@ -469,8 +477,6 @@ class LoRA(nn.Module):
         else:
             gate = None
 
-        if self._epoch_end():
-            self._rescale_weights()
         # Return the processed hidden_states and gate
         return hidden_states, gate
 
