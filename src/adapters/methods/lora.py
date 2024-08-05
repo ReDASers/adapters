@@ -441,7 +441,7 @@ class LoRA(nn.Module):
 
             # Apply probabilistic residual connection
             if self.training:
-                if torch.rand(1).item() < 0.5:
+                if torch.rand(1).item() > 0.1:
                     hidden_states = hidden_states + residual
             else:
                 # Always apply the residual during evaluation
