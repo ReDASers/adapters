@@ -71,7 +71,7 @@ class LoRA(nn.Module):
         self.sigma = "loria"
         self.eps = 1e-9
         self._delta_w = None  # Placeholder for delta weights
-
+        self.batch_number = 0
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
@@ -324,7 +324,8 @@ class LoRA(nn.Module):
             return False
         
         self.n_batches += 1
-
+        self.batch_number += 1
+        print(f"Batch number: {self.batch_number}")
         if self.n_batches > self.batches_per_epoch:
             self.n_batches = 0
             return True
