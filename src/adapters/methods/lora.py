@@ -440,11 +440,13 @@ class LoRA(nn.Module):
             hidden_states = self.rescale(hidden_states, self.sigma)
         # Alternative calculation mode
         else:
+            if self.n_batches > 1:
+                self._rescale_weights()
+
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
 
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler)
-            self._rescale_weights()
 
         self.delta_w = hidden_states
         # Apply gating mechanism if use_gating is enabled
