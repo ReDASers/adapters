@@ -442,8 +442,7 @@ class LoRA(nn.Module):
         else:
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
-            # Apply scaling to the weights
-               # Apply probabilistic residual connection
+
             if self.training and torch.rand(1).item() < 0.1:
                 hidden_states = torch.ones_like(scaling_vector)
             else:
