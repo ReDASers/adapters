@@ -317,7 +317,7 @@ class LoRA(nn.Module):
         if self.training:
             self.n_batches += 1
 
-    def _on_epoch_start(self) -> bool:
+    def _epoch_start(self) -> bool:
         """
         Checks if rescaling is required based on the configuration.
 
@@ -330,12 +330,12 @@ class LoRA(nn.Module):
         if not self.training:
             return False
         
-        if self.n_batches > self.batches_per_epoch * 2:
+        if self.n_batches > self.batches_per_epoch:
             self.n_batches = 1
             return True
         return False
     
-    def _on_epoch_end(self) -> bool:
+    def _epoch_end(self) -> bool:
         if self.batches_per_epoch < 1:
             return False
         
@@ -436,8 +436,9 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
-        if self._on_epoch_start():
-            self._rescale_weights()
+        if self._epoch_start():
+            pass
+            
 
         if self.mode == "attention":
             # If hidden_states is None, use layer_input instead
@@ -468,6 +469,8 @@ class LoRA(nn.Module):
         else:
             gate = None
 
+        if self._epoch_end():
+            self._rescale_weights()
         # Return the processed hidden_states and gate
         return hidden_states, gate
 
