@@ -82,7 +82,8 @@ class LoRA(nn.Module):
         self.n_batches = 0 # have not trained yet   
 
         # List to store variance for each LoRA instance
-        self.variances = []
+        self.variances = {["delta_w"]: [0.0]}
+        
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         if batch_size is not None and training_set_size is not None:
@@ -208,6 +209,7 @@ class LoRA(nn.Module):
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
         self.sigma = self._estimate_scaling_sigma()
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
+        self.variances["lora_C"] = [self.get_variance(self.lora_C)]
 
     def _estimate_scaling_sigma(self):
         return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
@@ -231,6 +233,7 @@ class LoRA(nn.Module):
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
         self.sigma = self.A_sigma
         
+        
 
     def _setup_lora_matrices(self, lora_A_shape, lora_B_shape):
         """
@@ -250,8 +253,10 @@ class LoRA(nn.Module):
         """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
+        self.variances["lora_A"] = [self.get_variance(self.lora_A)]
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
+        self.variances["lora_B"] = [self.get_variance(self.lora_B)]
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
         """
@@ -270,6 +275,7 @@ class LoRA(nn.Module):
                 nn.init.kaiming_uniform_(layer.weight, mode=mode, a=math.sqrt(5))
                 sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
                 self.autoencoder_sigmas.append(sigma)
+                self.variances[f"autoencoder_{i}"] = [self.get_variance(layer.weight)]
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
@@ -371,7 +377,27 @@ class LoRA(nn.Module):
             self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
             self._rescale_autoencoder_weights()
             
-    
+    def record_variances(self) -> None:
+        """
+        Calculates the variance of the given weights.
+
+        Args:
+            weights (torch.Tensor): Weights to calculate the variance for.
+
+        Returns:
+            float: Variance of the weights.
+        """
+        with torch.no_grad():
+            if self.mode == "attention":
+                self.variances["lora_A"].append(self.lora_A.var().item())
+                self.variances["lora_B"].append(self.lora_B.var().item())
+                for i, layer in enumerate(self.f):
+                    if isinstance(layer, nn.Linear):
+                        self.variances[f"autoencoder_{i}"].append(layer.weight.var().item())
+            else:
+                self.variances["lora_C"].append(self.lora_C.var().item())
+        
+        
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
@@ -379,12 +405,7 @@ class LoRA(nn.Module):
         w = torch.nan_to_num(weights)
         u = torch.mean(w, dtype=dtype)
         stddev = torch.std(w)
-        # calculate variance
-        variance = stddev ** 2
-
-        # Store variance in local list
-        self.variances.append(variance.item())
-
+  
         # calculate z-scores
         z = (w - u) / (stddev + 1e-12)
         # rescale to original range
@@ -405,6 +426,8 @@ class LoRA(nn.Module):
         if scaling is None:
             scaling = self.scaling
 
+        with torch.no_grad():
+            self.variances["delta_w"].append(added.var().item())
         match self.mode:
             case "attention":
                 return weights + added * scaling
