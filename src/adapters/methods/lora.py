@@ -71,9 +71,7 @@ class LoRA(nn.Module):
         self.sigma = "loria"
         self.eps = 1e-9
         self._delta_w = None  # Placeholder for delta weights
-        self.step = 0
-        self.training_step = 0
-        self.mirror_n_batches = 0
+        
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
@@ -332,7 +330,7 @@ class LoRA(nn.Module):
         if not self.training:
             return False
         
-        if self.n_batches > self.batches_per_epoch:
+        if self.n_batches > self.batches_per_epoch * 2:
             self.n_batches = 1
             return True
         return False
@@ -470,8 +468,6 @@ class LoRA(nn.Module):
         else:
             gate = None
 
-        if self._on_epoch_end():
-            self._rescale_weights()
         # Return the processed hidden_states and gate
         return hidden_states, gate
 
