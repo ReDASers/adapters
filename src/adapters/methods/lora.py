@@ -31,6 +31,7 @@ except ImportError:
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
 
+
 class LoRA(nn.Module):
     def __init__(
         self,
@@ -351,22 +352,21 @@ class LoRA(nn.Module):
                     nn.init.zeros_(layer.bias)
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
-        with torch.no_grad():
-            if sigma == 0:
-                return weights
-            w = torch.nan_to_num(weights)
-            u = torch.mean(w, dtype=dtype)
-            stddev = torch.std(w)
-            # calculate variance
-            variance = stddev ** 2
+        if sigma == 0:
+            return weights
+        w = torch.nan_to_num(weights)
+        u = torch.mean(w, dtype=dtype)
+        stddev = torch.std(w)
+        # calculate variance
+        variance = stddev ** 2
 
-            # Store variance in local list
-            self.variances.append(variance.item())
+        # Store variance in local list
+        self.variances.append(variance.item())
 
-            # calculate z-scores
-            z = (w - u) / (stddev + 1e-12)
-            # rescale to original range
-            return z * sigma + u
+        # calculate z-scores
+        z = (w - u) / (stddev + 1e-12)
+        # rescale to original range
+        return z * sigma + u
     
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
@@ -385,7 +385,7 @@ class LoRA(nn.Module):
 
         match self.mode:
             case "attention":
-                return weights + (self.rescale(added, self.sigma) * scaling)
+                return weights + added * scaling
             case "dense_fan_in" | "dense_fan_out": 
                 return weights * (added * scaling)
             case _:
@@ -421,7 +421,6 @@ class LoRA(nn.Module):
         """
         if self._do_rescale():
             self._rescale_weights()
-
         if self.mode == "attention":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
@@ -433,7 +432,7 @@ class LoRA(nn.Module):
             dw_norm = dw.norm(p=2, dim=1, keepdim=True)
             dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
             hidden_states = dw / dw_norm
-            
+            hidden_states = self.rescale(hidden_states, self.sigma)
         # Alternative calculation mode
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
@@ -458,6 +457,7 @@ class LoRA(nn.Module):
             hidden_states = hidden_states * gate
         else:
             gate = None
+
 
         # Return the processed hidden_states and gate
         return hidden_states, gate
