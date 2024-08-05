@@ -437,7 +437,7 @@ class LoRA(nn.Module):
             dw_norm = dw.norm(p=2, dim=1, keepdim=True)
             dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
             hidden_states = dw / dw_norm
-            hidden_states = self.rescale(hidden_states, self.sigma)
+            # hidden_states = self.rescale(hidden_states, self.sigma)
         # Alternative calculation mode
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
