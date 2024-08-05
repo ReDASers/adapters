@@ -326,7 +326,7 @@ class LoRA(nn.Module):
         self.n_batches += 1
 
         if self.n_batches > self.batches_per_epoch:
-            self.n_batches = 0
+            self.n_batches = 1
             return True
         return False
             
@@ -421,7 +421,7 @@ class LoRA(nn.Module):
         """
         if self._do_rescale():
             self._rescale_weights()
-            
+
         if self.mode == "attention":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
