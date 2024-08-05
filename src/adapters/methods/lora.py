@@ -330,10 +330,7 @@ class LoRA(nn.Module):
         self.batch_number += 1
         
         if self.n_batches > self.batches_per_epoch:
-            print(f"Batch number: {self.batch_number},\
-                   epoch: {self.batch_number//self.batches_per_epoch + 1},\
-                      batches_per_epoch: {self.batches_per_epoch}")
-            self.n_batches = 0
+            self.n_batches = 1
             return True
         return False
             
