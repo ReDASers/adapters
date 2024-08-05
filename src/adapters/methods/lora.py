@@ -437,21 +437,23 @@ class LoRA(nn.Module):
             dw_norm = dw.norm(p=2, dim=1, keepdim=True)
             dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
             hidden_states = dw / dw_norm
-            
+            hidden_states = self.rescale(hidden_states, self.sigma)
         # Alternative calculation mode
         elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             # Apply scaling to the weights
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler)
-                  
+            if self.mode == "dense_fan_out":
+                hidden_states = self.rescale(hidden_states, self.sigma)
+            
         # No operation mode
         else:
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
-                
-        hidden_states = self.rescale(hidden_states, self.sigma)
+
+        
         self.delta_w = hidden_states
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
