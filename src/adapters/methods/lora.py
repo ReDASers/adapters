@@ -71,7 +71,9 @@ class LoRA(nn.Module):
         self.sigma = "loria"
         self.eps = 1e-9
         self._delta_w = None  # Placeholder for delta weights
-        self.batch_number = 0
+        self.step = 0
+        self.training_step = 0
+        self.mirror_n_batches = 0
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
@@ -323,13 +325,21 @@ class LoRA(nn.Module):
         if self.batches_per_epoch < 1:
             return False
         
+        self.step += 1
+        self.mirror_n_batches += 1
+
+        if self.mirror_n_batches > self.batches_per_epoch:
+            self.mirror_n_batches = 0
+            print(f"Eval n_batches {self.n_batches} Step: {self.step}, Training Step: {self.training_step}")
         if not self.training:
             return False
         
+        
+        self.training_step += 1
         self.n_batches += 1
-        self.batch_number += 1
         
         if self.n_batches > self.batches_per_epoch:
+            print(f"Train n_batches {self.n_batches} Step: {self.step}, Training Step: {self.training_step}")
             self.n_batches = 1
             return True
         return False
@@ -440,9 +450,6 @@ class LoRA(nn.Module):
             hidden_states = self.rescale(hidden_states, self.sigma)
         # Alternative calculation mode
         else:
-            if self.n_batches > 1:
-                self._rescale_weights()
-
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
 
