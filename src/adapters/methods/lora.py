@@ -430,8 +430,9 @@ class LoRA(nn.Module):
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
-           
-            hidden_states = self.dropout(torch.nan_to_num(hidden_states))
+            
+            hidden_states = self.rescale(torch.nan_to_num(hidden_states), self.sigma)
+            hidden_states = self.dropout(hidden_states)
             dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True)
@@ -444,8 +445,6 @@ class LoRA(nn.Module):
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             # Apply scaling to the weights
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler)
-            if self.mode == "dense_fan_in":
-                hidden_states = self.rescale(hidden_states, self.sigma)
             
         # No operation mode
         else:
