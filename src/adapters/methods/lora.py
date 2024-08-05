@@ -444,7 +444,7 @@ class LoRA(nn.Module):
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             # Apply scaling to the weights
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler)
-            if self.mode == "dense_fan_out":
+            if self.mode == "dense_fan_in":
                 hidden_states = self.rescale(hidden_states, self.sigma)
             
         # No operation mode
