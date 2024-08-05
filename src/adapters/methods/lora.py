@@ -315,7 +315,11 @@ class LoRA(nn.Module):
         """Deletes the delta_w value."""
         del self._delta_w
 
-    def _do_rescale(self) -> bool:
+    def _increment_training_step_maybe(self):
+        if self.training:
+            self.n_batches += 1
+
+    def _on_epoch_start(self) -> bool:
         """
         Checks if rescaling is required based on the configuration.
 
@@ -328,11 +332,19 @@ class LoRA(nn.Module):
         if not self.training:
             return False
         
-        
-        self.n_batches += 1
-        
         if self.n_batches > self.batches_per_epoch:
             self.n_batches = 1
+            return True
+        return False
+    
+    def _on_epoch_end(self) -> bool:
+        if self.batches_per_epoch < 1:
+            return False
+        
+        if not self.training:
+            return False
+        
+        if self.n_batches == self.batches_per_epoch:
             return True
         return False
             
@@ -425,7 +437,8 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-        if self._do_rescale():
+        self._increment_training_step_maybe()
+        if self._on_epoch_start():
             self._rescale_weights()
 
         if self.mode == "attention":
@@ -457,7 +470,8 @@ class LoRA(nn.Module):
         else:
             gate = None
 
-
+        if self._on_epoch_end():
+            self._rescale_weights()
         # Return the processed hidden_states and gate
         return hidden_states, gate
 
