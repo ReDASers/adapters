@@ -71,7 +71,8 @@ class LoRA(nn.Module):
         self.sigma = "loria"
         self.eps = 1e-9
         self._delta_w = None  # Placeholder for delta weights
-        
+        # List to store variance for each LoRA instance
+        self.variances = {["delta_w"]: [0.0]}
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
@@ -81,8 +82,7 @@ class LoRA(nn.Module):
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         self.n_batches = 0 # have not trained yet   
 
-        # List to store variance for each LoRA instance
-        self.variances = {["delta_w"]: [0.0]}
+       
         
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
