@@ -209,7 +209,7 @@ class LoRA(nn.Module):
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
         self.sigma = self._estimate_scaling_sigma()
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
-        self.variances["lora_C"] = [self.get_variance(self.lora_C)]
+        self.variances["lora_C"] = [self.lora_C.var().item()]
 
     def _estimate_scaling_sigma(self):
         return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
@@ -253,10 +253,10 @@ class LoRA(nn.Module):
         """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
-        self.variances["lora_A"] = [self.get_variance(self.lora_A)]
+        self.variances["lora_A"] = [self.lora_A.var().item()]
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
-        self.variances["lora_B"] = [self.get_variance(self.lora_B)]
+        self.variances["lora_B"] = [self.lora_B.var().item()]
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
         """
@@ -275,7 +275,7 @@ class LoRA(nn.Module):
                 nn.init.kaiming_uniform_(layer.weight, mode=mode, a=math.sqrt(5))
                 sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
                 self.autoencoder_sigmas.append(sigma)
-                self.variances[f"autoencoder_{i}"] = [self.get_variance(layer.weight)]
+                self.variances[f"autoencoder_{i}"] = [layer.weight.var().item()]
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
