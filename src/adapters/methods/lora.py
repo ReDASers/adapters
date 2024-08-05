@@ -326,11 +326,14 @@ class LoRA(nn.Module):
         if not self.training:
             return False
         
+        if self.n_batches == 0:
+            return True 
+        
         self.n_batches += 1
         self.batch_number += 1
         
-        if self.n_batches >= self.batches_per_epoch:
-            self.n_batches = 0
+        if self.n_batches > self.batches_per_epoch:
+            self.n_batches = 1
             return True
         return False
             
@@ -423,6 +426,8 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
+        if self._do_rescale():
+            self._rescale_weights()
 
         if self.mode == "attention":
             # If hidden_states is None, use layer_input instead
@@ -461,8 +466,7 @@ class LoRA(nn.Module):
         else:
             gate = None
 
-        if self._do_rescale():
-            self._rescale_weights()
+
         # Return the processed hidden_states and gate
         return hidden_states, gate
 
