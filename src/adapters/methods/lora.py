@@ -431,27 +431,30 @@ class LoRA(nn.Module):
             if hidden_states is None:
                 hidden_states = layer_input
             
+            residual = hidden_states.clone()
             hidden_states = self.dropout(torch.nan_to_num(hidden_states))
             dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True)
             dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
             hidden_states = dw / dw_norm
+
+            # Apply probabilistic residual connection
+            if self.training:
+                if torch.rand(1).item() < 0.5:
+                    hidden_states = hidden_states + residual
+            else:
+                # Always apply the residual during evaluation
+                hidden_states = hidden_states + residual
+
             hidden_states = self.rescale(hidden_states, self.sigma)
         # Alternative calculation mode
-        elif self.mode == "dense_fan_in" or self.mode == "dense_fan_out":
+        else:
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             # Apply scaling to the weights
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler)
-            
-        # No operation mode
-        else:
-            # If hidden_states is None, use layer_input instead
-            if hidden_states is None:
-                hidden_states = layer_input
 
-        
         self.delta_w = hidden_states
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
