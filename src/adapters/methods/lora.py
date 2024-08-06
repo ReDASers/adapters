@@ -82,8 +82,6 @@ class LoRA(nn.Module):
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         self.n_batches = 0 # have not trained yet   
 
-       
-        
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         if batch_size is not None and training_set_size is not None:
@@ -97,7 +95,7 @@ class LoRA(nn.Module):
                         This may lead to incorrect rescaling and suboptimal performance.")
         return 1
             
-    def _is_valid_location_key(self, config, location_key):
+    def _is_valid_location_key(self, config, location_key) -> bool:
         """
         Checks if the given location key is valid based on the config.
 
@@ -117,7 +115,7 @@ class LoRA(nn.Module):
             return False
         return True
 
-    def _calculation_mode(self):
+    def _calculation_mode(self) -> str:
         """
         Checks if advanced calculation is possible based on the current configuration.
 
@@ -144,7 +142,7 @@ class LoRA(nn.Module):
             case _:
                 pass
 
-    def _get_neg_slope(self, non_linearity: str = "leakyrelu"):
+    def _get_neg_slope(self, non_linearity: str = "leakyrelu") -> float:
         """
         Retruns the negative slope for various activation functions.
 
@@ -163,29 +161,6 @@ class LoRA(nn.Module):
             case _:
                 return 0.0
 
-    def _calculate_gain(self, nonlinearity: str):
-        match nonlinearity:
-            case "leaky_relu" | "leakyrelu" | "prelu":
-                return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
-            case "linear" | "snselu"  | "sigmoid":
-                return 1.0
-            case "tanh":
-                return nn.init.calculate_gain("tanh")
-            case "selu":
-                return nn.init.calculate_gain("selu")
-            case "mish":
-                return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
-            case "gelu":
-                return nn.init.calculate_gain("leaky_relu", param=self._get_neg_slope(nonlinearity))
-            case "relu":
-                return nn.init.calculate_gain("relu")
-            case "relu6" | "elu":
-                return math.sqrt(2.0)
-            case _:
-                return nn.init.calculate_gain("leaky_relu", math.sqrt(5))
-            
-    def _calculate_std(self, gain, fan):
-        return gain / math.sqrt(float(fan))
             
     def _setup_gating_maybe(self, gating_heads: int):
         """
@@ -196,10 +171,7 @@ class LoRA(nn.Module):
         """
         if self.use_gating:
             self.gate = nn.Linear(self.connections_in, gating_heads, dtype=torch.float32)
-            fan = nn.init._calculate_correct_fan(self.gate.weight, mode="fan_in")
-            gain = self._calculate_gain("sigmoid")
-            std = self._calculate_std(gain, fan)
-            nn.init.normal_(self.gate.weight, std=std)
+            nn.init.normal_(self.gate.weight, std=0.02)
 
     def _setup_scaling(self):
         """
@@ -211,7 +183,7 @@ class LoRA(nn.Module):
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
         self.variances["lora_C"] = [self.lora_C.var().item()]
 
-    def _estimate_scaling_sigma(self):
+    def _estimate_scaling_sigma(self) -> float:
         return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
     
     def _estimate_attn_sigma(self, tensor: torch.Tensor, mode: Literal["fan_in", "fan_out"] = "fan_in"):
@@ -279,7 +251,7 @@ class LoRA(nn.Module):
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
-    def _get_autoencoder_architecture(self, arch: str = "NLbLN"):
+    def _get_autoencoder_architecture(self, arch: str = "NLbLN") -> nn.Sequential:
         """
         Retrieves the autoencoder architecture based on the configuration.
 
@@ -399,7 +371,7 @@ class LoRA(nn.Module):
         
        
          
-    def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
+    def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
             return weights
         w = torch.nan_to_num(weights)
