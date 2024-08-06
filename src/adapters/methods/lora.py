@@ -397,7 +397,7 @@ class LoRA(nn.Module):
             else:
                 self.variances["lora_C"].append(self.lora_C.var().item())
         
-        
+       
          
     def rescale(self, weights: torch.Tensor, sigma: torch.float32 = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
@@ -435,6 +435,15 @@ class LoRA(nn.Module):
                 return weights * (added * scaling)
             case _:
                 return weights
+            
+    def get_variances(self) -> Dict[str, List[float]]:
+        """
+        Returns the recorded variances for each parameter.
+
+        Returns:
+            Dict[str, List[float]]: Dictionary with variance lists for each parameter.
+        """
+        return self.variances
 
     def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
         """Inverts the composition operation between existing and injected weights.
@@ -467,7 +476,7 @@ class LoRA(nn.Module):
         self._increment_training_step_maybe()
         if self._epoch_start():
             self.rescale_weights()
-            
+        self.record_variances()   
 
         if self.mode == "attention":
             # If hidden_states is None, use layer_input instead
@@ -487,6 +496,9 @@ class LoRA(nn.Module):
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler)
 
         self.delta_w = hidden_states
+
+        with torch.no_grad():
+            self.variances["delta_w"].append(hidden_states.var().item())
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
             # Compute gate values using a sigmoid function applied to the layer input
