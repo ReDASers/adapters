@@ -41,15 +41,12 @@ class LoRA(nn.Module):
         gating_heads: int = 1,
         location_key: str = None,
     ):
-        super().__init__()
-        
+        super().__init__() 
         # Ensure the composition mode is 'add'
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
-        # Validate and set the location key
-        if self._is_valid_location_key(config, location_key) == False:
-            raise ValueError(f"Location key {self.location_key} is not enabled in config or invalid.")
+       
         # Initialize configuration parameters
-        self.location_key = location_key 
+        self.location = self._get_valid_location_key(config, location_key)
         self.connections_in = lora_A_shape[-1]
         self.connections_out = lora_B_shape[0]
         self.r = int(config.r)
@@ -68,15 +65,12 @@ class LoRA(nn.Module):
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
         self.non_linearity = config.non_linearity 
-        self.sigma = "loria"
-        self.eps = 1e-9
+        self.sigma = None
         self._delta_w = None  # Placeholder for delta weights
         # List to store variance for each LoRA instance
         
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
-        
-        self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
-        self.variances = {self.location_key+"_delta_w": [0.0]}
+        self.variances = {self.location+"_delta_w": [0.0]}
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
@@ -85,6 +79,9 @@ class LoRA(nn.Module):
 
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
+        """
+        Calculates the number of batches per epoch based on the batch size and training set size.
+        """
         if batch_size is not None and training_set_size is not None:
             batches_per_epoch = training_set_size // batch_size
             if batches_per_epoch < 1:
@@ -96,49 +93,32 @@ class LoRA(nn.Module):
                         This may lead to incorrect rescaling and suboptimal performance.")
         return 1
             
-    def _is_valid_location_key(self, config, location_key) -> bool:
+    def _get_valid_location_key(self, config, location_key) -> bool:
         """
-        Checks if the given location key is valid based on the config.
-
-        Args:
-            config (LoRAConfig): Configuration object for LoRA settings.
-
-        Returns:
-            bool: True if the location key is valid, False otherwise.
+        Checks if the location key is valid based on the configuration.
         """
-        if location_key is None:
-            logging.warning("Location key must be provided, but is currently None.")
-            return False
-        if (config.selfattn_lora == False and location_key == "selfattn_lora") or \
-           (config.intermediate_lora == False and location_key == "intermediate_lora") or \
-           (config.output_lora == False and location_key == "output_lora"):
-            logging.warning(f"LoRIA module has location key {location_key} but is not enabled in config.")
-            return False
-        return True
-
-    def _calculation_mode(self) -> str:
-        """
-        Checks if advanced calculation is possible based on the current configuration.
-
-        Returns:
-            stromg: how adapter weights will be handled.
-        """
-        match self.location_key:
-            case "selfattn_lora" if self.connections_in == self.connections_out:
-                return "attention"
-            case "intermediate_lora" if self.connections_in < self.connections_out:
-                return "dense_fan_out"
-            case "output_lora" if self.connections_in > self.connections_out:
-                return "dense_fan_in"
+        match location_key:
+            case "selfattn_lora" if config.selfattn_lora:
+                if self.connections_in != self.connections_out:
+                    logging.warning("Self-attention requires connections_in == connections_out!")
+                return "selfattn"
+            case "intermediate_lora" if config.intermediate_lora:
+                if self.connections_in >= self.connections_out:
+                    logging.warning("Intermediate requires connections_in < connections_out!")
+                return "intermediate"
+            case "output_lora" if config.output_lora:
+                if self.connections_in <= self.connections_out:
+                    logging.warning("Output requires connections_in > connections_out!")
+                return "output"
             case _:
-                return "noop"
+                raise ValueError(f"Invalid location key: {location_key}")
     
     def _layer_specific_setup(self, lora_A_shape, lora_B_shape):
          # Determine calculation mode and setup accordingly
-        match self.mode:
-            case "attention":
+        match self.location:
+            case "selfattn":
                 self._setup_in_attn(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-            case "dense_fan_in" | "dense_fan_out":
+            case "output" | "intermediate":
                 self._setup_scaling()
             case _:
                 pass
@@ -179,10 +159,10 @@ class LoRA(nn.Module):
         Sets up the basic calculation mode by initializing scaling parameters.
         """
         self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
-        self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
+        self.scalar_scaler = nn.Parameter(torch.tensor(1e-9, dtype=torch.float32))
         self.sigma = self._estimate_scaling_sigma()
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
-        self.variances[self.location_key+"_lora_C"] = [self.lora_C.var()]
+        self.variances[self.location+"_lora_C"] = [self.lora_C.var()]
 
     def _estimate_scaling_sigma(self) -> float:
         return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
@@ -226,10 +206,10 @@ class LoRA(nn.Module):
         """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
-        self.variances[self.location_key+"_lora_A"] = [self.lora_A.var().item()]
+        self.variances[self.location+"_lora_A"] = [self.lora_A.var().item()]
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
-        self.variances[self.location_key+"_lora_B"] = [self.lora_B.var().item()]
+        self.variances[self.location+"_lora_B"] = [self.lora_B.var().item()]
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
         """
@@ -248,7 +228,7 @@ class LoRA(nn.Module):
                 nn.init.kaiming_uniform_(layer.weight, mode=mode, a=math.sqrt(5))
                 sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
                 self.autoencoder_sigmas.append(sigma)
-                self.variances[f"{self.location_key}_autoencoder_{i}"] = [layer.weight.var()]
+                self.variances[f"{self.location}_autoencoder_{i}"] = [layer.weight.var()]
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
@@ -343,9 +323,9 @@ class LoRA(nn.Module):
         if not self.training:
             logger.warning("Weight rescaling is only supported during training.")
             return
-        if self.mode in ["dense_fan_in", "dense_fan_out"] and self.batches_per_epoch >= 1:
+        if self.location in ["output", "intermediate"] and self.batches_per_epoch >= 1:
             self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
-        elif self.mode == "attention":
+        elif self.location == "selfattn":
             self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
             self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
             self._rescale_autoencoder_weights()
@@ -362,19 +342,19 @@ class LoRA(nn.Module):
         """
         if self.training:
             with torch.no_grad():
-                if self.mode == "attention":
-                    self.variances[self.location_key+"_lora_A"].append(self.lora_A.var())
-                    self.variances[self.location_key+"_lora_B"].append(self.lora_B.var())
+                if self.location == "selfattn":
+                    self.variances[self.location+"_lora_A"].append(self.lora_A.var())
+                    self.variances[self.location+"_lora_B"].append(self.lora_B.var())
                     for i, layer in enumerate(self.f):
                         if isinstance(layer, nn.Linear):
-                            self.variances[f"{self.location_key}_autoencoder_{i}"].append(layer.weight.var())
+                            self.variances[f"{self.location}_autoencoder_{i}"].append(layer.weight.var())
                 else:
-                    self.variances[self.location_key+"_lora_C"].append(self.lora_C.var())
+                    self.variances[self.location+"_lora_C"].append(self.lora_C.var())
         
     def record_dw_var_maybe(self, hidden_states: torch.Tensor) -> None:
         if self.training:
             with torch.no_grad():
-                self.variances[self.location_key+"_delta_w"].append(hidden_states.var())
+                self.variances[self.location+"_delta_w"].append(hidden_states.var())
          
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
@@ -403,10 +383,10 @@ class LoRA(nn.Module):
         if scaling is None:
             scaling = self.scaling
 
-        match self.mode:
-            case "attention":
+        match self.location:
+            case "selfattn":
                 return weights + added * scaling
-            case "dense_fan_in" | "dense_fan_out": 
+            case "output" | "intermediate": 
                 return weights * (added * scaling)
             case _:
                 return weights
@@ -430,10 +410,10 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Inverted weights.
         """
-        match self.mode:
-            case "attention":
+        match self.location:
+            case "selfattn":
                 return weights - (added * self.scaling)
-            case "dense_fan_in" | "dense_fan_out":
+            case "output" | "intermediate":
                 return weights / (added * self.scaling)
             case _:
                 return weights
@@ -454,7 +434,7 @@ class LoRA(nn.Module):
         
         self.record_weights_var_maybe()   
 
-        if self.mode == "attention":
+        if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
