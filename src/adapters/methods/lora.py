@@ -72,10 +72,11 @@ class LoRA(nn.Module):
         self.eps = 1e-9
         self._delta_w = None  # Placeholder for delta weights
         # List to store variance for each LoRA instance
-        self.variances = {"delta_w": [0.0]}
+        
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
         self.mode: Literal["attention", "dense_fan_out", "dense_fan_in", "noop"] = self._calculation_mode()
+        self.variances = {self.location_key+"_delta_w": [0.0]}
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
@@ -181,7 +182,7 @@ class LoRA(nn.Module):
         self.scalar_scaler = nn.Parameter(torch.tensor(self.eps, dtype=torch.float32))
         self.sigma = self._estimate_scaling_sigma()
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
-        self.variances["lora_C"] = [self.lora_C.var().item()]
+        self.variances[self.location_key+"_lora_C"] = [self.lora_C.var()]
 
     def _estimate_scaling_sigma(self) -> float:
         return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
@@ -225,10 +226,10 @@ class LoRA(nn.Module):
         """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
         self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
-        self.variances["lora_A"] = [self.lora_A.var().item()]
+        self.variances[self.location_key+"_lora_A"] = [self.lora_A.var().item()]
         nn.init.zeros_(self.lora_B)
         self.B_sigma = 0.0
-        self.variances["lora_B"] = [self.lora_B.var().item()]
+        self.variances[self.location_key+"_lora_B"] = [self.lora_B.var().item()]
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
         """
@@ -247,7 +248,7 @@ class LoRA(nn.Module):
                 nn.init.kaiming_uniform_(layer.weight, mode=mode, a=math.sqrt(5))
                 sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
                 self.autoencoder_sigmas.append(sigma)
-                self.variances[f"autoencoder_{i}"] = [layer.weight.var()]
+                self.variances[f"{self.location_key}_autoencoder_{i}"] = [layer.weight.var()]
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
@@ -349,7 +350,7 @@ class LoRA(nn.Module):
             self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
             self._rescale_autoencoder_weights()
             
-    def record_variances_maybe(self) -> None:
+    def record_weights_var_maybe(self) -> None:
         """
         Calculates the variance of the given weights.
 
@@ -359,18 +360,21 @@ class LoRA(nn.Module):
         Returns:
             float: Variance of the weights.
         """
-        if self.trainig:
+        if self.training:
             with torch.no_grad():
                 if self.mode == "attention":
-                    self.variances["lora_A"].append(self.lora_A.var())
-                    self.variances["lora_B"].append(self.lora_B.var())
+                    self.variances[self.location_key+"_lora_A"].append(self.lora_A.var())
+                    self.variances[self.location_key+"_lora_B"].append(self.lora_B.var())
                     for i, layer in enumerate(self.f):
                         if isinstance(layer, nn.Linear):
-                            self.variances[f"autoencoder_{i}"].append(layer.weight.var())
+                            self.variances[f"{self.location_key}_autoencoder_{i}"].append(layer.weight.var())
                 else:
-                    self.variances["lora_C"].append(self.lora_C.var())
+                    self.variances[self.location_key+"_lora_C"].append(self.lora_C.var())
         
-       
+    def record_dw_var_maybe(self, hidden_states: torch.Tensor) -> None:
+        if self.training:
+            with torch.no_grad():
+                self.variances[self.location_key+"_delta_w"].append(hidden_states.var())
          
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
@@ -399,9 +403,6 @@ class LoRA(nn.Module):
         if scaling is None:
             scaling = self.scaling
 
-        if self.training:
-            with torch.no_grad():
-                self.variances["delta_w"].append(added.var())
         match self.mode:
             case "attention":
                 return weights + added * scaling
@@ -451,7 +452,7 @@ class LoRA(nn.Module):
         if self._epoch_start():
             self.rescale_weights()
         
-        self.record_variances_maybe()   
+        self.record_weights_var_maybe()   
 
         if self.mode == "attention":
             # If hidden_states is None, use layer_input instead
@@ -462,19 +463,18 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True)
             dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
-            hidden_states = dw / dw_norm
+            hidden_states = dw / dw_norm       
             hidden_states = self.rescale(hidden_states, self.sigma)
         # Alternative calculation mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler)
+            
 
         self.delta_w = hidden_states
+        self.record_dw_var_maybe(hidden_states)
 
-        if self.training:
-            with torch.no_grad():
-                self.variances["delta_w"].append(hidden_states.var())
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
             # Compute gate values using a sigmoid function applied to the layer input
