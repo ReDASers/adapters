@@ -327,12 +327,14 @@ class LoRA(nn.Module):
         if not self.training:
             logger.warning("Weight rescaling is only supported during training.")
             return
+        self.record_weights_var_maybe()
         if self.location in ["output", "intermediate"] and self.batches_per_epoch >= 1:
             self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
         elif self.location == "selfattn":
             self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
             self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
             self._rescale_autoencoder_weights()
+        self.record_weights_var_maybe()
             
     def record_weights_var_maybe(self) -> None:
         """
@@ -351,9 +353,9 @@ class LoRA(nn.Module):
                     self.variances[self.location+"_lora_B"].append(self.lora_B.var())
                     for i, layer in enumerate(self.f):
                         if isinstance(layer, nn.Linear):
-                            self.variances[f"{self.location}_autoencoder_{i}"].append(layer.weight.var())
+                            self.variances[f"{self.location}_autoencoder_{i}"].append(torch.var(layer.weight.data))
                 else:
-                    self.variances[self.location+"_lora_C"].append(self.lora_C.var())
+                    self.variances[self.location+"_lora_C"].append(torch.var(self.lora_C))
         
     def record_dw_var_maybe(self, hidden_states: torch.Tensor) -> None:
         if self.training:
@@ -433,15 +435,17 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
+        
         if self._epoch_start():
             self.rescale_weights()
         
-        self.record_weights_var_maybe()   
+           
 
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
+            self.record_dw_var_maybe(hidden_states)
             hidden_states = torch.nan_to_num(self.dropout(hidden_states))
             dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
@@ -453,6 +457,7 @@ class LoRA(nn.Module):
         else:
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
+            self.record_dw_var_maybe(scaling_vector)
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler)
             
 
