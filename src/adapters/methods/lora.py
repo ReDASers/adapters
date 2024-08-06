@@ -58,7 +58,7 @@ class LoRA(nn.Module):
         self.scaling = float(self.lora_alpha / self.r) if self.lora_alpha > 1.0 else 1.0
         beta = config.beta if config.beta is not None else int(self.r * 1.5)
         self.bottleneck_size = int(beta * self.r)  
-        self.autoencoder_sigmas = []
+        self.autoencoder_sigmas = None
         self.A_sigma = None
         self.B_sigma = 0.0
         self.composition_mode = config.composition_mode
@@ -164,8 +164,9 @@ class LoRA(nn.Module):
         """
         self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
         self.scalar_scaler = nn.Parameter(torch.tensor(1e-9, dtype=torch.float32))
-        self.sigma = self._estimate_scaling_sigma()
-        nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
+        sigma = self._estimate_scaling_sigma()
+        nn.init.normal_(self.lora_C, mean=1.0, std=sigma)
+        self.sigma = self.lora_C.std().item()
         self.variances[self.location+"_lora_C"] = [self.lora_C.var().item()]
 
     def _estimate_scaling_sigma(self) -> float:
@@ -209,10 +210,12 @@ class LoRA(nn.Module):
         Initializes the LoRA matrices A and B.
         """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
-        self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
+        #self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
+        self.A_sigma = self.lora_A.std().item()
         self.variances[self.location+"_lora_A"] = [self.lora_A.var().item()]
         nn.init.zeros_(self.lora_B)
-        self.B_sigma = 0.0
+        #self.B_sigma = 0.0
+        self.B_sigma = self.lora_B.std().item()
         self.variances[self.location+"_lora_B"] = [self.lora_B.var().item()]
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
@@ -222,7 +225,8 @@ class LoRA(nn.Module):
         Args:
             layers (nn.Sequential): Sequential model containing the layers.
         """
-        
+        self.autoencoder_sigmas = torch.zeros(len(layers), dtype=torch.float32)
+
         for i, layer in enumerate(layers):
             if isinstance(layer, nn.Linear):
                 if i < len(layers) / 2:
@@ -230,9 +234,10 @@ class LoRA(nn.Module):
                 else:
                     mode = "fan_out"
                 nn.init.kaiming_uniform_(layer.weight, mode=mode, a=math.sqrt(5))
-                sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
-                self.autoencoder_sigmas.append(sigma)
-                self.variances[f"{self.location}_autoencoder_{i}"] = [layer.weight.var()]
+                # sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
+                sigma = layer.weight.std().item()
+                self.autoencoder_sigmas[i] = sigma
+                self.variances[f"{self.location}_autoencoder_{i}"] = [layer.weight.var().item()]
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
@@ -316,6 +321,7 @@ class LoRA(nn.Module):
         """
         for layer, sigma in zip(self.f, self.autoencoder_sigmas):
             if isinstance(layer, nn.Linear):
+                assert sigma, "Sigma must be set."
                 layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
