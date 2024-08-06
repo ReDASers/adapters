@@ -46,7 +46,7 @@ class LoRA(nn.Module):
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
        
         # Initialize configuration parameters
-        self.location = self._get_valid_location_key(config, location_key)
+        
         self.connections_in = lora_A_shape[-1]
         self.connections_out = lora_B_shape[0]
         self.r = int(config.r)
@@ -70,7 +70,11 @@ class LoRA(nn.Module):
         # List to store variance for each LoRA instance
         
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
+        
+        self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_delta_w": [0.0]}
+
+        
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
