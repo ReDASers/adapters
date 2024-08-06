@@ -166,7 +166,7 @@ class LoRA(nn.Module):
         self.scalar_scaler = nn.Parameter(torch.tensor(1e-9, dtype=torch.float32))
         self.sigma = self._estimate_scaling_sigma()
         nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
-        self.variances[self.location+"_lora_C"] = [self.lora_C.var()]
+        self.variances[self.location+"_lora_C"] = [self.lora_C.var().item()]
 
     def _estimate_scaling_sigma(self) -> float:
         return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
@@ -279,7 +279,7 @@ class LoRA(nn.Module):
 
     def _increment_training_step_maybe(self):
         if self.training:
-            self.n_batches += 1
+            self.n_batches = self.n_batches + 1
 
     def _epoch_start(self) -> bool:
         """
@@ -328,7 +328,7 @@ class LoRA(nn.Module):
             logger.warning("Weight rescaling is only supported during training.")
             return
         self.record_weights_var_maybe()
-        if self.location in ["output", "intermediate"] and self.batches_per_epoch >= 1:
+        if self.location in ["output", "intermediate"]:
             self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
         elif self.location == "selfattn":
             self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
@@ -349,18 +349,18 @@ class LoRA(nn.Module):
         if self.training:
             with torch.no_grad():
                 if self.location == "selfattn":
-                    self.variances[self.location+"_lora_A"].append(self.lora_A.var())
-                    self.variances[self.location+"_lora_B"].append(self.lora_B.var())
+                    self.variances[self.location+"_lora_A"].append(self.lora_A.var().item())
+                    self.variances[self.location+"_lora_B"].append(self.lora_B.var().item())
                     for i, layer in enumerate(self.f):
                         if isinstance(layer, nn.Linear):
-                            self.variances[f"{self.location}_autoencoder_{i}"].append(torch.var(layer.weight.data))
+                            self.variances[f"{self.location}_autoencoder_{i}"].append(torch.var(layer.weight).item())
                 else:
-                    self.variances[self.location+"_lora_C"].append(torch.var(self.lora_C))
+                    self.variances[self.location+"_lora_C"].append(torch.var(self.lora_C).item())
         
     def record_dw_var_maybe(self, hidden_states: torch.Tensor) -> None:
         if self.training:
             with torch.no_grad():
-                self.variances[self.location+"_delta_w"].append(hidden_states.var())
+                self.variances[self.location+"_delta_w"].append(hidden_states.var().item())
          
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
@@ -439,20 +439,18 @@ class LoRA(nn.Module):
         if self._epoch_start():
             self.rescale_weights()
         
-           
-
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
-            self.record_dw_var_maybe(hidden_states)
-            hidden_states = torch.nan_to_num(self.dropout(hidden_states))
-            dw = self.f(hidden_states) @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+            x = torch.nan_to_num(hidden_states)
+            self.record_dw_var_maybe(x)
+            fx = self.f(self.dropout(x))
+            dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
-            dw_norm = dw.norm(p=2, dim=1, keepdim=True)
-            dw_norm = dw_norm + (dw_norm == 0).float() * 1e-9  # Avoid division by zero
-            hidden_states = dw / dw_norm       
-            hidden_states = self.rescale(hidden_states, self.sigma)
+            dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
+            normed_dw = dw / dw_norm       
+            hidden_states = self.rescale(normed_dw, self.sigma)
         # Alternative calculation mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
@@ -461,7 +459,7 @@ class LoRA(nn.Module):
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler)
             
 
-        self.delta_w = hidden_states
+        self.delta_w = hidden_states.clone()
         self.record_dw_var_maybe(hidden_states)
 
         # Apply gating mechanism if use_gating is enabled
@@ -610,7 +608,7 @@ class LoRALayer(AdapterLayerBase):
                     module = self.loras[name]
                     for k, v in module.state_dict().items():
                         if k in avg_state_dict:
-                            avg_state_dict[k] += weight * v
+                            avg_state_dict[k] = avg_state_dict[k] + weight * v
                         else:
                             avg_state_dict[k] = weight * v
                 else:
