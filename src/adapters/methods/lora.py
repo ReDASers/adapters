@@ -72,7 +72,7 @@ class LoRA(nn.Module):
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
         self.location = self._get_valid_location_key(config, location_key)
-        self.variances = {self.location+"_delta_w": [0.0]}
+        self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
 
         
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
@@ -229,11 +229,11 @@ class LoRA(nn.Module):
 
         for i, layer in enumerate(layers):
             if isinstance(layer, nn.Linear):
-                if i < len(layers) / 2:
-                    mode = "fan_in"
-                else:
-                    mode = "fan_out"
-                nn.init.kaiming_uniform_(layer.weight, mode=mode, a=math.sqrt(5))
+                #if i < len(layers) / 2:
+                #    mode = "fan_in"
+                #else:
+                #    mode = "fan_out"
+                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
                 # sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
                 sigma = layer.weight.std().item()
                 self.autoencoder_sigmas[i] = sigma
@@ -333,14 +333,14 @@ class LoRA(nn.Module):
         if not self.training:
             logger.warning("Weight rescaling is only supported during training.")
             return
-        self.record_weights_var_maybe()
+        
         if self.location in ["output", "intermediate"]:
             self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
         elif self.location == "selfattn":
             self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
             self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
             self._rescale_autoencoder_weights()
-        self.record_weights_var_maybe()
+        
             
     def record_weights_var_maybe(self) -> None:
         """
@@ -367,7 +367,12 @@ class LoRA(nn.Module):
         if self.training:
             with torch.no_grad():
                 self.variances[self.location+"_delta_w"].append(hidden_states.var().item())
-         
+    
+    def record_w_var_maybe(self, weights: torch.Tensor) -> None:
+        if self.training:
+            with torch.no_grad():
+                self.variances[self.location+"_W"].append(weights.var().item())
+
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
             return weights
@@ -395,6 +400,9 @@ class LoRA(nn.Module):
         if scaling is None:
             scaling = self.scaling
 
+        self.record_dw_var_maybe(added * scaling)
+        self.record_w_var_maybe(weights)
+        self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
                 return weights + added * scaling
@@ -422,6 +430,7 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Inverted weights.
         """
+ 
         match self.location:
             case "selfattn":
                 return weights - (added * self.scaling)
@@ -441,6 +450,7 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
+        self.record_weights_var_maybe()
         
         if self._epoch_start():
             self.rescale_weights()
@@ -466,7 +476,7 @@ class LoRA(nn.Module):
             
 
         self.delta_w = hidden_states.clone()
-        self.record_dw_var_maybe(hidden_states)
+        
 
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
@@ -551,6 +561,7 @@ class IA3(nn.Module):
         else:
             gate = None
 
+        
         return hidden_states, gate
 
 
