@@ -82,7 +82,6 @@ class LoRA(nn.Module):
         self.n_batches = 0 # have not trained yet   
         self.training_steps = 0
         self.sigma_w = 0.0
-        self.sigma_dw = 0.0
 
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
@@ -213,7 +212,7 @@ class LoRA(nn.Module):
         Initializes the LoRA matrices A and B.
         """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
-        
+        #self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
         self.A_sigma = self.lora_A.std().item()
         self.variances[self.location+"_lora_A"] = [self.lora_A.var().item()]
         nn.init.zeros_(self.lora_B)
@@ -287,10 +286,7 @@ class LoRA(nn.Module):
 
     def _increment_training_step_maybe(self):
         if self.training:
-            self.training_steps = self.training_steps + 1
             self.n_batches = self.n_batches + 1
-            if self.n_batches > self.batches_per_epoch:
-                self.n_batches = 1
 
     def _epoch_start(self) -> bool:
         """
@@ -305,7 +301,8 @@ class LoRA(nn.Module):
         if not self.training:
             return False
         
-        if self.n_batches == 1 and self.training_steps > 1:
+        if self.n_batches > self.batches_per_epoch:
+            self.n_batches = 1
             return True
         return False
     
@@ -402,26 +399,27 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
+        if self.training:
+            self.training_steps = self.training_steps + 1
         if self.training_steps == 1:
             self.sigma_w = weights.std().item()
-       
+        if self._epoch_start():
+            w = self.rescale(weights, self.sigma_w)
+        else:
+            w = weights.clone()
         if scaling is None:
             scaling = self.scaling
 
-        self.record_dw_var_maybe(added)
-        self.record_w_var_maybe(weights)
+        self.record_dw_var_maybe(added * scaling)
+        self.record_w_var_maybe(w)
         self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
-                if self._epoch_start():
-                    return self.rescale(weights, self.sigma_w) + added * scaling
-                return weights + added * scaling
-            case "output" | "intermediate":
-                if self._epoch_start():
-                    return self.rescale(weights, self.sigma_w) * (added * scaling)
-                return weights * (added * scaling)
+                return w + added * scaling
+            case "output" | "intermediate": 
+                return w * (added * scaling)
             case _:
-                raise ValueError(f"Unknown location: {self.location}")
+                return w
             
     def get_variances(self) -> Dict[str, List[float]]:
         """
