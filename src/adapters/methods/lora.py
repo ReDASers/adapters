@@ -376,7 +376,7 @@ class LoRA(nn.Module):
                 self.variances[self.location+"_W"].append(weights.var().item())
 
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
-        if sigma == 0 or not self.training:
+        if sigma == 0:
             return weights
         w = torch.nan_to_num(weights)
         u = torch.mean(w, dtype=dtype)
@@ -403,10 +403,8 @@ class LoRA(nn.Module):
             self.training_steps = self.training_steps + 1
         if self.training_steps == 1:
             self.sigma_w = weights.std().item()
-        if self._epoch_start() and self.location != "selfattn":
-            w = self.rescale(weights, self.sigma_w)
-        else:
-            w = weights.clone()
+       
+   
         if scaling is None:
             scaling = self.scaling
 
@@ -415,11 +413,15 @@ class LoRA(nn.Module):
         self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
-                return self.rescale(weights, self.sigma_w) + added * scaling
-            case "output" | "intermediate": 
-                return w * (added * scaling)
+                if self._epoch_start():
+                    return self.rescale(weights, self.sigma_w) + self.rescale(added, self.sigma_w) * scaling
+                return weights + self.rescale(added, self.sigma_w) * scaling
+            case "output" | "intermediate":
+                if self._epoch_start():
+                    return self.rescale(weights, self.sigma_w) * (added * scaling)
+                return weights * (added * scaling)
             case _:
-                return w
+                raise ValueError(f"Unknown location: {self.location}")
             
     def get_variances(self) -> Dict[str, List[float]]:
         """
@@ -476,7 +478,7 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm       
-            hidden_states = self.rescale(normed_dw, self.sigma)
+            # hidden_states = self.rescale(normed_dw, self.sigma)
         # Alternative calculation mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
