@@ -408,7 +408,7 @@ class LoRA(nn.Module):
         if scaling is None:
             scaling = self.scaling
 
-        self.record_dw_var_maybe(added * scaling)
+        self.record_dw_var_maybe(added)
         self.record_w_var_maybe(weights)
         self.record_weights_var_maybe()
         match self.location:
@@ -417,6 +417,8 @@ class LoRA(nn.Module):
                     return self.rescale(weights, self.sigma_w) + added * scaling
                 return weights + added * scaling
             case "output" | "intermediate":
+                if self._epoch_start():
+                    return self.rescale(weights, self.sigma_w) * (added * scaling)
                 return weights * (added * scaling)
             case _:
                 raise ValueError(f"Unknown location: {self.location}")
@@ -462,8 +464,8 @@ class LoRA(nn.Module):
         self._increment_training_step_maybe()
         self.record_weights_var_maybe()
         
-        if self._epoch_start():
-            self.rescale_weights()
+        #if self._epoch_start():
+        #    self.rescale_weights()
         
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
