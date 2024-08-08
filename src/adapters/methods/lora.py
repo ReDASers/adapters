@@ -403,7 +403,7 @@ class LoRA(nn.Module):
             self.training_steps = self.training_steps + 1
         if self.training_steps == 1:
             self.sigma_w = weights.std().item()
-        if self._epoch_start() and weights.std() > self.sigma_w:
+        if self._epoch_start():
             w = self.rescale(weights, self.sigma_w)
         else:
             w = weights.clone()
