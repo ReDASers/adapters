@@ -288,7 +288,7 @@ class LoRA(nn.Module):
         if self.training:
             self.n_batches = self.n_batches + 1
 
-    def _on_epoch_start(self) -> bool:
+    def _epoch_start(self) -> bool:
         """
         Checks if rescaling is required based on the configuration.
 
@@ -306,7 +306,7 @@ class LoRA(nn.Module):
             return True
         return False
     
-    def _is_epoch_end(self) -> bool:
+    def _epoch_end(self) -> bool:
         if self.batches_per_epoch < 1:
             return False
         
@@ -376,7 +376,7 @@ class LoRA(nn.Module):
                 self.variances[self.location+"_W"].append(weights.var().item())
 
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
-        if sigma == 0:
+        if sigma == 0 or not self.training:
             return weights
         w = torch.nan_to_num(weights)
         u = torch.mean(w, dtype=dtype)
@@ -403,24 +403,23 @@ class LoRA(nn.Module):
             self.training_steps = self.training_steps + 1
         if self.training_steps == 1:
             self.sigma_w = weights.std().item()
-        
+        if self._epoch_start() and self.location != "selfattn":
+            w = self.rescale(weights, self.sigma_w)
+        else:
+            w = weights.clone()
         if scaling is None:
             scaling = self.scaling
 
         self.record_dw_var_maybe(added * scaling)
-        self.record_w_var_maybe(weights)
+        self.record_w_var_maybe(w)
         self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
-                if self._is_epoch_end():
-                    return self.rescale(weights, self.sigma_w) + self.rescale(added, self.sigma_w) * scaling
-                return weights + self.rescale(added, self.sigma_w) * scaling
-            case "output" | "intermediate":
-                if self._is_epoch_end():
-                    return self.rescale(weights, self.sigma_w) * (added * scaling)
-                return weights * (added * scaling)
+                return self.rescale(weights, self.sigma_w) + added * scaling
+            case "output" | "intermediate": 
+                return w * (added * scaling)
             case _:
-                raise ValueError(f"Invalid location key: {self.location}")
+                return w
             
     def get_variances(self) -> Dict[str, List[float]]:
         """
@@ -462,8 +461,7 @@ class LoRA(nn.Module):
         """
         self._increment_training_step_maybe()
         self.record_weights_var_maybe()
-        if self._on_epoch_start(): # must do this to reset n_batches
-            pass
+        
         #if self._epoch_start():
         #    self.rescale_weights()
         
@@ -477,8 +475,8 @@ class LoRA(nn.Module):
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
-            hidden_states = dw / dw_norm       
-            # hidden_states = self.rescale(normed_dw, self.sigma)
+            normed_dw = dw / dw_norm       
+            hidden_states = self.rescale(normed_dw, self.sigma)
         # Alternative calculation mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
