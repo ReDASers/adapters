@@ -414,11 +414,11 @@ class LoRA(nn.Module):
         match self.location:
             case "selfattn":
                 if self._epoch_start():
-                    return self.rescale(weights, self.sigma) + self.rescale(added, self.sigma) * scaling
+                    return self.rescale(weights, self.sigma_w) + self.rescale(added, self.sigma) * scaling
                 return weights + self.rescale(added, self.sigma) * scaling
             case "output" | "intermediate":
                 if self._epoch_start():
-                    return self.rescale(weights, self.sigma) * (added * scaling)
+                    return self.rescale(weights, self.sigma_w) * (added * scaling)
                 return weights * (added * scaling)
             case _:
                 raise ValueError(f"Unknown location: {self.location}")
