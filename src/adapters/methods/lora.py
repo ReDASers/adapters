@@ -414,8 +414,8 @@ class LoRA(nn.Module):
         match self.location:
             case "selfattn":
                 if self._epoch_start():
-                    return self.rescale(weights, self.sigma_w) + self.rescale(added, self.sigma) * scaling
-                return weights + self.rescale(added, self.sigma) * scaling
+                    return self.rescale(weights, self.sigma_w) + added * scaling
+                return weights + added * scaling
             case "output" | "intermediate":
                 return weights * (added * scaling)
             case _:
@@ -475,8 +475,8 @@ class LoRA(nn.Module):
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
-            hidden_states = dw / dw_norm       
-            # hidden_states = self.rescale(normed_dw, self.sigma)
+            normed_dw = dw / dw_norm       
+            hidden_states = self.rescale(normed_dw, self.sigma)
         # Alternative calculation mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
