@@ -403,8 +403,6 @@ class LoRA(nn.Module):
             self.training_steps = self.training_steps + 1
             if self.training_steps == 1:
                 self.sigma_w = weights.std().item()
-        if self._epoch_start():
-            self.rescale_weights()
             w = self.rescale(weights, self.sigma_w)
         else:
             w = weights.clone()
@@ -418,7 +416,7 @@ class LoRA(nn.Module):
             case "selfattn":
                 return w + added * scaling
             case "output" | "intermediate": 
-                return w * (added * scaling)
+                return weights * (added * scaling)
             case _:
                 return w
             
@@ -463,8 +461,8 @@ class LoRA(nn.Module):
         self._increment_training_step_maybe()
         self.record_weights_var_maybe()
         
-        #if self._epoch_start():
-        #    self.rescale_weights()
+        if self._epoch_start():
+            self.rescale_weights()
         
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
