@@ -233,7 +233,7 @@ class LoRA(nn.Module):
                     mode = "fan_out"
                 else:
                     mode = "fan_in"
-                nn.init.kaiming_normal_(layer.weight, mode=mode, a=math.sqrt(5))
+                nn.init.kaiming_normal_(layer.weight, mode="fan_in", a=math.sqrt(5))
                 # sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
                 sigma = layer.weight.std().item()
                 self.autoencoder_sigmas[i] = sigma
