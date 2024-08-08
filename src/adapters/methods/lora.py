@@ -324,23 +324,24 @@ class LoRA(nn.Module):
         for layer, sigma in zip(self.f, self.autoencoder_sigmas):
             if isinstance(layer, nn.Linear):
                 assert sigma, "Sigma must be set."
-                layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
-                if layer.bias is not None:
-                    nn.init.zeros_(layer.bias)
+                if layer.weight.std() > sigma:
+                    layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
+                    if layer.bias is not None:
+                        nn.init.zeros_(layer.bias)
             
-    def rescale_weights(self):
+    def rescale_weights_maybe(self):
         """
         Rescale the weights based on the current configuration.
         """
-        if not self.training:
-            logger.warning("Weight rescaling is only supported during training.")
+        if not self.training or self.n_batches <= self.batches_per_epoch:
             return
         
         if self.location in ["output", "intermediate"]:
-            self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
+            if self.lora_C.std() > self.sigma:
+                self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
         elif self.location == "selfattn":
-            self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
-            self.lora_B.data = self.rescale(self.lora_B.data, sigma=self.B_sigma)
+            if self.lora_A.std() > self.A_sigma:
+                self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
             self._rescale_autoencoder_weights()
         
             
@@ -404,6 +405,7 @@ class LoRA(nn.Module):
         if self.training_steps == 1:
             self.sigma_w = weights.std().item()
         if self._epoch_start():
+            
             w = self.rescale(weights, self.sigma_w)
         else:
             w = weights.clone()
@@ -460,6 +462,7 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
+        self.rescale_weights_maybe()
         self.record_weights_var_maybe()
         
         #if self._epoch_start():
