@@ -376,7 +376,7 @@ class LoRA(nn.Module):
                 self.variances[self.location+"_W"].append(weights.var().item())
 
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
-        if sigma == 0:
+        if sigma == 0 or not self.training:
             return weights
         w = torch.nan_to_num(weights)
         u = torch.mean(w, dtype=dtype)
