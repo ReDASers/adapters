@@ -82,6 +82,7 @@ class LoRA(nn.Module):
         self.n_batches = 0 # have not trained yet   
         self.training_steps = 0
         self.sigma_w = 0.0
+        self.sigma_dw = 0.0
 
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
@@ -414,8 +415,8 @@ class LoRA(nn.Module):
         match self.location:
             case "selfattn":
                 if self._epoch_start():
-                    return self.rescale(weights, self.sigma_w) + self.rescale(added, self.sigma) * scaling
-                return weights + self.rescale(added, self.sigma) * scaling
+                    return self.rescale(weights, self.sigma_w) + self.rescale(added, self.sigma_w) * scaling
+                return weights + self.rescale(added, self.sigma_w) * scaling
             case "output" | "intermediate":
                 if self._epoch_start():
                     return self.rescale(weights, self.sigma_w) * (added * scaling)
@@ -477,7 +478,7 @@ class LoRA(nn.Module):
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
-            normed_dw = dw / dw_norm       
+            hidden_states = dw / dw_norm       
             # hidden_states = self.rescale(normed_dw, self.sigma)
         # Alternative calculation mode
         else:
