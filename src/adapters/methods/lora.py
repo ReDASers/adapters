@@ -327,6 +327,13 @@ class LoRA(nn.Module):
                 layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
+
+    def _reset_biases(self):
+        for layer, sigma in zip(self.f, self.autoencoder_sigmas):
+            if isinstance(layer, nn.Linear):
+                if layer.bias is not None:
+                    nn.init.zeros_(layer.bias)
+
             
     def rescale_weights(self):
         """
@@ -403,7 +410,11 @@ class LoRA(nn.Module):
             self.training_steps = self.training_steps + 1
             if self.training_steps == 1:
                 self.sigma_w = weights.std().item()
+        if self._epoch_start():
             w = self.rescale(weights, self.sigma_w)
+            if self.location == "selfattn":
+                self._reset_biases()
+
         else:
             w = weights.clone()
         if scaling is None:
@@ -416,7 +427,7 @@ class LoRA(nn.Module):
             case "selfattn":
                 return w + added * scaling
             case "output" | "intermediate": 
-                return weights * (added * scaling)
+                return w * (added * scaling)
             case _:
                 return w
             
@@ -461,8 +472,8 @@ class LoRA(nn.Module):
         self._increment_training_step_maybe()
         self.record_weights_var_maybe()
         
-        if self._epoch_start():
-            self.rescale_weights()
+        
+        #self.rescale_weights()
         
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
