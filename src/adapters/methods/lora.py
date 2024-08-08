@@ -414,8 +414,8 @@ class LoRA(nn.Module):
         match self.location:
             case "selfattn":
                 if self._epoch_start():
-                    return self.rescale(weights, self.sigma_w) + self.rescale(added, self.sigma_w) * scaling
-                return weights + self.rescale(added, self.sigma_w) * scaling
+                    return self.rescale(weights, self.sigma_w) + self.rescale(added, self.sigma) * scaling
+                return weights + self.rescale(added, self.sigma) * scaling
             case "output" | "intermediate":
                 if self._epoch_start():
                     return self.rescale(weights, self.sigma_w) * (added * scaling)
