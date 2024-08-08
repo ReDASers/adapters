@@ -475,14 +475,18 @@ class LoRA(nn.Module):
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
-            normed_dw = dw / dw_norm       
-            hidden_states = self.rescale(normed_dw, self.sigma)
+            normed_dw = dw / dw_norm
+            if normed_dw.std() > self.sigma:
+                hidden_states = self.rescale(normed_dw, self.sigma)  
+            else:
+                hidden_states = normed_dw     
+            
         # Alternative calculation mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             self.record_dw_var_maybe(scaling_vector)
-            hidden_states = scaling_vector # * (1.0 - self.scalar_scaler)
+            hidden_states = scaling_vector  * (1.0 - self.scalar_scaler)
             
 
         self.delta_w = hidden_states.clone()
