@@ -401,8 +401,8 @@ class LoRA(nn.Module):
         """
         if self.training:
             self.training_steps = self.training_steps + 1
-        if self.training_steps == 1:
-            self.sigma_w = weights.std().item()
+            if self.training_steps == 1:
+                self.sigma_w = weights.std().item()
         if self._epoch_start():
             w = self.rescale(weights, self.sigma_w)
         else:
