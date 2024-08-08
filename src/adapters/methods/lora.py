@@ -412,8 +412,6 @@ class LoRA(nn.Module):
                 self.sigma_w = weights.std().item()
         if self._epoch_start():
             w = self.rescale(weights, self.sigma_w)
-            if self.location == "selfattn":
-                self._reset_biases()
 
         else:
             w = weights.clone()
