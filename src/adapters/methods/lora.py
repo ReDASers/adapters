@@ -327,13 +327,6 @@ class LoRA(nn.Module):
                 layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
-
-    def _reset_biases(self):
-        for layer, sigma in zip(self.f, self.autoencoder_sigmas):
-            if isinstance(layer, nn.Linear):
-                if layer.bias is not None:
-                    nn.init.zeros_(layer.bias)
-
             
     def rescale_weights(self):
         """
@@ -383,7 +376,7 @@ class LoRA(nn.Module):
                 self.variances[self.location+"_W"].append(weights.var().item())
 
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
-        if sigma == 0 or not self.training:
+        if sigma == 0:
             return weights
         w = torch.nan_to_num(weights)
         u = torch.mean(w, dtype=dtype)
@@ -408,11 +401,10 @@ class LoRA(nn.Module):
         """
         if self.training:
             self.training_steps = self.training_steps + 1
-            if self.training_steps == 1:
-                self.sigma_w = weights.std().item()
+        if self.training_steps == 1:
+            self.sigma_w = weights.std().item()
         if self._epoch_start():
             w = self.rescale(weights, self.sigma_w)
-
         else:
             w = weights.clone()
         if scaling is None:
@@ -470,8 +462,8 @@ class LoRA(nn.Module):
         self._increment_training_step_maybe()
         self.record_weights_var_maybe()
         
-        
-        #self.rescale_weights()
+        #if self._epoch_start():
+        #    self.rescale_weights()
         
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
