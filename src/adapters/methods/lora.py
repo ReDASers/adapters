@@ -192,7 +192,7 @@ class LoRA(nn.Module):
         self.f = self._get_autoencoder_architecture("NLbLN")
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-        self.sigma = self.A_sigma
+        self.sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
         
         
 
@@ -213,7 +213,7 @@ class LoRA(nn.Module):
         Initializes the LoRA matrices A and B.
         """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
-        #self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
+        
         self.A_sigma = self.lora_A.std().item()
         self.variances[self.location+"_lora_A"] = [self.lora_A.var().item()]
         nn.init.zeros_(self.lora_B)
