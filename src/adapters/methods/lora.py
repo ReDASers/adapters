@@ -409,7 +409,7 @@ class LoRA(nn.Module):
             scaling = self.scaling
 
         self.record_dw_var_maybe(added * scaling)
-        self.record_w_var_maybe(w)
+        self.record_w_var_maybe(weights)
         self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
