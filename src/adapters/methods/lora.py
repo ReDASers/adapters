@@ -287,7 +287,10 @@ class LoRA(nn.Module):
 
     def _increment_training_step_maybe(self):
         if self.training:
+            self.training_steps = self.training_steps + 1
             self.n_batches = self.n_batches + 1
+            if self.n_batches > self.batches_per_epoch:
+                self.n_batches = 1
 
     def _epoch_start(self) -> bool:
         """
@@ -302,8 +305,7 @@ class LoRA(nn.Module):
         if not self.training:
             return False
         
-        if self.n_batches > self.batches_per_epoch:
-            self.n_batches = 1
+        if self.n_batches == 1 and self.training_steps > 1:
             return True
         return False
     
@@ -400,12 +402,9 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
-        if self.training:
-            self.training_steps = self.training_steps + 1
         if self.training_steps == 1:
             self.sigma_w = weights.std().item()
        
-   
         if scaling is None:
             scaling = self.scaling
 
@@ -465,8 +464,8 @@ class LoRA(nn.Module):
         self._increment_training_step_maybe()
         self.record_weights_var_maybe()
         
-        #if self._epoch_start():
-        #    self.rescale_weights()
+        if self._epoch_start():
+            self.rescale_weights()
         
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
