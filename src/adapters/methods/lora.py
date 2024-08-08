@@ -324,10 +324,10 @@ class LoRA(nn.Module):
         for layer, sigma in zip(self.f, self.autoencoder_sigmas):
             if isinstance(layer, nn.Linear):
                 assert sigma, "Sigma must be set."
-                if layer.weight.std() > 2 * sigma:
-                    layer.weight.data = self.rescale(layer.weight.data, sigma=2*sigma)
-                    if layer.bias is not None:
-                        nn.init.zeros_(layer.bias)
+                
+                layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
+                if layer.bias is not None:
+                    nn.init.zeros_(layer.bias)
             
     def rescale_weights_maybe(self):
         """
@@ -337,11 +337,9 @@ class LoRA(nn.Module):
             return
         
         if self.location in ["output", "intermediate"]:
-            if self.lora_C.std() > 2 * self.sigma:
-                self.lora_C.data = self.rescale(self.lora_C.data, sigma=2*self.sigma, dtype=torch.float32)    
+            self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
         elif self.location == "selfattn":
-            if self.lora_A.std() > 2 * self.A_sigma:
-                self.lora_A.data = self.rescale(self.lora_A.data, sigma=2*self.A_sigma)
+            self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
             self._rescale_autoencoder_weights()
         
             
