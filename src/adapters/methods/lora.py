@@ -80,6 +80,8 @@ class LoRA(nn.Module):
         self._setup_gating_maybe(gating_heads)
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         self.n_batches = 0 # have not trained yet   
+        self.training_steps = 0
+        self.sigma_w = 0.0
 
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
@@ -397,19 +399,27 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
+        if self.training:
+            self.training_steps = self.training_steps + 1
+        if self.training_steps == 1:
+            self.sigma_w = weights.std().item()
+        if self._epoch_start():
+            w = self.rescale(weights, self.sigma_w)
+        else:
+            w = weights.clone()
         if scaling is None:
             scaling = self.scaling
 
         self.record_dw_var_maybe(added * scaling)
-        self.record_w_var_maybe(weights)
+        self.record_w_var_maybe(w)
         self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
-                return weights + added * scaling
+                return w + added * scaling
             case "output" | "intermediate": 
-                return weights * (added * scaling)
+                return w * (added * scaling)
             case _:
-                return weights
+                return w
             
     def get_variances(self) -> Dict[str, List[float]]:
         """
@@ -452,8 +462,8 @@ class LoRA(nn.Module):
         self._increment_training_step_maybe()
         self.record_weights_var_maybe()
         
-        if self._epoch_start():
-            self.rescale_weights()
+        #if self._epoch_start():
+        #    self.rescale_weights()
         
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
