@@ -229,11 +229,11 @@ class LoRA(nn.Module):
 
         for i, layer in enumerate(layers):
             if isinstance(layer, nn.Linear):
-                #if i < len(layers) / 2:
-                #    mode = "fan_in"
-                #else:
-                #    mode = "fan_out"
-                nn.init.kaiming_normal_(layer.weight, mode="fan_out", a=math.sqrt(5))
+                if i < len(layers) / 2:
+                    mode = "fan_in"
+                else:
+                    mode = "fan_out"
+                nn.init.kaiming_normal_(layer.weight, mode=mode, a=math.sqrt(5))
                 # sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
                 sigma = layer.weight.std().item()
                 self.autoencoder_sigmas[i] = sigma
