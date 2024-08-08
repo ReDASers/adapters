@@ -412,15 +412,15 @@ class LoRA(nn.Module):
         self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
-                if self._epoch_end():
+                if self._is_epoch_end():
                     return self.rescale(weights, self.sigma_w) + self.rescale(added, self.sigma_w) * scaling
                 return weights + self.rescale(added, self.sigma_w) * scaling
             case "output" | "intermediate":
-                if self._epoch_end():
+                if self._is_epoch_end():
                     return self.rescale(weights, self.sigma_w) * (added * scaling)
                 return weights * (added * scaling)
             case _:
-                return w
+                raise ValueError(f"Invalid location key: {self.location}")
             
     def get_variances(self) -> Dict[str, List[float]]:
         """
