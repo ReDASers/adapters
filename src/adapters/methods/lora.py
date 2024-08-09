@@ -231,8 +231,8 @@ class LoRA(nn.Module):
         n = 0
         for i, layer in enumerate(layers):
             if isinstance(layer, nn.Linear):
-                #if i < len(layers) / 2:
-                if n % 2 == 0:
+                if i < len(layers) / 2:
+                # if n % 2 == 0:
                     mode = "fan_in"
                 else:
                     mode = "fan_out"
@@ -462,7 +462,7 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
-        # self.rescale_weights_maybe()
+        self.rescale_weights_maybe()
         self.record_weights_var_maybe()
         
         #if self._epoch_start():
