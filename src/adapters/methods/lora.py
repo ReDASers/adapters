@@ -495,7 +495,7 @@ class LoRA(nn.Module):
             else:
                 hidden_states = normed_dw     
             
-        # Alternative calculation mode
+        # scaling mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
