@@ -118,6 +118,33 @@ class LoRA(nn.Module):
                 return "output"
             case _:
                 raise ValueError(f"Invalid location key: {location_key}")
+            
+    def _get_autoencoder_architecture(self, arch: str = "NLbLN") -> nn.Sequential:
+        """
+        Retrieves the autoencoder architecture based on the configuration.
+
+        Returns:
+            nn.Sequential: The autoencoder architecture as a sequential model.
+
+        Raises:
+            ValueError: If the autoencoder architecture is unknown.
+        """
+        architectures = {
+            "NLbLN": [
+                nn.Linear(self.connections_in, self.r),
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.r, self.bottleneck_size),
+                nn.Linear(self.bottleneck_size, self.r),
+                Activation_Function_Class(self.non_linearity.lower()),
+                nn.Linear(self.r, self.connections_in),
+            ],
+        }
+
+        try:
+            return nn.Sequential(*architectures[arch])
+        except KeyError:
+            raise ValueError(f"Unknown autoencoder architecture: {arch}")
+        
     
     def _layer_specific_setup(self, lora_A_shape, lora_B_shape):
          # Determine calculation mode and setup accordingly
@@ -231,7 +258,7 @@ class LoRA(nn.Module):
         n = 0
         for i, layer in enumerate(layers):
             if isinstance(layer, nn.Linear):
-                if i < len(layers) / 2:
+                if i <= len(layers) / 2:
                 # if n % 2 == 0:
                     mode = "fan_in"
                 else:
@@ -245,32 +272,7 @@ class LoRA(nn.Module):
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
 
-    def _get_autoencoder_architecture(self, arch: str = "NLbLN") -> nn.Sequential:
-        """
-        Retrieves the autoencoder architecture based on the configuration.
-
-        Returns:
-            nn.Sequential: The autoencoder architecture as a sequential model.
-
-        Raises:
-            ValueError: If the autoencoder architecture is unknown.
-        """
-        architectures = {
-            "NLbLN": [
-                nn.Linear(self.connections_in, self.r),
-                Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.bottleneck_size),
-                nn.Linear(self.bottleneck_size, self.r),
-                Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.connections_in),
-            ],
-        }
-
-        try:
-            return nn.Sequential(*architectures[arch])
-        except KeyError:
-            raise ValueError(f"Unknown autoencoder architecture: {arch}")
-        
+    
     @property
     def delta_w(self) -> torch.Tensor:
         """Placeholder for delta_w calculation."""
