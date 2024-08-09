@@ -411,8 +411,10 @@ class LoRA(nn.Module):
         """
         if self.training and self.training_steps == 1:
             self.sigma_w = weights.std().item()
-        
-        w = self.rescale(weights, self.sigma_w)
+        if self.training:
+            w = self.rescale(weights, self.sigma_w)
+        else:
+            w = weights.clone()
 
         if scaling is None:
             scaling = self.scaling
