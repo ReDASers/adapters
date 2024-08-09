@@ -243,8 +243,7 @@ class LoRA(nn.Module):
         self.A_sigma = self.lora_A.std().item()
         self.variances[self.location+"_lora_A"] = [self.lora_A.var().item()]
         nn.init.zeros_(self.lora_B)
-        #self.B_sigma = 0.0
-        self.B_sigma = self.lora_B.std().item()
+        self.B_sigma = 0.0
         self.variances[self.location+"_lora_B"] = [self.lora_B.var().item()]
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
