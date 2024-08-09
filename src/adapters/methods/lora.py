@@ -218,7 +218,7 @@ class LoRA(nn.Module):
         self.f = self._get_autoencoder_architecture("NLbLN")
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-        self.sigma = self.A_sigma
+        self.sigma = self.f[-1].weight.std().item()
         
         
 
@@ -483,6 +483,7 @@ class LoRA(nn.Module):
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
+            
             x = torch.nan_to_num(hidden_states)
             self.record_dw_var_maybe(x)
             fx = self.f(self.dropout(x))
@@ -490,7 +491,7 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
-            if normed_dw.std() > self.sigma and self.epoch > 1:
+            if normed_dw.std() > self.sigma:
                 hidden_states = self.rescale(normed_dw, self.sigma)  
             else:
                 hidden_states = normed_dw     
