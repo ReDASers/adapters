@@ -301,18 +301,23 @@ class LoRA(nn.Module):
         Returns:
             bool: True if rescaling is required, False otherwise.
         """
+        if not self.training:
+            return False
+        
         if self.batches_per_epoch < 1:
             return False
         
         if not self.training:
             return False
         
-        if self.n_batches > self.batches_per_epoch:
-            # self.n_batches = 1
+        if self.n_batches  == 1: 
             return True
         return False
     
     def _epoch_end(self) -> bool:
+        if not self.training:
+            return False
+        
         if self.batches_per_epoch < 1:
             return False
         
@@ -406,13 +411,12 @@ class LoRA(nn.Module):
         """
         if self.training and self.training_steps == 1:
             self.sigma_w = weights.std().item()
-        # if self._epoch_start():
-            
-        #    w = self.rescale(weights, self.sigma_w)
-        #   else:
-            #w = weights.clone()
-        if self.training:
+        if self._epoch_start():
             w = self.rescale(weights, self.sigma_w)
+        else:
+            w = weights.clone()
+        if self.training:
+            w = s
         else:
             w = weights.clone()
         if scaling is None:
@@ -423,7 +427,7 @@ class LoRA(nn.Module):
         self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
-                return w + added * scaling
+                return self.rescale(weights, self.sigma_w) + added * scaling
             case "output" | "intermediate": 
                 return w * (added * scaling)
             case _:
