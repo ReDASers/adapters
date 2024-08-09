@@ -386,6 +386,11 @@ class LoRA(nn.Module):
             with torch.no_grad():
                 self.variances[self.location+"_W"].append(weights.var().item())
 
+    def record_var(self, weights: torch.Tensor, param_name: str):
+        if self.training:
+            with torch.no_grad():
+                self.variances[self.location+"_"+param_name].append(weights.var().item())
+
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
             return weights
@@ -431,7 +436,7 @@ class LoRA(nn.Module):
         if scaling is None:
             scaling = self.scaling
 
-        self.record_dw_var_maybe(added * scaling)
+        self.record_dw_var_maybe(added)
         self.record_w_var_maybe(w)
         self.record_weights_var_maybe()
         match self.location:
@@ -474,7 +479,6 @@ class LoRA(nn.Module):
         """
         self._increment_training_step_maybe()
         # self.rescale_weights_maybe()
-        self.record_weights_var_maybe()
         # if self._epoch_start():
         #if self._epoch_start():
         #    self.rescale_weights()
@@ -485,7 +489,6 @@ class LoRA(nn.Module):
                 hidden_states = layer_input
             
             x = torch.nan_to_num(hidden_states)
-            self.record_dw_var_maybe(x)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
@@ -500,7 +503,6 @@ class LoRA(nn.Module):
         else:
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
-            self.record_dw_var_maybe(scaling_vector)
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler) 
             
 
