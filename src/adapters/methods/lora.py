@@ -218,7 +218,7 @@ class LoRA(nn.Module):
         self.f = self._get_autoencoder_architecture("NLbLN")
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-        self.sigma = self.f[0].weight.std().item()
+        self.sigma = self.A_sigma
         
         
 
