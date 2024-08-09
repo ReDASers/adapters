@@ -82,7 +82,7 @@ class LoRA(nn.Module):
         self.n_batches = 0 # have not trained yet   
         self.training_steps = 0
         self.sigma_w = 0.0
-        self.sigma_h = 0.0
+        self.sigma_h = torch.zeros(self.batches_per_epoch)
         self.epoch = 1
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
@@ -429,10 +429,10 @@ class LoRA(nn.Module):
         """
         if self.training and self.epoch == 1:
             self.sigma_w = self.sigma_w + weights.std().item()
-            self.sigma_h = self.sigma_h + added.std().item()
+            self.sigma_h[self.n_batches - 1] = added.std().item()
             if self._epoch_end():
                 self.sigma_w = self.sigma_w / self.batches_per_epoch
-                self.sigma_h = self.sigma_h / self.batches_per_epoch
+                
         if self._epoch_start() and self.epoch > 1:
             w = self.rescale(weights, self.sigma_w)
         else:
@@ -447,7 +447,7 @@ class LoRA(nn.Module):
         match self.location:
             case "selfattn":
                 if self.epoch > 1:
-                    h = self.rescale(added, self.sigma_h)
+                    h = self.rescale(added, self.sigma_h[self.n_batches - 1])
                 else:
                     h = added
                 return w + h * scaling
