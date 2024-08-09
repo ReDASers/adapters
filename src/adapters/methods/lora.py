@@ -228,13 +228,15 @@ class LoRA(nn.Module):
             layers (nn.Sequential): Sequential model containing the layers.
         """
         self.autoencoder_sigmas = torch.zeros(len(layers), dtype=torch.float32)
-
+        n = 0
         for i, layer in enumerate(layers):
             if isinstance(layer, nn.Linear):
-                if i < len(layers) / 2:
+                #if i < len(layers) / 2:
+                if n % 2 == 0:
                     mode = "fan_in"
                 else:
                     mode = "fan_out"
+                n = n + 1
                 nn.init.kaiming_normal_(layer.weight, mode=mode, a=math.sqrt(5))
                 # sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
                 sigma = layer.weight.std().item()
