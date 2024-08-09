@@ -345,14 +345,21 @@ class LoRA(nn.Module):
         """
         Rescale the weights based on the current configuration.
         """
-        if not self._epoch_start() or self.epoch == 1:
+        if self.epoch == 1:
             return
         
-        if self.location in ["output", "intermediate"]:
-            self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
-        elif self.location == "selfattn":
+        match self.location:
+            case "output":
+                self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
+            case "intermediate" if self._epoch_start():
+                self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
+            case "selfattn":
+                pass
+            case _:
+                raise ValueError(f"Unknown location: {self.location}")  
+        # elif self.location == "selfattn":
             # self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
-            self._rescale_autoencoder_weights()
+            # self._rescale_autoencoder_weights()
         
             
     def record_weights_var_maybe(self) -> None:
