@@ -345,19 +345,12 @@ class LoRA(nn.Module):
         """
         Rescale the weights based on the current configuration.
         """
-        if self.epoch == 1:
+        if self.epoch == 1 or not self._epoch_start():
             return
         
-        match self.location:
-            case "output" if self._epoch_start():
-                self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
-            case "intermediate":
-                self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
-            case "selfattn":
-                pass
-            case _:
-                pass  
-        # elif self.location == "selfattn":
+        if self.location in ["output", "intermediate"]:
+            self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
+        #   elif self.location == "selfattn":
             # self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
             # self._rescale_autoencoder_weights()
         
@@ -430,7 +423,7 @@ class LoRA(nn.Module):
             self.sigma_w = weights.std().item()
         # burn in period
         
-        if self._epoch_start() and self.epoch > 1:
+        if self._epoch_start() and self.epoch > 1 and self.location == "selfattn":
             w = self.rescale(weights, self.sigma_w)
         else:
             w = weights
