@@ -398,6 +398,15 @@ class LoRA(nn.Module):
         # rescale to original range
         return z * sigma + u
     
+    def get_variances(self) -> Dict[str, List[float]]:
+        """
+        Returns the recorded variances for each parameter.
+
+        Returns:
+            Dict[str, List[float]]: Dictionary with variance lists for each parameter.
+        """
+        return self.variances
+    
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
 
@@ -432,15 +441,7 @@ class LoRA(nn.Module):
                 return w * (added * scaling)
             case _:
                 return w
-            
-    def get_variances(self) -> Dict[str, List[float]]:
-        """
-        Returns the recorded variances for each parameter.
-
-        Returns:
-            Dict[str, List[float]]: Dictionary with variance lists for each parameter.
-        """
-        return self.variances
+    
 
     def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
         """Inverts the composition operation between existing and injected weights.
