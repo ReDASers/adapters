@@ -473,7 +473,7 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
-        #self.rescale_weights_maybe()
+        # self.rescale_weights_maybe()
         self.record_weights_var_maybe()
         # if self._epoch_start():
         #if self._epoch_start():
@@ -500,7 +500,7 @@ class LoRA(nn.Module):
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             self.record_dw_var_maybe(scaling_vector)
-            dw = scaling_vector  * (1.0 - self.scalar_scaler)
+            dw = scaling_vector * (1.0 - self.scalar_scaler)
             if dw.std() > self.sigma:
                 hidden_states = self.rescale(dw, self.sigma)  
             else:
