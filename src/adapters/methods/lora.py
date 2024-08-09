@@ -424,7 +424,7 @@ class LoRA(nn.Module):
         self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
-                return self.rescale(weights, self.sigma_w) + added * scaling
+                return w + added * scaling
             case "output" | "intermediate": 
                 return w * (added * scaling)
             case _:
