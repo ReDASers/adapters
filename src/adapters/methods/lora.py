@@ -351,8 +351,8 @@ class LoRA(nn.Module):
         if self.location in ["output", "intermediate"]:
             self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
         elif self.location == "selfattn":
-            self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
-        #    self._rescale_autoencoder_weights()
+            # self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
+            self._rescale_autoencoder_weights()
         
             
     def record_weights_var_maybe(self) -> None:
