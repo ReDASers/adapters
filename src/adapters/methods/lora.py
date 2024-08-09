@@ -446,7 +446,11 @@ class LoRA(nn.Module):
         self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
-                return w + added * scaling
+                if self.epoch > 1:
+                    h = self.rescale(added, self.sigma_h)
+                else:
+                    h = added
+                return w + h * scaling
             case "output" | "intermediate": 
                 return w * (added * scaling)
             case _:
@@ -498,12 +502,12 @@ class LoRA(nn.Module):
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
-            normed_dw = dw / dw_norm
-            self.record_var(normed_dw, "normed_dw")
-            if self.epoch > 1 and normed_dw.std() > self.sigma_h:
-                hidden_states = self.rescale(normed_dw, self.sigma_h)  
-            else:
-                hidden_states = normed_dw     
+            hidden_states = dw / dw_norm
+            #self.record_var(normed_dw, "normed_dw")
+            #if self.epoch > 1 and normed_dw.std() > self.sigma_h:
+            #    hidden_states = self.rescale(normed_dw, self.sigma_h)  
+            #else:
+            #    hidden_states = normed_dw     
             
         # scaling mode
         else:
