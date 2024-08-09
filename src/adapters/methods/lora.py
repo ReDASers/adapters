@@ -82,6 +82,7 @@ class LoRA(nn.Module):
         self.n_batches = 0 # have not trained yet   
         self.training_steps = 0
         self.sigma_w = 0.0
+        self.sigma_h = 0.0
         self.epoch = 1
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
@@ -428,9 +429,10 @@ class LoRA(nn.Module):
         """
         if self.training and self.epoch == 1:
             self.sigma_w = self.sigma_w + weights.std().item()
+            self.sigma_h = self.sigma_h + added.std().item()
             if self._epoch_end():
                 self.sigma_w = self.sigma_w / self.batches_per_epoch
-        
+                self.sigma_h = self.sigma_h / self.batches_per_epoch
         if self._epoch_start() and self.epoch > 1:
             w = self.rescale(weights, self.sigma_w)
         else:
@@ -498,8 +500,8 @@ class LoRA(nn.Module):
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
             self.record_var(normed_dw, "normed_dw")
-            if normed_dw.std() > self.sigma:
-                hidden_states = self.rescale(normed_dw, self.sigma)  
+            if self.epoch > 1 and normed_dw.std() > self.sigma_h:
+                hidden_states = self.rescale(normed_dw, self.sigma_h)  
             else:
                 hidden_states = normed_dw     
             
