@@ -502,7 +502,7 @@ class LoRA(nn.Module):
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             self.record_dw_var_maybe(scaling_vector)
-            dw = scaling_vector * (1.0 - self.scalar_scaler) 
+            hidden_states = scaling_vector * (1.0 - self.scalar_scaler) 
             
 
         self.delta_w = hidden_states.clone()
