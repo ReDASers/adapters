@@ -388,7 +388,8 @@ class LoRA(nn.Module):
     def record_var(self, weights: torch.Tensor, param_name: str):
         if self.training:
             with torch.no_grad():
-                self.variances[self.location+"_"+param_name].append(weights.var().item())
+
+                self.variances.get([self.location+"_"+param_name], []).append(weights.var().item())
 
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
@@ -494,6 +495,7 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
+            self.record_var(normed_dw, "normed_dw")
             if normed_dw.std() > self.sigma:
                 hidden_states = self.rescale(normed_dw, self.sigma)  
             else:
