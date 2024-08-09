@@ -349,9 +349,9 @@ class LoRA(nn.Module):
             return
         
         match self.location:
-            case "output":
+            case "output" if self._epoch_start():
                 self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
-            case "intermediate" if self._epoch_start():
+            case "intermediate":
                 self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
             case "selfattn":
                 pass
