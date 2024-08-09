@@ -289,7 +289,10 @@ class LoRA(nn.Module):
 
     def _increment_training_step_maybe(self):
         if self.training:
+            self.training_steps = self.training_steps + 1
             self.n_batches = self.n_batches + 1
+            if self.n_batches > self.batches_per_epoch:
+                self.n_batches = 1
 
     def _epoch_start(self) -> bool:
         """
@@ -305,7 +308,7 @@ class LoRA(nn.Module):
             return False
         
         if self.n_batches > self.batches_per_epoch:
-            self.n_batches = 1
+            # self.n_batches = 1
             return True
         return False
     
@@ -341,9 +344,9 @@ class LoRA(nn.Module):
         
         if self.location in ["output", "intermediate"]:
             self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
-        elif self.location == "selfattn":
-            self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
-            self._rescale_autoencoder_weights()
+        #elif self.location == "selfattn":
+        #    self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
+        #    self._rescale_autoencoder_weights()
         
             
     def record_weights_var_maybe(self) -> None:
@@ -401,15 +404,14 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
-        if self.training:
-            self.training_steps = self.training_steps + 1
-        if self.training_steps == 1:
+        if self.training and self.training_steps == 1:
             self.sigma_w = weights.std().item()
-        if self._epoch_start():
+        # if self._epoch_start():
             
-            w = self.rescale(weights, self.sigma_w)
-        else:
+        #    w = self.rescale(weights, self.sigma_w)
+        #   else:
             #w = weights.clone()
+        if self.training:
             w = self.rescale(weights, self.sigma_w)
         if scaling is None:
             scaling = self.scaling
@@ -466,7 +468,7 @@ class LoRA(nn.Module):
         self._increment_training_step_maybe()
         # self.rescale_weights_maybe()
         self.record_weights_var_maybe()
-        
+        # if self._epoch_start():
         #if self._epoch_start():
         #    self.rescale_weights()
         
