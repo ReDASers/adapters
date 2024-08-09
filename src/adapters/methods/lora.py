@@ -349,11 +349,9 @@ class LoRA(nn.Module):
             return
         
         if self.location in ["output", "intermediate"]:
-            if self.lora_C.std() > self.sigma:
-                self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
-        #    self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)    
-        #elif self.location == "selfattn":
-        #    self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
+            self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
+        elif self.location == "selfattn":
+            self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
         #    self._rescale_autoencoder_weights()
         
             
