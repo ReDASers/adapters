@@ -388,8 +388,10 @@ class LoRA(nn.Module):
     def record_var(self, weights: torch.Tensor, param_name: str):
         if self.training:
             with torch.no_grad():
-
-                self.variances.get([self.location+"_"+param_name], []).append(weights.var().item())
+                key = self.location+"_"+param_name
+                if key not in self.variances:
+                    self.variances[key] = []
+                self.variances[key].append(weights.var().item()) 
 
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         if sigma == 0:
