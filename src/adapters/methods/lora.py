@@ -356,7 +356,7 @@ class LoRA(nn.Module):
             case "selfattn":
                 pass
             case _:
-                raise ValueError(f"Unknown location: {self.location}")  
+                pass  
         # elif self.location == "selfattn":
             # self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
             # self._rescale_autoencoder_weights()
