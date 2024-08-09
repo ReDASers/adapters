@@ -345,7 +345,7 @@ class LoRA(nn.Module):
         """
         Rescale the weights based on the current configuration.
         """
-        if not self.training or self.n_batches <= self.batches_per_epoch:
+        if not self._epoch_start() or self.epoch == 1:
             return
         
         if self.location in ["output", "intermediate"]:
@@ -413,8 +413,8 @@ class LoRA(nn.Module):
         if self.training and self.training_steps == 1:
             self.sigma_w = weights.std().item()
         # burn in period
-
-        if self.epoch > 1 and (self.location == "selfattn" or self._epoch_start()):
+        
+        if self._epoch_start() and self.epoch > 1:
             w = self.rescale(weights, self.sigma_w)
         else:
             w = weights
@@ -431,7 +431,7 @@ class LoRA(nn.Module):
             case "output" | "intermediate": 
                 return w * (added * scaling)
             case _:
-                raise ValueError(f"Unknown location: {self.location}")
+                return w
             
     def get_variances(self) -> Dict[str, List[float]]:
         """
@@ -472,7 +472,7 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
-        # self.rescale_weights_maybe()
+        self.rescale_weights_maybe()
         self.record_weights_var_maybe()
         # if self._epoch_start():
         #if self._epoch_start():
