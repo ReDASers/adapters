@@ -82,7 +82,7 @@ class LoRA(nn.Module):
         self.n_batches = 0 # have not trained yet   
         self.training_steps = 0
         self.sigma_w = 0.0
-
+        self.epoch = 1
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
@@ -293,6 +293,7 @@ class LoRA(nn.Module):
             self.n_batches = self.n_batches + 1
             if self.n_batches > self.batches_per_epoch:
                 self.n_batches = 1
+                self.epoch = self.epoch + 1
 
     def _epoch_start(self) -> bool:
         """
@@ -412,7 +413,8 @@ class LoRA(nn.Module):
         if self.training and self.training_steps == 1:
             self.sigma_w = weights.std().item()
         # burn in period
-        if self._epoch_start() and self.training_steps > 1:
+
+        if self.epoch > 1 and (self.location == "selfattn" or self._epoch_start()):
             w = self.rescale(weights, self.sigma_w)
         else:
             w = weights
@@ -429,7 +431,7 @@ class LoRA(nn.Module):
             case "output" | "intermediate": 
                 return w * (added * scaling)
             case _:
-                return w
+                raise ValueError(f"Unknown location: {self.location}")
             
     def get_variances(self) -> Dict[str, List[float]]:
         """
