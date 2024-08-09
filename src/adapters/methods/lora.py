@@ -423,7 +423,7 @@ class LoRA(nn.Module):
             self.sigma_w = weights.std().item()
         # burn in period
         
-        if self._epoch_start() and self.epoch > 1 and self.location == "selfattn":
+        if self._epoch_start() and self.epoch > 1:
             w = self.rescale(weights, self.sigma_w)
         else:
             w = weights
@@ -473,7 +473,7 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
-        self.rescale_weights_maybe()
+        # self.rescale_weights_maybe()
         self.record_weights_var_maybe()
         # if self._epoch_start():
         #if self._epoch_start():
@@ -490,7 +490,7 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
-            if normed_dw.std() > self.sigma:
+            if normed_dw.std() > self.sigma and self.epoch > 1:
                 hidden_states = self.rescale(normed_dw, self.sigma)  
             else:
                 hidden_states = normed_dw     
