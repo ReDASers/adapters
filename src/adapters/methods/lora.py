@@ -520,10 +520,10 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
-            dw_std = normed_dw.std()
+            dw_std = normed_dw.std().item()
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = dw_std
-                self.sigma_h = torch.mean(self.batch_sigmas)
+                self.sigma_h = torch.mean(self.batch_sigmas).item()
 
             
             self.record_var(dw_std, "dw_std")
