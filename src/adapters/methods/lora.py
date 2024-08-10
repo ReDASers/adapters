@@ -385,13 +385,16 @@ class LoRA(nn.Module):
             with torch.no_grad():
                 self.variances[self.location+"_W"].append(weights.var().item())
 
-    def record_var(self, weights: torch.Tensor, param_name: str):
+    def record_var(self, weights_or_num: torch.Tensor | float, param_name: str):
         if self.training:
             with torch.no_grad():
                 key = self.location+"_"+param_name
                 if key not in self.variances:
                     self.variances[key] = []
-                self.variances[key].append(weights.var().item()) 
+                if isinstance(weights_or_num, torch.Tensor):
+                    self.variances[key].append(weights_or_num.var().item()) 
+                else:
+                    self.variances[key].append(weights_or_num)
 
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         """
@@ -519,17 +522,17 @@ class LoRA(nn.Module):
             normed_dw = dw / dw_norm
             dw_std = normed_dw.std()
             if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = dw_std.item()
+                self.batch_sigmas[self.n_batches - 1] = dw_std
                 self.sigma_h = torch.mean(self.batch_sigmas)
 
             
             self.record_var(dw_std, "dw_std")
             self.record_var(self.sigma_h, "dw_norm")
             # Rescale delta_w if its standard deviation is greater than sigma_h
-            if dw_std > self.sigma_h + self.sigma_h * 0.05:
+            if dw_std > self.sigma_h + self.sigma_h * 0.03:
                 hidden_states = self.rescale(normed_dw, self.sigma_h)
-            elif dw_std < self.sigma_h / math.sqrt(3):
-                hidden_states = self.rescale(normed_dw, self.sigma_h)
+            #elif dw_std < self.sigma_h * 0.05:
+            #    hidden_states = self.rescale(normed_dw, self.sigma_h)
             else:
                 hidden_states = normed_dw     
             
