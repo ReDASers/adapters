@@ -430,7 +430,7 @@ class LoRA(nn.Module):
         if self.training:
             if self.epoch == 1:
                 self.sigma_w = self.sigma_w + weights.std().item()
-                self.sigma_h = self.sigma_h + (added.std().item() + weights.std().item())/2.0
+                self.sigma_h = self.sigma_h + added.std().item()
                 if self._epoch_end():
                     self.sigma_w = self.sigma_w / self.batches_per_epoch
                     self.sigma_h = self.sigma_h / self.batches_per_epoch
@@ -444,6 +444,7 @@ class LoRA(nn.Module):
             w = self.rescale(weights, self.sigma_w)
         else:
             w = weights
+        
 
         if scaling is None:
             scaling = self.scaling
@@ -456,7 +457,7 @@ class LoRA(nn.Module):
                 if self.epoch > 1:
                     h = self.rescale(added, self.sigma_h)
                 else:
-                    h = added
+                    h = self.rescale(added, self.sigma)
                 return w + h * scaling
             case "output" | "intermediate": 
                 return w * (added * scaling)
