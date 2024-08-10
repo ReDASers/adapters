@@ -82,10 +82,8 @@ class LoRA(nn.Module):
         self.n_batches = 0 # have not trained yet   
         self.training_steps = 0
         self.sigma_w = 0.0
-        self.sigma_h = 0.0
-        self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
+        self.batch_sigmas = None
         self.epoch = 1
-        self.sigma_x = 0.0
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
@@ -221,7 +219,10 @@ class LoRA(nn.Module):
         self.f = self._get_autoencoder_architecture("NLbLN")
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-        self.sigma = self.A_sigma
+        self.sigma_h = 0.0
+        self.sigma_std = 0.0
+        self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
+        self.sigma_x = 0.0
         
         
 
@@ -527,16 +528,22 @@ class LoRA(nn.Module):
                 self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item()
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
                 self.sigma_std = torch.std(self.batch_sigmas).item()
+                
 
-            if self.training:
+            if self.training and self.epoch > 1:
+                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item()
+                if self._epoch_end():
+                    sigma_h = torch.mean(self.batch_sigmas).item()
+                    if sigma_h < self.sigma_h:
+                        self.sigma_h = sigma_h
                 self.record_var(normed_dw.std().item(), "dw_std")
                 self.record_var(self.sigma_h, "sigma_h")
+
+        
 
             # Rescale delta_w if its standard deviation is greater than sigma_h
             dw_std = normed_dw.std().item()
             if dw_std > self.sigma_h:
-                hidden_states = self.rescale(normed_dw, self.sigma_h)
-            elif dw_std < self.sigma_h - self.sigma_std*0.5 and self.epoch > 2:
                 hidden_states = self.rescale(normed_dw, self.sigma_h)
             else:
                 hidden_states = normed_dw     
