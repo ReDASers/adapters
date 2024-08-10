@@ -429,10 +429,10 @@ class LoRA(nn.Module):
         """
         if self.training and self.epoch == 1:
             self.sigma_w = self.sigma_w + weights.std().item()
-            self.sigma_h = self.sigma_h + added.std().item()
+            
             if self._epoch_end():
                 self.sigma_w = self.sigma_w / self.batches_per_epoch
-                self.sigma_h = self.sigma_h / self.batches_per_epoch
+                
         if self._epoch_start() and self.epoch > 1:
             w = self.rescale(weights, self.sigma_w)
         else:
@@ -494,14 +494,16 @@ class LoRA(nn.Module):
                 hidden_states = layer_input
             
             x = torch.nan_to_num(hidden_states)
-            x = self.rescale(x, self.sigma)
+            #x = self.rescale(x, self.sigma)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
             self.record_var(normed_dw, "normed_dw")
-            if self.epoch > 1 and normed_dw.std() > self.sigma_h:
+            if self.epoch == 1:
+                self.sigma_h = (self.sigma_h + normed_dw.std().item()) / self.n_batches
+            if normed_dw.std() > self.sigma_h:
                 hidden_states = self.rescale(normed_dw, self.sigma_h)  
             else:
                 hidden_states = normed_dw     
