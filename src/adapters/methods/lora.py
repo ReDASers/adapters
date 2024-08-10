@@ -454,7 +454,7 @@ class LoRA(nn.Module):
         match self.location:
             case "selfattn":
                 if self.epoch > 1:
-                    h = self.rescale(added, self.sigma_h)
+                    h = self.rescale(added, (self.sigma_h + added.std().item())/2)
                 else:
                     h = added
                 return w + h * scaling
