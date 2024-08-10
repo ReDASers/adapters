@@ -397,12 +397,14 @@ class LoRA(nn.Module):
         if sigma == 0:
             return weights
         w = torch.nan_to_num(weights)
+
+        # calculate the mean of the weights (this is not W, can be dw or any other weight)
         u = torch.mean(w, dtype=dtype)
+        # calculate the standard deviation of the weights
         stddev = torch.std(w)
-  
         # calculate z-scores
         z = (w - u) / (stddev + 1e-12)
-        # rescale to original range
+        # rescale to the desired standard deviation sigma in order to control the variance
         return z * sigma + u
     
     def get_variances(self) -> Dict[str, List[float]]:
