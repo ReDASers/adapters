@@ -430,13 +430,14 @@ class LoRA(nn.Module):
         if self.training:
             if self.epoch == 1:
                 self.sigma_w = self.sigma_w + weights.std().item()
-                self.sigma_h = self.sigma_h + added.std().item()
+                self.sigma_h = self.sigma_h + (added.std().item() + weights.std().item())/2.0
                 if self._epoch_end():
                     self.sigma_w = self.sigma_w / self.batches_per_epoch
-            if self.epoch == 2:
-                self.sigma_h = self.sigma_h + added.std().item()
-                if self._epoch_end():
-                    self.sigma_h = self.sigma_h / (self.batches_per_epoch * 2)
+                    self.sigma_h = self.sigma_h / self.batches_per_epoch
+            #if self.epoch == 2:
+            #    self.sigma_h = self.sigma_h + added.std().item()
+            #    if self._epoch_end():
+            #       self.sigma_h = self.sigma_h / (self.batches_per_epoch * 2)
             
                 
         if self._epoch_start() and self.epoch > 1:
@@ -452,7 +453,7 @@ class LoRA(nn.Module):
         self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
-                if self.epoch > 2:
+                if self.epoch > 1:
                     h = self.rescale(added, self.sigma_h)
                 else:
                     h = added
