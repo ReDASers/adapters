@@ -433,17 +433,10 @@ class LoRA(nn.Module):
             if self._epoch_end():
                 self.sigma_w = self.sigma_w / self.batches_per_epoch
                 self.sigma_h = self.sigma_h / self.batches_per_epoch
-            #if self.epoch == 2:
-            #    self.sigma_h = self.sigma_h + added.std().item()
-            #    if self._epoch_end():
-            #       self.sigma_h = self.sigma_h / (self.batches_per_epoch * 2)
-            
-                
         if self._epoch_start() and self.epoch > 1:
             w = self.rescale(weights, self.sigma_w)
         else:
             w = weights
-        
 
         if scaling is None:
             scaling = self.scaling
@@ -453,15 +446,11 @@ class LoRA(nn.Module):
         self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
-                if self.epoch > 1:
-                    h = self.rescale(added, (self.sigma_h + added.std().item())/2)
-                else:
-                    h = added
-                return w + h * scaling
+                return w + added * scaling
             case "output" | "intermediate": 
                 return w * (added * scaling)
             case _:
-                raise ValueError(f"Invalid location key: {self.location}")
+                return w
     
 
     def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
@@ -509,12 +498,12 @@ class LoRA(nn.Module):
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
-            hidden_states = dw / dw_norm
-            #self.record_var(normed_dw, "normed_dw")
-            #if self.epoch > 1 and normed_dw.std() > self.sigma_h:
-            #    hidden_states = self.rescale(normed_dw, self.sigma_h)  
-            #else:
-            #    hidden_states = normed_dw     
+            normed_dw = dw / dw_norm
+            self.record_var(normed_dw, "normed_dw")
+            if self.epoch > 1 and normed_dw.std() > self.sigma_h:
+                hidden_states = self.rescale(normed_dw, self.sigma_h)  
+            else:
+                hidden_states = normed_dw     
             
         # scaling mode
         else:
