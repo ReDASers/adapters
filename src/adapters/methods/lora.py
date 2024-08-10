@@ -529,7 +529,7 @@ class LoRA(nn.Module):
 
             
             self.record_var(dw_std, "dw_std")
-            self.record_var(self.sigma_h, "dw_norm")
+            self.record_var(self.sigma_h, "sigma_h")
             # Rescale delta_w if its standard deviation is greater than sigma_h
             if dw_std > self.sigma_h + self.sigma_h * 0.03:
                 hidden_states = self.rescale(normed_dw, self.sigma_h)
