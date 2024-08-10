@@ -68,17 +68,16 @@ class LoRA(nn.Module):
         self.sigma = None
         self._delta_w = None  # Placeholder for delta weights
         # List to store variance for each LoRA instance
-        
+        self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
-
         
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
-        self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
+        
         self.n_batches = 0 # have not trained yet   
         self.training_steps = 0
         self.sigma_h = None
