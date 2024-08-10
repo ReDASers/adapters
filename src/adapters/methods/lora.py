@@ -83,6 +83,7 @@ class LoRA(nn.Module):
         self.training_steps = 0
         self.sigma_w = 0.0
         self.sigma_h = 0.0
+        self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
         self.epoch = 1
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
@@ -322,9 +323,6 @@ class LoRA(nn.Module):
         if self.batches_per_epoch < 1:
             return False
         
-        if not self.training:
-            return False
-        
         if self.n_batches == self.batches_per_epoch:
             return True
         return False
@@ -501,8 +499,10 @@ class LoRA(nn.Module):
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
             self.record_var(normed_dw, "normed_dw")
-            if self.epoch == 1:
-                self.sigma_h = (self.sigma_h + normed_dw.std().item()) / self.n_batches
+            if self.training and self.epoch == 1:
+                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item()
+                self.sigma_h = torch.sum(self.batch_sigmas) / self.n_batches
+            # Rescale delta_w if its standard deviation is greater than sigma_h
             if normed_dw.std() > self.sigma_h:
                 hidden_states = self.rescale(normed_dw, self.sigma_h)  
             else:
