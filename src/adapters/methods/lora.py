@@ -506,7 +506,7 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
-        self.rescale_weights_maybe()
+        # self.rescale_weights_maybe()
         # if self._epoch_start():
         #if self._epoch_start():
         #    self.rescale_weights()
