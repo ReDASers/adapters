@@ -85,6 +85,7 @@ class LoRA(nn.Module):
         self.sigma_h = 0.0
         self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
         self.epoch = 1
+        self.sigma_x = 0.0
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
@@ -490,9 +491,13 @@ class LoRA(nn.Module):
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
+                if self.training and self.epoch == 1:
+                    self.sigma_x += hidden_states.std().item()
+                    if self._epoch_end():
+                        self.sigma_x = self.sigma_x / self.batches_per_epoch
             
             x = torch.nan_to_num(hidden_states)
-            #x = self.rescale(x, self.sigma)
+            x = self.rescale(x, self.sigma_x)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
