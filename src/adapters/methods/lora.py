@@ -67,6 +67,15 @@ class LoRA(nn.Module):
         self.non_linearity = config.non_linearity 
         self.sigma = None
         self._delta_w = None  # Placeholder for delta weights
+        
+        self.sigma_h = None
+        self.sigma_x = None
+        self.sigma_w = 0.0
+        self.batch_sigmas = None
+
+        self.n_batches = 0 # have not trained yet   
+        self.training_steps = 0
+        self.epoch = 1
         # List to store variance for each LoRA instance
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
@@ -78,13 +87,7 @@ class LoRA(nn.Module):
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
         
-        self.n_batches = 0 # have not trained yet   
-        self.training_steps = 0
-        self.sigma_h = None
-        self.sigma_x = None
-        self.sigma_w = 0.0
-        self.batch_sigmas = None
-        self.epoch = 1
+
 
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
@@ -512,7 +515,7 @@ class LoRA(nn.Module):
             if hidden_states is None:
                 hidden_states = layer_input
                 if self.training and self.epoch == 1:
-                    self.sigma_x += hidden_states.std().item()
+                    self.sigma_x = self.sigma_x + hidden_states.std().item()
                     if self._epoch_end():
                         self.sigma_x = self.sigma_x / self.batches_per_epoch
             
