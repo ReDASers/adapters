@@ -517,14 +517,18 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
-            self.record_var(normed_dw, "normed_dw")
+            dw_std = normed_dw.std()
             if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item()
+                self.batch_sigmas[self.n_batches - 1] = dw_std.item()
                 self.sigma_h = torch.mean(self.batch_sigmas)
+
+            
+            self.record_var(dw_std, "dw_std")
+            self.record_var(self.sigma_h, "dw_norm")
             # Rescale delta_w if its standard deviation is greater than sigma_h
-            if normed_dw.std() > self.sigma_h + self.sigma_h * 0.03:
+            if dw_std > self.sigma_h + self.sigma_h * 0.03:
                 hidden_states = self.rescale(normed_dw, self.sigma_h)
-            elif normed_dw.std() < self.sigma_h - self.sigma_h / math.sqrt(3):
+            elif dw_std < self.sigma_h / math.sqrt(3):
                 hidden_states = self.rescale(normed_dw, self.sigma_h)
             else:
                 hidden_states = normed_dw     
