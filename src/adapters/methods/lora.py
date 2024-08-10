@@ -528,7 +528,9 @@ class LoRA(nn.Module):
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
                 self.sigma_std = torch.std(self.batch_sigmas).item()
 
-            
+            if self.epoch > 2 and self._epoch_start():
+                self.sigma_h = self.sigma_h * 0.99
+
             self.record_var(dw_std, "dw_std")
             self.record_var(self.sigma_h, "sigma_h")
             # Rescale delta_w if its standard deviation is greater than sigma_h
