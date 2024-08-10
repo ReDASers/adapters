@@ -427,13 +427,12 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
-        if self.training:
-            if self.epoch == 1:
-                self.sigma_w = self.sigma_w + weights.std().item()
-                self.sigma_h = self.sigma_h + added.std().item()
-                if self._epoch_end():
-                    self.sigma_w = self.sigma_w / self.batches_per_epoch
-                    self.sigma_h = self.sigma_h / self.batches_per_epoch
+        if self.training and self.epoch == 1:
+            self.sigma_w = self.sigma_w + weights.std().item()
+            self.sigma_h = self.sigma_h + added.std().item()
+            if self._epoch_end():
+                self.sigma_w = self.sigma_w / self.batches_per_epoch
+                self.sigma_h = self.sigma_h / self.batches_per_epoch
             #if self.epoch == 2:
             #    self.sigma_h = self.sigma_h + added.std().item()
             #    if self._epoch_end():
@@ -457,7 +456,7 @@ class LoRA(nn.Module):
                 if self.epoch > 1:
                     h = self.rescale(added, self.sigma_h)
                 else:
-                    h = self.rescale(added, self.sigma)
+                    h = added
                 return w + h * scaling
             case "output" | "intermediate": 
                 return w * (added * scaling)
