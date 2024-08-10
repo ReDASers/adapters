@@ -77,6 +77,7 @@ class LoRA(nn.Module):
         self.training_steps = 0
         self.epoch = 1
         # List to store variance for each LoRA instance
+        self.decay = 0.0
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
@@ -530,7 +531,8 @@ class LoRA(nn.Module):
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item()
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
-
+                std = torch.std(self.batch_sigmas).item()
+                self.decay = (2.0 * std) / 100
         
 
             # Rescale delta_w if its standard deviation is greater than sigma_h
@@ -543,9 +545,10 @@ class LoRA(nn.Module):
             if self.training and self.epoch > 1:
                 self.batch_sigmas[self.n_batches - 1] = dw_std
                 if self._epoch_end():
-                    sigma_h = torch.mean(self.batch_sigmas).item()
-                    if sigma_h < self.sigma_h:
-                        self.sigma_h = sigma_h
+                    with torch.no_grad():
+                        sigma_h = self.sigma_h
+                        if sigma_h - self.decay > 0:
+                            self.sigma_h = self.sigma_h - self.decay
                 self.record_var(dw_std, "dw_std")
                 self.record_var(self.sigma_h, "sigma_h")   
             
