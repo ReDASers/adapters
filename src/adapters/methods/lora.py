@@ -81,6 +81,8 @@ class LoRA(nn.Module):
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         self.n_batches = 0 # have not trained yet   
         self.training_steps = 0
+        self.sigma_h = None
+        self.sigma_x = None
         self.sigma_w = 0.0
         self.batch_sigmas = None
         self.epoch = 1
@@ -220,7 +222,6 @@ class LoRA(nn.Module):
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
         self.sigma_h = 0.0
-        self.sigma_std = 0.0
         self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
         self.sigma_x = 0.0
         
@@ -527,17 +528,6 @@ class LoRA(nn.Module):
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item()
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
-                self.sigma_std = torch.std(self.batch_sigmas).item()
-                
-
-            if self.training and self.epoch > 1:
-                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item()
-                if self._epoch_end():
-                    sigma_h = torch.mean(self.batch_sigmas).item()
-                    if sigma_h < self.sigma_h:
-                        self.sigma_h = sigma_h
-                self.record_var(normed_dw.std().item(), "dw_std")
-                self.record_var(self.sigma_h, "sigma_h")
 
         
 
@@ -546,7 +536,16 @@ class LoRA(nn.Module):
             if dw_std > self.sigma_h:
                 hidden_states = self.rescale(normed_dw, self.sigma_h)
             else:
-                hidden_states = normed_dw     
+                hidden_states = normed_dw  
+
+            if self.training and self.epoch > 1:
+                self.batch_sigmas[self.n_batches - 1] = dw_std
+                if self._epoch_end():
+                    sigma_h = torch.mean(self.batch_sigmas).item()
+                    if sigma_h < self.sigma_h:
+                        self.sigma_h = sigma_h
+                self.record_var(dw_std, "dw_std")
+                self.record_var(self.sigma_h, "sigma_h")   
             
         # scaling mode
         else:
