@@ -394,6 +394,18 @@ class LoRA(nn.Module):
                 self.variances[key].append(weights.var().item()) 
 
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
+        """
+        Rescales the weights to have a standard deviation of sigma using the z-score.
+        A method to control the variance of the weights.
+
+        Args:
+            weights (torch.Tensor): Weights to rescale.
+            sigma (float, optional): Desired standard deviation. Defaults to 0.05.
+            dtype (torch.dtype, optional): Data type. Defaults to None.
+        
+        Returns:
+            torch.Tensor: Rescaled weights
+        """
         if sigma == 0:
             return weights
         w = torch.nan_to_num(weights)
