@@ -531,6 +531,7 @@ class LoRA(nn.Module):
             if self.training:
                 self.record_var(normed_dw.std().item(), "dw_std")
                 self.record_var(self.sigma_h, "sigma_h")
+
             # Rescale delta_w if its standard deviation is greater than sigma_h
             dw_std = normed_dw.std().item()
             if dw_std > self.sigma_h:
