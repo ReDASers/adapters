@@ -393,8 +393,10 @@ class LoRA(nn.Module):
                     self.variances[key] = []
                 if isinstance(weights_or_num, torch.Tensor):
                     self.variances[key].append(weights_or_num.var().item()) 
-                else:
+                elif isinstance(weights_or_num, float):
                     self.variances[key].append(weights_or_num)
+                else:
+                    raise ValueError("weights_or_num must be a tensor or a float.")
 
     def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
         """
