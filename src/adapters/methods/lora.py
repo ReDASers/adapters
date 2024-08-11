@@ -456,14 +456,11 @@ class LoRA(nn.Module):
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
                 
         if self._epoch_start() and self.epoch > 1 and weights.std().item() > self.sigma_w:
-            if self.location == "selfattn":
-                w = self.rescale(weights, 
-                                sigma=self.sigma_w, 
-                                noise_std=self.noise_std*self.sigma_w, 
-                                weight_dropout_prob=self.weight_dropout_prob, 
-                                skip_prob=0.0)
-            else:
-                w = weights
+            w = self.rescale(weights, 
+                            sigma=self.sigma_w, 
+                            noise_std=self.noise_std*self.sigma_w, 
+                            weight_dropout_prob=self.weight_dropout_prob if self.location == "selfattn" else 0.0, 
+                            skip_prob=0.0)
         else:
             w = weights
 
@@ -493,13 +490,14 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
+        '''
         if self._epoch_start() and self.location is not "selfattn":
             self.lora_C.data = self.rescale(self.lora_C.data, 
                                             self.sigma, 
                                             noise_std=self.noise_std,
                                             weight_dropout_prob=0.0,
                                             skip_prob=self.skip_prob)
-        
+        '''
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
@@ -515,8 +513,7 @@ class LoRA(nn.Module):
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = sigma_dw 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
-            elif self.epoch == 3 and self._epoch_start():
-                self.sigma_h = min(self.sigma_h, self.sigma_w/self.batches_per_epoch)
+                self.sigma_h = (self.sigma_h + self.sigma_w/self.n_batches)/2.0
             # Rescale delta_w if its standard deviation is greater than sigma_h
             if sigma_dw > self.sigma_h:
                 hidden_states = self.rescale(weights=normed_dw, 
