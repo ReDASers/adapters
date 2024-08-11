@@ -545,8 +545,7 @@ class LoRA(nn.Module):
             if self.training and self.epoch > 1:
                 self.batch_sigmas[self.n_batches - 1] = dw_std
                 if self._epoch_end():
-                    with torch.no_grad(): 
-                        self.sigma_h = self.sigma_h + self.decay
+                    self.sigma_h = self.sigma_h * 0.98
                 self.record_var(dw_std, "dw_std")
                 self.record_var(self.sigma_h, "sigma_h")   
             
