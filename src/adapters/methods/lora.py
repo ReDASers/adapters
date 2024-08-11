@@ -70,7 +70,7 @@ class LoRA(nn.Module):
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         
         self.sigma_w = 0.0
-        self.sigma_h = 0.01
+        self.sigma_h = 0.0
         self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
         
         self.n_batches = 0 # have not trained yet   
@@ -82,8 +82,6 @@ class LoRA(nn.Module):
         self.noise_std = config.noise_std
         self.weight_dropout_prob = config.weight_dropout_prob
         self.skip_prob = config.skip_prob
-        self.noise_dist = config.noise_dist
-        self.neftunish_noise = config.neftunish_noise
 
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
@@ -380,46 +378,14 @@ class LoRA(nn.Module):
                 return weights / (added * self.scaling)
             case _:
                 return weights
-
-    def inject_neftune_noise(self, inputs: torch.Tensor) -> torch.Tensor:
-        """
-        Injects Neftune-style noise into the inputs, scaled relative to sigma_h.
-
-        Args:
-            inputs (torch.Tensor): Input tensor to which noise will be added.
-            alpha (float, optional): Scaling factor for the noise. Defaults to 0.1.
-            distribution (str, optional): Type of noise distribution ('uniform' or 'gaussian'). Defaults to 'uniform'.
-            sigma_h (float, optional): Target standard deviation for delta-W. Defaults to 0.05.
-        
-        Returns:
-            torch.Tensor: Noisy inputs.
-        """
-        if not self.training:
-            return inputs  # No noise added during inference
-
-        L, d = inputs.size(-2), inputs.size(-1)
-        scale_factor = self.neftunish_noise / torch.sqrt(torch.tensor(L * d, dtype=torch.float32))
-        scale_factor *= self.sigma_h  # Scale noise by sigma to align with delta-W's standard deviation
-
-        if self.noise_dist == 'uniform':
-            noise = torch.rand_like(inputs) * 2 - 1  # Uniform noise in the range [-1, 1]
-        elif self.noise_dist == 'gaussian' or self.noise_dist == 'normal':
-            noise = torch.randn_like(inputs)  # Gaussian noise
-            noise = torch.clamp(noise, -1, 1)  # Clamping Gaussian noise to the range [-1, 1]
-        else:
-            raise ValueError("Distribution must be 'uniform' or 'gaussian'.")
-
-        noise = noise * scale_factor
-        return inputs + noise
-
             
 
     def rescale(self, 
                 weights: torch.Tensor, 
                 sigma: float = 0.05, 
+                noise_std: float = 0.01, 
                 weight_dropout_prob: float = 0.01,
-                skip_prob: float = 0.05,
-                noise_std: float | None = 0.005) -> torch.Tensor:
+                skip_prob: float = 0.1) -> torch.Tensor:
         """
         Rescales the weights to have a standard deviation of sigma using the z-score.
         A method to control the variance of the weights with probabilistic rescaling
@@ -453,10 +419,8 @@ class LoRA(nn.Module):
         # calculate z-scores
         z = (w - u) / (stddev + 1e-12)
         
-        if noise_std is None:
-            noise_std = sigma * 0.003
         # Add probabilistic noise to sigma
-        sigma = sigma + torch.normal(mean=0.0, std=noise_std, size=(1,), device=w.device).item()
+        sigma += torch.normal(mean=0.0, std=noise_std, size=(1,), device=w.device).item()
         
         # Rescale the weights
         rescaled_weights = z * sigma + u
@@ -492,10 +456,10 @@ class LoRA(nn.Module):
                 
         if self._epoch_start() and self.epoch > 1 and weights.std().item() > self.sigma_w:
             w = self.rescale(weights, 
-                             self.sigma_w,  
-                             self.weight_dropout_prob, 
-                             self.skip_prob, 
-                             self.noise_std,)
+                             sigma=self.sigma_w, 
+                             noise_std=self.noise_std, 
+                             weight_dropout_prob=self.weight_dropout_prob, 
+                             skip_prob=self.skip_prob)
         else:
             w = weights
 
@@ -524,17 +488,14 @@ class LoRA(nn.Module):
         Returns:
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
-        self._increment_training_step_maybe() 
+        self._increment_training_step_maybe()
         
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
-            x = torch.nan_to_num(hidden_states)
             
-            if self.training:
-                x = self.inject_neftune_noise(x)
-           
+            x = torch.nan_to_num(hidden_states)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
@@ -550,9 +511,9 @@ class LoRA(nn.Module):
             if normed_dw.std().item() > self.sigma_h:
                 normed_dw = self.rescale(weights=normed_dw, 
                                          sigma=self.sigma_h,
+                                         noise_std=self.noise_std,
                                          weight_dropout_prob=self.weight_dropout_prob,
-                                         skip_prob=self.skip_prob,
-                                         noise_std=self.noise_std,) 
+                                         skip_prob=self.skip_prob) 
             
             if self.training:
                 self.record_var(normed_dw.std().item(), "dw_std")
