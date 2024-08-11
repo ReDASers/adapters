@@ -378,6 +378,38 @@ class LoRA(nn.Module):
                 return weights / (added * self.scaling)
             case _:
                 return weights
+
+    def inject_neftune_noise(self, inputs: torch.Tensor, alpha: float = 0.1, distribution: str = 'uniform', sigma: float = 0.05) -> torch.Tensor:
+        """
+        Injects Neftune-style noise into the inputs, scaled relative to sigma_h.
+
+        Args:
+            inputs (torch.Tensor): Input tensor to which noise will be added.
+            alpha (float, optional): Scaling factor for the noise. Defaults to 0.1.
+            distribution (str, optional): Type of noise distribution ('uniform' or 'gaussian'). Defaults to 'uniform'.
+            sigma_h (float, optional): Target standard deviation for delta-W. Defaults to 0.05.
+        
+        Returns:
+            torch.Tensor: Noisy inputs.
+        """
+        if not self.training:
+            return inputs  # No noise added during inference
+
+        L, d = inputs.size(-2), inputs.size(-1)
+        scale_factor = alpha / torch.sqrt(torch.tensor(L * d, dtype=torch.float32))
+        scale_factor *= sigma  # Scale noise by sigma to align with delta-W's standard deviation
+
+        if distribution == 'uniform':
+            noise = torch.rand_like(inputs) * 2 - 1  # Uniform noise in the range [-1, 1]
+        elif distribution == 'gaussian':
+            noise = torch.randn_like(inputs)  # Gaussian noise
+            noise = torch.clamp(noise, -1, 1)  # Clamping Gaussian noise to the range [-1, 1]
+        else:
+            raise ValueError("Distribution must be 'uniform' or 'gaussian'.")
+
+        noise = noise * scale_factor
+        return inputs + noise
+
             
 
     def rescale(self, 
@@ -489,6 +521,8 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
+        if layer_input is not None:
+            layer_input = self.inject_neftune_noise(layer_input, alpha=0.1, distribution='gaussian', sigma=0.02)
         
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
