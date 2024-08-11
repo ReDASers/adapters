@@ -456,11 +456,12 @@ class LoRA(nn.Module):
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
                 
         if self._epoch_start() and self.epoch > 1 and weights.std().item() > self.sigma_w:
-            w = self.rescale(weights, 
-                             sigma=self.sigma_w, 
-                             noise_std=self.noise_std*self.sigma_w, 
-                             weight_dropout_prob=0.0, 
-                             skip_prob=self.skip_prob)
+            if self.location == "selfattn":
+                w = self.rescale(weights, 
+                                sigma=self.sigma_w, 
+                                noise_std=self.noise_std*self.sigma_w, 
+                                weight_dropout_prob=0.0, 
+                                skip_prob=self.skip_prob)
         else:
             w = weights
 
@@ -490,7 +491,7 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
-        if self._epoch_start() and self.location == "intermediate":
+        if self._epoch_start() and self.location is not "selfattn":
             self.lora_C.data = self.rescale(self.lora_C.data, 
                                             self.sigma, 
                                             noise_std=self.noise_std*self.sigma,
