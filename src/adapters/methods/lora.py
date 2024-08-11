@@ -380,6 +380,19 @@ class LoRA(nn.Module):
                 return weights
             
 
+    def _rescale_for_inference(self, weights: torch.Tensor, sigma: float) -> torch.Tensor:
+        if self.training:
+            raise RuntimeError("This rescaling method is not supported during training.")
+        with torch.no_grad():
+            w = torch.nan_to_num(weights)
+            # calculate the mean of the weights (this is not W, can be dw or any other weight)
+            u = torch.mean(w, dtype=w.dtype)
+            # calculate the standard deviation of the weights
+            stddev = torch.std(w)
+            # calculate z-scores
+            z = (w - u) / (stddev + 1e-12)
+            return z * sigma + u
+        
     def rescale(self, 
                 weights: torch.Tensor, 
                 sigma: float = 0.05, 
@@ -401,13 +414,8 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Rescaled weights
         """
-        # Skip rescaling with a probability of `skip_prob
-        if not self.training:
-            noise_std = 0.0
-            skip_prob = 0.0
-            weight_dropout_prob = 0.0
-            
-        if sigma == 0 or torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0:
+        # Skip rescaling with a probability of `skip_prob            
+        if sigma == 0:
             return weights
         
         w = torch.nan_to_num(weights)
@@ -419,18 +427,16 @@ class LoRA(nn.Module):
         # calculate z-scores
         z = (w - u) / (stddev + 1e-12)
         
-        # Add probabilistic noise to sigma
-        sigma += torch.normal(mean=0.0, std=noise_std, size=(1,), device=w.device).item()
-        
-        # Rescale the weights
-        rescaled_weights = z * sigma + u
-
-        # Create a dropout mask
-        mask = torch.bernoulli(torch.full_like(w, 1 - weight_dropout_prob, dtype=w.dtype, device=w.device))
-
-        # Apply the dropout mask: only rescale where the mask is 1
-        final_weights = mask * rescaled_weights + (1 - mask) * w
-        
+        if self.training:
+            if torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0:
+                return weights
+            sigma = sigma + torch.normal(mean=0.0, std=noise_std, size=(1,), device=w.device).item()
+            mask = torch.bernoulli(torch.full_like(w, 1 - weight_dropout_prob, dtype=w.dtype, device=w.device))
+            rescaled_weights = z * sigma + u
+            # Apply the dropout mask: only rescale where the mask is 1
+            final_weights = mask * rescaled_weights + (1 - mask) * w
+        else:
+            final_weights = z * sigma + u
         return final_weights
 
 
@@ -460,6 +466,8 @@ class LoRA(nn.Module):
                              noise_std=self.noise_std, 
                              weight_dropout_prob=self.weight_dropout_prob, 
                              skip_prob=self.skip_prob)
+        elif not self.training:
+            w = self._rescale_for_inference(weights, sigma=self.sigma_w)
         else:
             w = weights
 
