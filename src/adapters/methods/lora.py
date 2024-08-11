@@ -458,9 +458,9 @@ class LoRA(nn.Module):
         if self._epoch_start() and self.epoch > 1 and weights.std().item() > self.sigma_w:
             w = self.rescale(weights, 
                              sigma=self.sigma_w, 
-                             noise_std=self.noise_std, 
+                             noise_std=self.noise_std*self.sigma_w, 
                              weight_dropout_prob=0.0, 
-                             skip_prob=0.0)
+                             skip_prob=self.skip_prob)
         else:
             w = weights
 
@@ -493,9 +493,9 @@ class LoRA(nn.Module):
         if self._epoch_start() and self.location == "output":
             self.lora_C.data = self.rescale(self.lora_C.data, 
                                             self.sigma, 
-                                            noise_std=self.noise_std,
-                                            weight_dropout_prob=self.weight_dropout_prob,
-                                            skip_prob=0.5)
+                                            noise_std=self.noise_std*self.sigma,
+                                            weight_dropout_prob=0.0,
+                                            skip_prob=self.skip_prob)
         
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
