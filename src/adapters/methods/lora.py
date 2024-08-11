@@ -69,15 +69,14 @@ class LoRA(nn.Module):
         self._delta_w = None  # Placeholder for delta weights
         
         self.sigma_h = None
-        self.sigma_x = None
         self.sigma_w = 0.0
         self.batch_sigmas = None
-        self.batch_xs = None
+        
         self.n_batches = 0 # have not trained yet   
         self.training_steps = 0
         self.epoch = 1
         # List to store variance for each LoRA instance
-        self.decay = 0.0
+        
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
@@ -226,9 +225,6 @@ class LoRA(nn.Module):
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
         self.sigma_h = 0.0
         self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
-        self.sigma_x = 0.0
-        self.batch_xs = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
-        
         
 
     def _setup_lora_matrices(self, lora_A_shape, lora_B_shape):
@@ -515,17 +511,6 @@ class LoRA(nn.Module):
                 hidden_states = layer_input
             
             x = torch.nan_to_num(hidden_states)
-            if self.training and self.epoch == 1:
-                self.batch_xs[self.n_batches - 1] = x.std().item()
-                self.sigma_x = torch.mean(self.batch_xs).item()
-
-                if self._epoch_end():
-                    self.sigma_x = self.sigma_x * 0.99
-
-            # Rescale delta_w if its standard deviation is greater than sigma_h
-            if x.std().item() > self.sigma_x:
-                x = self.rescale(x, self.sigma_x)
-
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
