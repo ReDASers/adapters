@@ -455,7 +455,7 @@ class LoRA(nn.Module):
             self.sigma_w = self.sigma_w + weights.std().item()
             
             if self._epoch_end():
-                self.sigma_w = self.sigma_w / self.batches_per_epoch
+                self.sigma_w = (self.sigma_w / self.batches_per_epoch) * 0.99
                 
         if self._epoch_start() and self.epoch > 1 and weights.std().item() > self.sigma_w:
             w = self.rescale(weights, self.sigma_w)
@@ -519,6 +519,9 @@ class LoRA(nn.Module):
                 self.batch_xs[self.n_batches - 1] = x.std().item()
                 self.sigma_x = torch.mean(self.batch_xs).item()
 
+                if self._epoch_end():
+                    self.sigma_x = self.sigma_x * 0.99
+
             # Rescale delta_w if its standard deviation is greater than sigma_h
             if x.std().item() > self.sigma_x:
                 x = self.rescale(x, self.sigma_x)
@@ -532,6 +535,9 @@ class LoRA(nn.Module):
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item()
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
+
+                if self._epoch_end():
+                    self.sigma_h = self.sigma_h * 0.99
 
             # Rescale delta_w if its standard deviation is greater than sigma_h
             if normed_dw.std().item() > self.sigma_h:
