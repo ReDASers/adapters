@@ -460,8 +460,8 @@ class LoRA(nn.Module):
                 w = self.rescale(weights, 
                                 sigma=self.sigma_w, 
                                 noise_std=self.noise_std*self.sigma_w, 
-                                weight_dropout_prob=0.0, 
-                                skip_prob=self.skip_prob)
+                                weight_dropout_prob=self.weight_dropout_prob, 
+                                skip_prob=0.0)
             else:
                 w = weights
         else:
@@ -496,7 +496,7 @@ class LoRA(nn.Module):
         if self._epoch_start() and self.location is not "selfattn":
             self.lora_C.data = self.rescale(self.lora_C.data, 
                                             self.sigma, 
-                                            noise_std=self.noise_std*self.sigma,
+                                            noise_std=self.noise_std,
                                             weight_dropout_prob=0.0,
                                             skip_prob=self.skip_prob)
         
