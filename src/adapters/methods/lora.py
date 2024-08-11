@@ -456,7 +456,7 @@ class LoRA(nn.Module):
         if noise_std is None:
             noise_std = sigma * 0.003
         # Add probabilistic noise to sigma
-        sigma = sigma + torch.normal(mean=u, std=noise_std, size=(1,), device=w.device).item()
+        sigma = sigma + torch.normal(mean=0.0, std=noise_std, size=(1,), device=w.device).item()
         
         # Rescale the weights
         rescaled_weights = z * sigma + u
