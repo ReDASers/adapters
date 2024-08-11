@@ -464,9 +464,10 @@ class LoRA(nn.Module):
         if scaling is None:
             scaling = self.scaling
 
-        self.record_dw_var_maybe(added)
-        self.record_w_var_maybe(w)
-        self.record_weights_var_maybe()
+        if self._epoch_end:
+            self.record_dw_var_maybe(added)
+            self.record_w_var_maybe(w)
+            self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
                 return w + added * scaling
@@ -506,10 +507,6 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
-        # self.rescale_weights_maybe()
-        # if self._epoch_start():
-        #if self._epoch_start():
-        #    self.rescale_weights()
         
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
@@ -519,24 +516,22 @@ class LoRA(nn.Module):
             x = torch.nan_to_num(hidden_states)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
-            
-              
-            if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = dw.std().item()
-                self.sigma_h = torch.mean(self.batch_sigmas).item()
-        
-            # Rescale delta_w if its standard deviation is greater than sigma_h
-            if dw.std().item() > self.sigma_h:
-                dw = self.rescale(dw, self.sigma_h)
-            
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
-   
-            self.record_var(normed_dw.std().item(), "dw_std")
-            self.record_var(self.sigma_h, "sigma_h")  
+            
+            if self.training and self.epoch == 1:
+                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item()
+                self.sigma_h = torch.mean(self.batch_sigmas).item()
 
-            hidden_states = normed_dw  
+            # Rescale delta_w if its standard deviation is greater than sigma_h
+            if normed_dw.std().item() > self.sigma_h:
+                hidden_states = self.rescale(normed_dw, self.sigma_h)
+            else:
+                hidden_states = normed_dw  
+
+            self.record_var(normed_dw.std().item(), "dw_std")
+            self.record_var(self.sigma_h, "sigma_h")   
             
         # scaling mode
         else:
