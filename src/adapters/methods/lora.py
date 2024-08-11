@@ -83,7 +83,7 @@ class LoRA(nn.Module):
         self.weight_dropout_prob = config.weight_dropout_prob
         self.skip_prob = config.skip_prob
         self.noise_dist = config.noise_dist
-        self.neptunish_noise = config.neptunish_noise
+        self.neftunish_noise = config.neftunish_noise
 
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
@@ -398,7 +398,7 @@ class LoRA(nn.Module):
             return inputs  # No noise added during inference
 
         L, d = inputs.size(-2), inputs.size(-1)
-        scale_factor = self.neptunish_noise / torch.sqrt(torch.tensor(L * d, dtype=torch.float32))
+        scale_factor = self.neftunish_noise / torch.sqrt(torch.tensor(L * d, dtype=torch.float32))
         scale_factor *= self.sigma_h  # Scale noise by sigma to align with delta-W's standard deviation
 
         if self.noise_dist == 'uniform':
@@ -533,7 +533,7 @@ class LoRA(nn.Module):
             x = torch.nan_to_num(hidden_states)
             
             if self.training:
-                x = self.inject_neftune_noise(x, alpha=0.1)
+                x = self.inject_neftune_noise(x)
            
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)

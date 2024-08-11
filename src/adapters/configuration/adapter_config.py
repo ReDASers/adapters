@@ -499,7 +499,7 @@ class LoRAConfig(AdapterConfig):
 
     noise_dist: str = "uniform"
 
-    neptunish_noise: float = 0.1
+    neftunish_noise: float = 0.1
     
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu" 
