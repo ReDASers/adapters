@@ -524,21 +524,19 @@ class LoRA(nn.Module):
                 if self.epoch == 1:
                     self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item()
                     self.sigma_h = torch.mean(self.batch_sigmas).item()
-                    sigma_dw = self.sigma_h
-                else:
-                    sigma_dw = (self.sigma_h+normed_dw.std().item())/2.0
-            else:
-                sigma_dw = self.sigma_h      
+                    if self._epoch_end():
+                        self.sigma_h = self.sigma_h * 0.75
 
             # Rescale delta_w if its standard deviation is greater than sigma_h
-            if normed_dw.std().item() > sigma_dw:
-                hidden_states = self.rescale(normed_dw, sigma_dw)
+            if normed_dw.std().item() > self.sigma_h:
+                hidden_states = self.rescale(normed_dw, self.sigma_h)
             else:
                 hidden_states = normed_dw  
 
-            self.record_var(normed_dw.std().item(), "dw_std")
-            self.record_var(sigma_dw, "sigma_h")   
-            
+            if self.training:
+                self.record_var(hidden_states.std().item(), "dw_std")
+                self.record_var(self.sigma_h, "sigma_h")   
+                
         # scaling mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
