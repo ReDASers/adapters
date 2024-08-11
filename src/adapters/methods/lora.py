@@ -537,7 +537,7 @@ class LoRA(nn.Module):
                 hidden_states = normed_dw  
 
             self.record_var(normed_dw.std().item(), "dw_std")
-            self.record_var(self.sigma_h, "sigma_h")   
+            self.record_var(sigma_dw, "sigma_h")   
             
         # scaling mode
         else:
