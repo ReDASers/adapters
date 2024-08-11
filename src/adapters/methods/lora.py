@@ -359,15 +359,47 @@ class LoRA(nn.Module):
                 else:
                     raise ValueError("weights_or_num must be a tensor or a float.")
 
-    def rescale(self, weights: torch.Tensor, sigma: float = 0.05, dtype: torch.dtype = None) -> torch.Tensor:
+    def get_variances(self) -> Dict[str, List[float]]:
+        """
+        Returns the recorded variances for each parameter.
+
+        Returns:
+            Dict[str, List[float]]: Dictionary with variance lists for each parameter.
+        """
+        return self.variances
+    
+    def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
+        """Inverts the composition operation between existing and injected weights.
+
+        Args:
+            weights (torch.Tensor): Existing weights.
+            added (torch.Tensor): Weights to subtract.
+
+        Returns:
+            torch.Tensor: Inverted weights.
+        """
+ 
+        match self.location:
+            case "selfattn":
+                return weights - (added * self.scaling)
+            case "output" | "intermediate":
+                return weights / (added * self.scaling)
+            case _:
+                return weights
+            
+
+    def rescale(self, weights: torch.Tensor, sigma: float = 0.05, noise_std: float = 0.01, dropout_prob: float = 0.01) -> torch.Tensor:
         """
         Rescales the weights to have a standard deviation of sigma using the z-score.
-        A method to control the variance of the weights.
+        A method to control the variance of the weights with probabilistic rescaling
+        and a dropout mechanism.
 
         Args:
             weights (torch.Tensor): Weights to rescale.
             sigma (float, optional): Desired standard deviation. Defaults to 0.05.
             dtype (torch.dtype, optional): Data type. Defaults to None.
+            noise_std (float, optional): Standard deviation of the Gaussian noise added to sigma. Defaults to 0.01.
+            dropout_prob (float, optional): Probability of dropping out the rescaling for a given weight. Defaults to 0.1.
         
         Returns:
             torch.Tensor: Rescaled weights
@@ -377,22 +409,28 @@ class LoRA(nn.Module):
         w = torch.nan_to_num(weights)
 
         # calculate the mean of the weights (this is not W, can be dw or any other weight)
-        u = torch.mean(w, dtype=dtype)
+        u = torch.mean(w, dtype=w.dtype)
         # calculate the standard deviation of the weights
         stddev = torch.std(w)
         # calculate z-scores
         z = (w - u) / (stddev + 1e-12)
-        # rescale to the desired standard deviation sigma in order to control the variance
-        return z * sigma + u
-    
-    def get_variances(self) -> Dict[str, List[float]]:
-        """
-        Returns the recorded variances for each parameter.
+        
+        # Add probabilistic noise to sigma
+        sigma += torch.normal(mean=0.0, std=noise_std, size=(1,), device=w.device).item()
+        
+        # Rescale the weights
+        rescaled_weights = z * sigma + u
 
-        Returns:
-            Dict[str, List[float]]: Dictionary with variance lists for each parameter.
-        """
-        return self.variances
+        # Create a dropout mask
+        mask = torch.bernoulli(torch.full_like(w, 1 - dropout_prob, dtype=w.dtype, device=w.device))
+
+        # Apply the dropout mask: only rescale where the mask is 1
+        final_weights = mask * rescaled_weights + (1 - mask) * w
+        
+        return final_weights
+
+
+   
     
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
@@ -430,28 +468,8 @@ class LoRA(nn.Module):
             case "output" | "intermediate": 
                 return w * (added * scaling)
             case _:
-                return w
+                raise ValueError(f"Invalid location key: {self.location}")
     
-
-    def com_inv(self, weights: torch.Tensor, added: torch.Tensor) -> torch.Tensor:
-        """Inverts the composition operation between existing and injected weights.
-
-        Args:
-            weights (torch.Tensor): Existing weights.
-            added (torch.Tensor): Weights to subtract.
-
-        Returns:
-            torch.Tensor: Inverted weights.
-        """
- 
-        match self.location:
-            case "selfattn":
-                return weights - (added * self.scaling)
-            case "output" | "intermediate":
-                return weights / (added * self.scaling)
-            case _:
-                return weights
-   
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         """Forward pass of the LoRA module.
     
