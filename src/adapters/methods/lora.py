@@ -516,7 +516,7 @@ class LoRA(nn.Module):
                 self.batch_sigmas[self.n_batches - 1] = sigma_dw 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
             elif self.training and self.epoch > 1:
-                self.sigma_h = (self.sigma_h + sigma_dw)/4 + (self.sigma_w/self.batches_per_epoch)/2
+                self.sigma_h = (self.sigma_h + self.sigma_w/self.batches_per_epoch)/2
 
             # Rescale delta_w if its standard deviation is greater than sigma_h
             if sigma_dw > self.sigma_h:
