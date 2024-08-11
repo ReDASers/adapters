@@ -466,8 +466,6 @@ class LoRA(nn.Module):
                              noise_std=self.noise_std, 
                              weight_dropout_prob=self.weight_dropout_prob, 
                              skip_prob=self.skip_prob)
-        elif not self.training:
-            w = self._rescale_for_inference(weights, sigma=self.sigma_w)
         else:
             w = weights
 
