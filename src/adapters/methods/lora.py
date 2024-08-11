@@ -531,7 +531,7 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
-            
+            '''
             if self.training:
                 if self.epoch == 1:
                     self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item()
@@ -543,8 +543,9 @@ class LoRA(nn.Module):
             if normed_dw.std().item() > self.sigma_h:
                 hidden_states = self.rescale(normed_dw, self.sigma_h)
             else:
-                hidden_states = normed_dw  
-
+            '''
+            hidden_states = normed_dw  
+            
             if self.training:
                 self.record_var(hidden_states.std().item(), "dw_std")
                 self.record_var(self.sigma_h, "sigma_h")   
