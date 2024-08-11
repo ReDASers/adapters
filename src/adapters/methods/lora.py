@@ -226,7 +226,7 @@ class LoRA(nn.Module):
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
         self.sigma_h = 0.0
         self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
-        self.sigma_x = 0.0
+        self.sigma_x = 0.03
         
         
 
@@ -516,6 +516,8 @@ class LoRA(nn.Module):
             if hidden_states is None:
                 hidden_states = layer_input
                 if self.training and self.epoch == 1:
+                    if self.training_steps == 1:
+                        self.sigma_x = 0.0
                     self.sigma_x = self.sigma_x + hidden_states.std().item()
                     if self._epoch_end():
                         self.sigma_x = self.sigma_x / self.batches_per_epoch
@@ -542,8 +544,8 @@ class LoRA(nn.Module):
                 hidden_states = normed_dw  
 
    
-                self.record_var(dw_std, "dw_std")
-                self.record_var(self.sigma_h, "sigma_h")   
+            self.record_var(normed_dw.std().item(), "dw_std")
+            self.record_var(self.sigma_h, "sigma_h")   
             
         # scaling mode
         else:
