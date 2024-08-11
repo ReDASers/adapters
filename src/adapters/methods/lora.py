@@ -66,17 +66,17 @@ class LoRA(nn.Module):
         self.use_gating = config.use_gating
         self.non_linearity = config.non_linearity 
         self._delta_w = None  # Placeholder for delta weights
+
+        self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         
-        self.sigma_h = None
         self.sigma_w = 0.0
-        self.batch_sigmas = None
+        self.sigma_h = 0.0
+        self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
         
         self.n_batches = 0 # have not trained yet   
         self.training_steps = 0
         self.epoch = 1
         # List to store variance for each LoRA instance
-        
-        self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
         
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         self.noise_std = config.noise_std
@@ -216,8 +216,7 @@ class LoRA(nn.Module):
         self.f = self._get_autoencoder_architecture("NLbLN")
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-        self.sigma_h = 0.0
-        self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
+        
         
 
     def _setup_lora_matrices(self, lora_A_shape, lora_B_shape):
@@ -403,6 +402,11 @@ class LoRA(nn.Module):
             torch.Tensor: Rescaled weights
         """
         # Skip rescaling with a probability of `skip_prob
+        if not self.training:
+            noise_std = 0.0
+            skip_prob = 0.0
+            weight_dropout_prob = 0.0
+            
         if sigma == 0 or torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0:
             return weights
         
