@@ -457,7 +457,7 @@ class LoRA(nn.Module):
             if self._epoch_end():
                 self.sigma_w = self.sigma_w / self.batches_per_epoch
                 
-        if self._epoch_start() and self.epoch > 1:
+        if self._epoch_start() and self.epoch > 1 and weights.std().item() > self.sigma_w:
             w = self.rescale(weights, self.sigma_w)
         else:
             w = weights
