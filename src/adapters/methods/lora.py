@@ -454,7 +454,7 @@ class LoRA(nn.Module):
         z = (w - u) / (stddev + 1e-12)
         
         if noise_std is None:
-            noise_std = sigma ** 3
+            noise_std = sigma * 0.003
         # Add probabilistic noise to sigma
         sigma = sigma + torch.normal(mean=u, std=noise_std, size=(1,), device=w.device).item()
         
