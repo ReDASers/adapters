@@ -493,9 +493,13 @@ class LoRAConfig(AdapterConfig):
 
     weight_dropout_prob: float = 0.01
 
-    noise_std: float = 0.01
+    skip_prob: float = 0.05
 
-    skip_prob: float = 0.1
+    noise_std: float | None = 0.005
+
+    noise_dist: str = "uniform"
+
+    neptunish_noise: float = 0.1
     
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu" 
