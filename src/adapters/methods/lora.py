@@ -511,15 +511,15 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
-            
+            sigma_dw = normed_dw.std().item()
             if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item()
+                self.batch_sigmas[self.n_batches - 1] = sigma_dw 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
-            elif self.training and self.epoch == 3:
-                self.sigma_h = (self.sigma_h + self.sigma_w/self.batches_per_epoch) / 2
+            elif self.training and self.epoch > 2:
+                self.sigma_h = (self.sigma_h + self.sigma_w/self.batches_per_epoch + sigma_dw) / 3
 
             # Rescale delta_w if its standard deviation is greater than sigma_h
-            if normed_dw.std().item() > self.sigma_h:
+            if sigma_dw > self.sigma_h:
                 normed_dw = self.rescale(weights=normed_dw, 
                                          sigma=self.sigma_h,
                                          noise_std=self.noise_std,
