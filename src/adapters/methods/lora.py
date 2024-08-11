@@ -515,38 +515,28 @@ class LoRA(nn.Module):
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
                 hidden_states = layer_input
-                if self.training and self.epoch == 1:
-                    if self.training_steps == 1:
-                        self.sigma_x = 0.0
-                    self.sigma_x = self.sigma_x + hidden_states.std().item()
-                    if self._epoch_end():
-                        self.sigma_x = self.sigma_x / self.batches_per_epoch
             
             x = torch.nan_to_num(hidden_states)
-            if self.epoch > 1:
-                x = self.rescale(x, self.sigma_x)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
+            
+              
+            if self.training and self.epoch == 1:
+                self.batch_sigmas[self.n_batches - 1] = dw.std().item()
+                self.sigma_h = torch.mean(self.batch_sigmas).item()
+        
+            # Rescale delta_w if its standard deviation is greater than sigma_h
+            if dw.std().item() > self.sigma_h:
+                dw = self.rescale(dw, self.sigma_h)
+            
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
-            
-            if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item()
-                self.sigma_h = torch.mean(self.batch_sigmas).item()
-                # std = torch.std(self.batch_sigmas).item()
-                # self.decay = (2.0 * std) / 100
-        
-
-            # Rescale delta_w if its standard deviation is greater than sigma_h
-            if normed_dw.std().item() > self.sigma_h:
-                hidden_states = self.rescale(normed_dw, self.sigma_h)
-            else:
-                hidden_states = normed_dw  
-
    
             self.record_var(normed_dw.std().item(), "dw_std")
-            self.record_var(self.sigma_h, "sigma_h")   
+            self.record_var(self.sigma_h, "sigma_h")  
+
+            hidden_states = normed_dw  
             
         # scaling mode
         else:
