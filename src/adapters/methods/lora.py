@@ -490,7 +490,7 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
-        if self._epoch_start():
+        if self._epoch_start() and self.location == "output":
             self.lora_C.data = self.rescale(self.lora_C.data, 
                                             self.sigma, 
                                             noise_std=self.noise_std,
