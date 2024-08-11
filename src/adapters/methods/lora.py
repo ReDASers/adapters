@@ -462,6 +462,8 @@ class LoRA(nn.Module):
                                 noise_std=self.noise_std*self.sigma_w, 
                                 weight_dropout_prob=0.0, 
                                 skip_prob=self.skip_prob)
+            else:
+                w = weights
         else:
             w = weights
 
