@@ -65,7 +65,6 @@ class LoRA(nn.Module):
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
         self.non_linearity = config.non_linearity 
-        self.sigma = None
         self._delta_w = None  # Placeholder for delta weights
         
         self.sigma_h = None
@@ -87,8 +86,6 @@ class LoRA(nn.Module):
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
         
-
-
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
         Calculates the number of batches per epoch based on the batch size and training set size.
@@ -198,19 +195,11 @@ class LoRA(nn.Module):
         """
         self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
         self.scalar_scaler = nn.Parameter(torch.tensor(1e-9, dtype=torch.float32))
-        sigma = self._estimate_scaling_sigma()
-        nn.init.normal_(self.lora_C, mean=1.0, std=sigma)
-        self.sigma = self.lora_C.std().item()
+        nn.init.normal_(self.lora_C, mean=1.0, std=self._estimate_scaling_sigma())
         self.variances[self.location+"_lora_C"] = [self.lora_C.var().item()]
 
     def _estimate_scaling_sigma(self) -> float:
         return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
-    
-    def _estimate_attn_sigma(self, tensor: torch.Tensor, mode: Literal["fan_in", "fan_out"] = "fan_in"):
-        fan = nn.init._calculate_correct_fan(tensor, mode=mode)
-        gain = nn.init.calculate_gain("leaky_relu", param=math.sqrt(5))
-        sigma = gain * math.sqrt(2.0 / float(fan))
-        return sigma
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
         """
@@ -244,11 +233,8 @@ class LoRA(nn.Module):
         Initializes the LoRA matrices A and B.
         """
         nn.init.kaiming_uniform_(self.lora_A, a=math.sqrt(5))
-        #self.A_sigma = self._estimate_attn_sigma(self.lora_A.data, mode="fan_in")
-        self.A_sigma = self.lora_A.std().item()
         self.variances[self.location+"_lora_A"] = [self.lora_A.var().item()]
         nn.init.zeros_(self.lora_B)
-        self.B_sigma = 0.0
         self.variances[self.location+"_lora_B"] = [self.lora_B.var().item()]
 
     def _initialize_autoencoder_weights(self, layers: nn.Sequential):
@@ -268,7 +254,6 @@ class LoRA(nn.Module):
                     mode = "fan_out"
                 
                 nn.init.kaiming_normal_(layer.weight, mode=mode, a=math.sqrt(5))
-                # sigma = self._estimate_attn_sigma(layer.weight, mode=mode)
                 sigma = layer.weight.std().item()
                 self.autoencoder_sigmas[i] = sigma
                 self.variances[f"{self.location}_autoencoder_{i}"] = [layer.weight.var().item()]
@@ -328,33 +313,7 @@ class LoRA(nn.Module):
         
         if self.n_batches == self.batches_per_epoch:
             return True
-        return False
-    
-    def _rescale_autoencoder_weights(self):
-        """
-        Rescales the weights of the autoencoder.
-        """
-        for layer, sigma in zip(self.f, self.autoencoder_sigmas):
-            if isinstance(layer, nn.Linear):
-                assert sigma, "Sigma must be set."
-                
-                layer.weight.data = self.rescale(layer.weight.data, sigma=sigma)
-                if layer.bias is not None:
-                    nn.init.zeros_(layer.bias)
-            
-    def rescale_weights_maybe(self):
-        """
-        Rescale the weights based on the current configuration.
-        """
-        if self.epoch == 1 or not self._epoch_start():
-            return
-        
-        if self.location in ["output", "intermediate"]:
-            self.lora_C.data = self.rescale(self.lora_C.data, sigma=self.sigma, dtype=torch.float32)
-        #   elif self.location == "selfattn":
-            # self.lora_A.data = self.rescale(self.lora_A.data, sigma=self.A_sigma)
-            # self._rescale_autoencoder_weights()
-        
+        return False     
             
     def record_weights_var_maybe(self) -> None:
         """
