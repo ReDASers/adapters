@@ -391,9 +391,9 @@ class LoRA(nn.Module):
     def rescale(self, 
                 weights: torch.Tensor, 
                 sigma: float = 0.05, 
-                noise_std: float = 0.01, 
-                dropout_prob: float = 0.01,
-                skip_prob: float = 0.05) -> torch.Tensor:
+                noise_std: float = 0.005, 
+                dropout_prob: float = 0.05,
+                skip_prob: float = 0.1) -> torch.Tensor:
         """
         Rescales the weights to have a standard deviation of sigma using the z-score.
         A method to control the variance of the weights with probabilistic rescaling
