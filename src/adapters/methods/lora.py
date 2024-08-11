@@ -58,7 +58,7 @@ class LoRA(nn.Module):
         self.scaling = float(self.lora_alpha / self.r) if self.lora_alpha > 1.0 else 1.0
         beta = config.beta if config.beta is not None else int(self.r * 1.5)
         self.bottleneck_size = int(beta * self.r)  
-        self.autoencoder_sigmas = None
+        
         self.A_sigma = None
         self.B_sigma = 0.0
         self.composition_mode = config.composition_mode
@@ -77,8 +77,12 @@ class LoRA(nn.Module):
         # List to store variance for each LoRA instance
         
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
-        self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         
+        self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
+        self.noise_std = config.noise_std
+        self.weight_dropout_prob = config.weight_dropout_prob
+        self.skip_prob = config.skip_prob
+
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
         
@@ -254,8 +258,6 @@ class LoRA(nn.Module):
                     mode = "fan_out"
                 
                 nn.init.kaiming_normal_(layer.weight, mode=mode, a=math.sqrt(5))
-                sigma = layer.weight.std().item()
-                self.autoencoder_sigmas[i] = sigma
                 self.variances[f"{self.location}_autoencoder_{i}"] = [layer.weight.var().item()]
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
@@ -336,15 +338,6 @@ class LoRA(nn.Module):
                 else:
                     self.variances[self.location+"_lora_C"].append(torch.var(self.lora_C).item())
         
-    def record_dw_var_maybe(self, hidden_states: torch.Tensor) -> None:
-        if self.training:
-            with torch.no_grad():
-                self.variances[self.location+"_delta_w"].append(hidden_states.var().item())
-    
-    def record_w_var_maybe(self, weights: torch.Tensor) -> None:
-        if self.training:
-            with torch.no_grad():
-                self.variances[self.location+"_W"].append(weights.var().item())
 
     def record_var(self, weights_or_num: torch.Tensor | float, param_name: str):
         if self.training:
@@ -392,7 +385,7 @@ class LoRA(nn.Module):
                 weights: torch.Tensor, 
                 sigma: float = 0.05, 
                 noise_std: float = 0.01, 
-                dropout_prob: float = 0.01,
+                weight_dropout_prob: float = 0.01,
                 skip_prob: float = 0.1) -> torch.Tensor:
         """
         Rescales the weights to have a standard deviation of sigma using the z-score.
@@ -429,7 +422,7 @@ class LoRA(nn.Module):
         rescaled_weights = z * sigma + u
 
         # Create a dropout mask
-        mask = torch.bernoulli(torch.full_like(w, 1 - dropout_prob, dtype=w.dtype, device=w.device))
+        mask = torch.bernoulli(torch.full_like(w, 1 - weight_dropout_prob, dtype=w.dtype, device=w.device))
 
         # Apply the dropout mask: only rescale where the mask is 1
         final_weights = mask * rescaled_weights + (1 - mask) * w
@@ -458,7 +451,11 @@ class LoRA(nn.Module):
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
                 
         if self._epoch_start() and self.epoch > 1 and weights.std().item() > self.sigma_w:
-            w = self.rescale(weights, self.sigma_w)
+            w = self.rescale(weights, 
+                             self.sigma_w, 
+                             self.noise_std, 
+                             self.weight_dropout_prob, 
+                             self.skip_prob)
         else:
             w = weights
 
@@ -466,8 +463,8 @@ class LoRA(nn.Module):
             scaling = self.scaling
 
         if self._epoch_end:
-            self.record_dw_var_maybe(added)
-            self.record_w_var_maybe(w)
+            self.record_var(added, "delta_W")
+            self.record_var(w, "W")
             self.record_weights_var_maybe()
         match self.location:
             case "selfattn":
@@ -508,7 +505,11 @@ class LoRA(nn.Module):
 
             # Rescale delta_w if its standard deviation is greater than sigma_h
             if normed_dw.std().item() > self.sigma_h:
-                normed_dw = self.rescale(normed_dw, self.sigma_h) 
+                normed_dw = self.rescale(normed_dw, 
+                                         self.sigma_h,
+                                         self.noise_std,
+                                         self.weight_dropout_prob,
+                                         self.skip_prob) 
             
             if self.training:
                 self.record_var(normed_dw.std().item(), "dw_std")
