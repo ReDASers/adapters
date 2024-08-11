@@ -403,7 +403,7 @@ class LoRA(nn.Module):
 
         if self.noise_dist == 'uniform':
             noise = torch.rand_like(inputs) * 2 - 1  # Uniform noise in the range [-1, 1]
-        elif self.noise_dist == 'gaussian':
+        elif self.noise_dist == 'gaussian' or self.noise_dist == 'normal':
             noise = torch.randn_like(inputs)  # Gaussian noise
             noise = torch.clamp(noise, -1, 1)  # Clamping Gaussian noise to the range [-1, 1]
         else:
