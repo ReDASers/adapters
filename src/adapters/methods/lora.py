@@ -425,12 +425,28 @@ class LoRA(nn.Module):
         # Rescale the weights
         rescaled_weights = z * sigma + u
 
+        # Create a Bernoulli mask to determine which weights are affected by noise
+        noise_mask = torch.bernoulli(torch.full_like(w, 
+                                                     weight_dropout_prob, 
+                                                     dtype=w.dtype, 
+                                                     device=w.device))
+    
+        # Inject uniform noise based on the mean and stddev of the weights
+        noise = (torch.rand_like(w) * 2 - 1) * noise_std * sigma
+        noise_injected_weights = rescaled_weights + noise_mask * noise
+
         # Create a dropout mask
-        mask = torch.bernoulli(torch.full_like(w, 1 - weight_dropout_prob, dtype=w.dtype, device=w.device))
+        mask = torch.bernoulli(torch.full_like(noise_injected_weights,
+                                               1 - weight_dropout_prob,
+                                               dtype=w.dtype, 
+                                               device=w.device))
 
         # Apply the dropout mask: only rescale where the mask is 1
-        final_weights = mask * rescaled_weights + (1 - mask) * w
-        
+        dropout_weights = mask * rescaled_weights + (1 - mask) * w
+        # Clamp the weights to avoid exploding gradients and improve quantization performance
+        final_weights = torch.clamp(dropout_weights, 
+                                    min=dropout_weights.mean() - 4 * dropout_weights.std(),
+                                    max=dropout_weights.mean() + 4 * dropout_weights.std())
         return final_weights
 
 
@@ -455,13 +471,9 @@ class LoRA(nn.Module):
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
                 
         if self._epoch_start() and self.epoch > 1 and weights.std().item() > self.sigma_w:
-            if self.location == "selfattn":
-                p = self.noise_std
-            else:
-                p = self.noise_std*0.5
             w = self.rescale(weights, 
                             sigma=self.sigma_w, 
-                            noise_std=p, 
+                            noise_std=self.noise_std, 
                             weight_dropout_prob=self.weight_dropout_prob, 
                             skip_prob=self.skip_prob)
         else:
