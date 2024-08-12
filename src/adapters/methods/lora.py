@@ -432,7 +432,7 @@ class LoRA(nn.Module):
                                                      device=rescaled_weights.device))
     
         # Inject uniform noise based on the mean and stddev of the weights
-        noise = (torch.rand_like(rescaled_weights) * (sigma * math.sqrt(3)) - 1) * noise_std * sigma
+        noise = (torch.rand_like(rescaled_weights) * (sigma * noise_std * math.sqrt(3)) - 1)
         noise_injected_weights = rescaled_weights + noise_mask * noise
 
         # Create a dropout mask
