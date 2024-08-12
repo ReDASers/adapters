@@ -495,7 +495,7 @@ class LoRAConfig(AdapterConfig):
 
     skip_prob: float = 0.05
 
-    noise_std: float | None = 0.005
+    noise_std: float | None = 0.01
     
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu" 
