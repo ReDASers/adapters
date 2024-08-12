@@ -425,28 +425,21 @@ class LoRA(nn.Module):
         # Rescale the weights
         rescaled_weights = z * sigma + u
 
-        # Create a Bernoulli mask to determine which weights are affected by noise
-        noise_mask = torch.bernoulli(torch.full_like(rescaled_weights, 
-                                                     noise_std ** 2,  
-                                                     dtype=rescaled_weights.dtype, 
-                                                     device=rescaled_weights.device))
-    
-        # Inject gaussian noise based on the mean and stddev of the weights
-        noise = z * (sigma * noise_std) + u
-        noise_injected_weights = rescaled_weights + noise_mask * noise
+      
 
-        # Create a dropout mask
-        mask = torch.bernoulli(torch.full_like(noise_injected_weights,
+
+      # Create a dropout mask
+        mask = torch.bernoulli(torch.full_like(rescaled_weights,
                                                1 - weight_dropout_prob,
-                                               dtype=noise_injected_weights.dtype, 
-                                               device=noise_injected_weights.device))
+                                               dtype=rescaled_weights.dtype, 
+                                               device=rescaled_weights.device))
 
         # Apply the dropout mask: only rescale where the mask is 1
-        final_weights = mask * rescaled_weights + (1 - mask) * w
+        dropout_weights = mask * rescaled_weights + (1 - mask) * w
         # Clamp the weights to avoid exploding gradients and improve quantization performance
-        #final_weights = torch.clamp(dropout_weights, 
-        #                            min=dropout_weights.mean() - 4 * dropout_weights.std(),
-        #                            max=dropout_weights.mean() + 4 * dropout_weights.std())
+        final_weights = torch.clamp(dropout_weights, 
+                                    min=dropout_weights.mean() - 4 * dropout_weights.std(),
+                                    max=dropout_weights.mean() + 4 * dropout_weights.std())
         return final_weights
 
 
