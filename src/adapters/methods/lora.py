@@ -458,7 +458,7 @@ class LoRA(nn.Module):
         if self._epoch_start() and self.epoch > 1 and weights.std().item() > self.sigma_w:
             w = self.rescale(weights, 
                             sigma=self.sigma_w, 
-                            noise_std=self.noise_std, 
+                            noise_std=0.0, 
                             weight_dropout_prob=self.weight_dropout_prob, 
                             skip_prob=0.0)
         else:
