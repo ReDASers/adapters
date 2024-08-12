@@ -458,7 +458,7 @@ class LoRA(nn.Module):
             if self.location == "selfattn":
                 p = self.noise_std
             else:
-                p = self.self.noise_std*2
+                p = self.noise_std*2
             w = self.rescale(weights, 
                             sigma=self.sigma_w, 
                             noise_std=p, 
