@@ -436,7 +436,8 @@ class LoRA(nn.Module):
         
         return final_weights
     
-    def regularize(weights: torch.Tensor, 
+    def regularize(self,
+                   weights: torch.Tensor, 
                    noise_std: float = 0.01, 
                    weight_dropout_prob: float = 0.01,
                    skip_prob: float = 0.05) -> torch.Tensor:
@@ -543,7 +544,7 @@ class LoRA(nn.Module):
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = sigma_dw 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
-                self.sigma_h = min(self.sigma_h, self.sigma_w/self.n_batches)
+                self.sigma_h = (self.sigma_h + min(self.sigma_h, self.sigma_w/self.n_batches_batches_per_epoch))/2.0
                  
             # Rescale delta_w if its standard deviation is greater than sigma_h
             if sigma_dw > self.sigma_h:
