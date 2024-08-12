@@ -519,17 +519,15 @@ class LoRA(nn.Module):
                 self.batch_sigmas[self.n_batches - 1] = sigma_dw 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
                  
-            
-            sigma_h = (sigma_dw+self.sigma_h+self.sigma_w/self.batches_per_epoch)/3.0
             # Rescale delta_w if its standard deviation is greater than sigma_h
-            if sigma_dw > sigma_h:
+            if sigma_dw > self.sigma_h:
                 hidden_states = self.rescale(weights=normed_dw, 
-                                            sigma=sigma_h,
-                                            noise_std=self.noise_std,
-                                            weight_dropout_prob=self.weight_dropout_prob,
-                                            skip_prob=self.skip_prob) 
+                                             sigma=self.sigma_h,
+                                             noise_std=self.noise_std,
+                                             weight_dropout_prob=self.weight_dropout_prob,
+                                             skip_prob=self.skip_prob) 
             else:
-                hidden_states = normed_dw
+                hidden_states = normed_dw.clone()
             
             if self.training:
                 self.record_var(hidden_states.std().item(), "hidden_std")
