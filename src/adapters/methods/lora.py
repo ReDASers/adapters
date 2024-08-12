@@ -465,7 +465,7 @@ class LoRA(nn.Module):
                             sigma=self.sigma_w, 
                             noise_std=self.noise_std, 
                             weight_dropout_prob=self.weight_dropout_prob, 
-                            skip_prob=0.0 if self.location != "selfattn" else self.skip_prob)
+                            skip_prob=0.0 if self.location == "selfattn" else self.skip_prob)
         else:
             w = weights
 
