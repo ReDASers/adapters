@@ -422,7 +422,7 @@ class LoRA(nn.Module):
         
         # Add probabilistic noise to sigma
         sigma += torch.normal(mean=0.0, std=noise_std * sigma, size=(1,), device=w.device).item()
-        
+        torch.rand()
         # Rescale the weights
         rescaled_weights = z * sigma + u
 
@@ -456,11 +456,15 @@ class LoRA(nn.Module):
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
                 
         if self._epoch_start() and self.epoch > 1 and weights.std().item() > self.sigma_w:
+            if self.location == "selfattn":
+                skip_prob = 0.0
+            else:
+                skip_prob = self.skip_prob
             w = self.rescale(weights, 
                             sigma=self.sigma_w, 
-                            noise_std=0.0, 
+                            noise_std=self.noise_std, 
                             weight_dropout_prob=self.weight_dropout_prob, 
-                            skip_prob=0.0)
+                            skip_prob=skip_prob)
         else:
             w = weights
 
