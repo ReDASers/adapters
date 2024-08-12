@@ -435,11 +435,8 @@ class LoRA(nn.Module):
                                                device=rescaled_weights.device))
 
         # Apply the dropout mask: only rescale where the mask is 1
-        dropout_weights = mask * rescaled_weights + (1 - mask) * w
-        # Clamp the weights to avoid exploding gradients and improve quantization performance
-        final_weights = torch.clamp(dropout_weights, 
-                                    min=dropout_weights.mean() - 5 * dropout_weights.std(),
-                                    max=dropout_weights.mean() + 5 * dropout_weights.std())
+        final_weights = mask * rescaled_weights + (1 - mask) * w
+        
         return final_weights
 
 
