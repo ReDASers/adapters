@@ -456,14 +456,14 @@ class LoRA(nn.Module):
                 
         if self._epoch_start() and self.epoch > 1 and weights.std().item() > self.sigma_w:
             if self.location == "selfattn":
-                skip_prob = self.skip_prob
+                p = 0
             else:
-                skip_prob = 0.0
+                p = self.weight_dropout_prob
             w = self.rescale(weights, 
                             sigma=self.sigma_w, 
                             noise_std=self.noise_std, 
-                            weight_dropout_prob=self.weight_dropout_prob, 
-                            skip_prob=skip_prob)
+                            weight_dropout_prob=p, 
+                            skip_prob=self.skip_prob)
         else:
             w = weights
 
