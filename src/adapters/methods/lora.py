@@ -421,7 +421,7 @@ class LoRA(nn.Module):
         z = (w - u) / (stddev + 1e-12)
         
         # Add probabilistic noise to sigma
-        sigma += torch.normal(mean=0.0, std=noise_std * sigma, size=(1,), device=w.device).item()
+        sigma = sigma + torch.normal(mean=0.0, std=noise_std * sigma, size=(1,), device=w.device).item()
         # Rescale the weights
         rescaled_weights = z * sigma + u
 
@@ -453,10 +453,11 @@ class LoRA(nn.Module):
         # calculate z-scores
         z = (w - u) / (stddev + 1e-12)
         
+        sigma = stddev.item()
         # Add probabilistic noise to sigma
-        stddev += torch.normal(mean=0.0, std=noise_std * stddev, size=(1,), device=w.device).item()
+        sigma = sigma + torch.normal(mean=0.0, std=noise_std * sigma, size=(1,), device=w.device).item()
         # Rescale the weights by noisy sigma
-        noisy_w = z * stddev + u
+        noisy_w = z * sigma + u
         mask = torch.bernoulli(torch.full_like(w,
                                                1 - weight_dropout_prob,
                                                dtype=w.dtype, 
@@ -554,7 +555,7 @@ class LoRA(nn.Module):
                                              weight_dropout_prob=self.weight_dropout_prob,
                                              skip_prob=self.skip_prob) 
             else:
-                hidden_states = self.regularize(normed_dw,
+                hidden_states = self.regularize(weights=normed_dw,
                                                 noise_std=self.noise_std,
                                                 weight_dropout_prob=self.weight_dropout_prob,
                                                 skip_prob=self.skip_prob)
