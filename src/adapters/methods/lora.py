@@ -428,11 +428,11 @@ class LoRA(nn.Module):
       
 
 
-      # Create a dropout mask
-        mask = torch.bernoulli(torch.full_like(rescaled_weights,
+       # Create a dropout mask
+        mask = torch.bernoulli(torch.full_like(w,
                                                1 - weight_dropout_prob,
-                                               dtype=rescaled_weights.dtype, 
-                                               device=rescaled_weights.device))
+                                               dtype=w.dtype, 
+                                               device=w.device))
 
         # Apply the dropout mask: only rescale where the mask is 1
         final_weights = mask * rescaled_weights + (1 - mask) * w
@@ -465,7 +465,7 @@ class LoRA(nn.Module):
                             sigma=self.sigma_w, 
                             noise_std=self.noise_std, 
                             weight_dropout_prob=self.weight_dropout_prob, 
-                            skip_prob=self.skip_prob)
+                            skip_prob=0.0 if self.location != "selfattn" else self.skip_prob)
         else:
             w = weights
 
