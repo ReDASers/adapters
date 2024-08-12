@@ -573,7 +573,7 @@ class LoRA(nn.Module):
             hidden_states = self.regularize(weights=scaling_vector, 
                                             noise_std=self.noise_std, 
                                             weight_dropout_prob=self.weight_dropout_prob, 
-                                            skip_prob=0.0)
+                                            skip_prob=self.skip_prob)
 
         self.delta_w = hidden_states.clone()
         
