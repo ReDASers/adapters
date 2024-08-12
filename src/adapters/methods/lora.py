@@ -459,8 +459,8 @@ class LoRA(nn.Module):
             w = self.rescale(weights, 
                             sigma=self.sigma_w, 
                             noise_std=self.noise_std, 
-                            weight_dropout_prob=self.weight_dropout_prob if self.location == "selfattn" else 0.0, 
-                            skip_prob=self.skip_prob)
+                            weight_dropout_prob=self.weight_dropout_prob, 
+                            skip_prob=0.0)
         else:
             w = weights
 
