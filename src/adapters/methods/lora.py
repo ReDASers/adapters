@@ -426,20 +426,20 @@ class LoRA(nn.Module):
         rescaled_weights = z * sigma + u
 
         # Create a Bernoulli mask to determine which weights are affected by noise
-        noise_mask = torch.bernoulli(torch.full_like(w, 
+        noise_mask = torch.bernoulli(torch.full_like(rescaled_weights, 
                                                      weight_dropout_prob, 
-                                                     dtype=w.dtype, 
-                                                     device=w.device))
+                                                     dtype=rescaled_weights.dtype, 
+                                                     device=rescaled_weights.device))
     
         # Inject uniform noise based on the mean and stddev of the weights
-        noise = (torch.rand_like(w) * 2 - 1) * noise_std * sigma
+        noise = (torch.rand_like(rescaled_weights) * (sigma * math.sqrt(3)) - 1) * noise_std * sigma
         noise_injected_weights = rescaled_weights + noise_mask * noise
 
         # Create a dropout mask
         mask = torch.bernoulli(torch.full_like(noise_injected_weights,
                                                1 - weight_dropout_prob,
-                                               dtype=w.dtype, 
-                                               device=w.device))
+                                               dtype=noise_injected_weights.dtype, 
+                                               device=noise_injected_weights.device))
 
         # Apply the dropout mask: only rescale where the mask is 1
         dropout_weights = mask * rescaled_weights + (1 - mask) * w
