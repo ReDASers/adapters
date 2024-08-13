@@ -398,7 +398,8 @@ class LoRA(nn.Module):
     def rescale(self, 
                 weights: torch.Tensor, 
                 sigma: float = 0.02, 
-                skip_prob: float = 0.05) -> torch.Tensor:
+                skip_prob: float = 0.05,
+                with_noise: bool = False) -> torch.Tensor:
         """
         Rescales the weights to have a standard deviation of sigma using the z-score.
         A method to control the variance of the weights with probabilistic rescaling
@@ -417,14 +418,24 @@ class LoRA(nn.Module):
         if sigma == 0 or self.skip(skip_prob):
             return weights
         
+        stddev = torch.std(weights)
+
+        if not with_noise and stddev.item() < sigma and self.skip(1 - skip_prob):
+            return weights
+        
         # calculate the mean of the weights (this is not W, can be dw or any other weight)
         u = torch.mean(weights, dtype=weights.dtype)
         # calculate the standard deviation of the weights
-        stddev = torch.std(weights)
+        
         # calculate z-scores
         z = (weights - u) / (stddev + 1e-12)
 
         return z * sigma + u
+    
+    def inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01, skip_prob: float = 0.05) -> float:
+        s = weights.std().item()
+        s = s + torch.normal(mean=0.0, std=noise_std * s, size=(1,), device=weights.device).item()
+        return self.rescale(weights=weights, sigma=s, skip_prob=skip_prob, with_noise=True)
         
     
     def regularize(self,
@@ -436,9 +447,7 @@ class LoRA(nn.Module):
         if not self.training or self.skip(skip_prob):
             return weights
         
-        s = weights.std().item()
-        s = s + torch.normal(mean=0.0, std=noise_std * s, size=(1,), device=weights.device).item()
-        w = self.rescale(weights=weights, sigma=s, skip_prob=self.skip_prob)
+        w = self.inject_noise(weights=weights, noise_std=noise_std, skip_prob=skip_prob)
         mask = torch.bernoulli(torch.full_like(weights,
                                                1 - weight_dropout_prob,
                                                dtype=weights.dtype, 
@@ -463,7 +472,7 @@ class LoRA(nn.Module):
                     
             if self._epoch_end():
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
-        if self.epoch > 1 and weights.std().item() > self.sigma_w:
+        if self.epoch > 1:
             w = self.rescale(weights=weights, sigma=self.sigma_w, skip_prob=self.skip_prob)
         else:
             w = weights
@@ -471,14 +480,6 @@ class LoRA(nn.Module):
                             noise_std=self.noise_std, 
                             weight_dropout_prob=self.weight_dropout_prob, 
                             skip_prob=self.skip_prob)       
-      
-        '''
-        else:
-            w = self.regularize(weights, 
-                                noise_std=self.noise_std, 
-                                weight_dropout_prob=self.weight_dropout_prob, 
-                                skip_prob=0.0)
-        '''
         
 
         if scaling is None:
@@ -543,28 +544,24 @@ class LoRA(nn.Module):
                                             noise_std=self.noise_std,
                                             weight_dropout_prob=self.weight_dropout_prob,
                                             skip_prob=self.skip_prob)   
-            
-
-                   
-            if self.training:
-                self.record_var(hidden_states.std().item(), "hidden_std")
-                self.record_var(sigma_dw, "sigma_dw")   
+          
            
         # scaling mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             scaling_vector = scaling_vector * (1.0 - self.scalar_scaler) 
-            if self.training:
-                hidden_states = self.regularize(weights=scaling_vector, 
-                                                noise_std=self.noise_std, 
-                                                weight_dropout_prob=self.weight_dropout_prob, 
-                                                skip_prob=self.skip_prob)
-            else:
-                hidden_states = scaling_vector
+            
+            hidden_states = self.regularize(weights=scaling_vector, 
+                                            noise_std=self.noise_std, 
+                                            weight_dropout_prob=self.weight_dropout_prob, 
+                                            skip_prob=self.skip_prob)
 
         self.delta_w = hidden_states.clone()
-        
+        if self.training:
+            self.record_var(hidden_states.std().item(), "hidden_std-train")
+        else:
+            self.record_var(hidden_states.std().item(), "hidden_std-eval")
 
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
