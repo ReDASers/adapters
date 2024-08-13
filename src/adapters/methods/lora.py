@@ -402,13 +402,7 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Rescaled weights
         """
-        # Skip rescaling with a probability of `skip_prob
-        if not self.training:
-            noise_std = 0.0
-            skip_prob = 0.0
-            weight_dropout_prob = 0.0
-            
-        if sigma == 0 or torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0:
+        if sigma == 0:
             return weights
         
         w = torch.nan_to_num(weights)
@@ -419,6 +413,12 @@ class LoRA(nn.Module):
         stddev = torch.std(w)
         # calculate z-scores
         z = (w - u) / (stddev + 1e-12)
+
+        if not self.training:
+            return z * sigma + u
+        
+        if torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0:
+            return weights
         
         # Add probabilistic noise to sigma
         sigma = sigma + torch.normal(mean=0.0, std=noise_std * sigma, size=(1,), device=w.device).item()
@@ -426,10 +426,10 @@ class LoRA(nn.Module):
         rescaled_weights = z * sigma + u
 
         # Create a dropout mask
-        mask = torch.bernoulli(torch.full_like(w,
+        mask = torch.bernoulli(torch.full_like(rescaled_weights,
                                                1 - weight_dropout_prob,
-                                               dtype=w.dtype, 
-                                               device=w.device))
+                                               dtype=rescaled_weights.dtype, 
+                                               device=rescaled_weights.device))
 
         # Apply the dropout mask: only rescale where the mask is 1
         final_weights = mask * rescaled_weights + (1 - mask) * w
@@ -441,7 +441,11 @@ class LoRA(nn.Module):
                    noise_std: float = 0.01, 
                    weight_dropout_prob: float = 0.01,
                    skip_prob: float = 0.05) -> torch.Tensor:
-        if torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0 or not self.training:
+        
+        if not self.training:
+            return weights
+        
+        if torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0:
             return weights
         
         w = torch.nan_to_num(weights)
@@ -481,18 +485,28 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
-        if self.training and self.epoch == 1:
-            self.sigma_w = self.sigma_w + weights.std().item()
-            
-            if self._epoch_end():
-                self.sigma_w = (self.sigma_w / self.batches_per_epoch)
+        if self.training:
+            if self.epoch == 1:
+                self.sigma_w = self.sigma_w + weights.std().item()
                 
-        if self._epoch_start() and self.epoch > 1 and weights.std().item() > self.sigma_w:
-            w = self.rescale(weights, 
-                            sigma=self.sigma_w, 
-                            noise_std=self.noise_std, 
-                            weight_dropout_prob=self.weight_dropout_prob, 
-                            skip_prob=0.01)
+                if self._epoch_end():
+                    self.sigma_w = (self.sigma_w / self.batches_per_epoch)
+                w = self.regularize(weights,
+                                    noise_std=self.noise_std,
+                                    weight_dropout_prob=self.weight_dropout_prob,
+                                    skip_prob=0.0)
+            else:   
+                if self._epoch_start() and weights.std().item() > self.sigma_w:
+                    w = self.rescale(weights, 
+                                     sigma=self.sigma_w, 
+                                     noise_std=self.noise_std, 
+                                     weight_dropout_prob=self.weight_dropout_prob, 
+                                     skip_prob=0.0)
+                else:
+                    w = self.regularize(weights, 
+                                        noise_std=self.noise_std, 
+                                        weight_dropout_prob=self.weight_dropout_prob, 
+                                        skip_prob=0.0)
         else:
             w = weights
 
