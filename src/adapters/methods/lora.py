@@ -383,9 +383,7 @@ class LoRA(nn.Module):
 
     def rescale(self, 
                 weights: torch.Tensor, 
-                sigma: float = 0.05, 
-                noise_std: float = 0.01, 
-                weight_dropout_prob: float = 0.01,
+                sigma: float = 0.02, 
                 skip_prob: float = 0.05) -> torch.Tensor:
         """
         Rescales the weights to have a standard deviation of sigma using the z-score.
@@ -402,7 +400,8 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Rescaled weights
         """
-        if sigma == 0:
+        
+        if sigma == 0 or (self.training and torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0):
             return weights
         
         w = torch.nan_to_num(weights)
@@ -414,38 +413,16 @@ class LoRA(nn.Module):
         # calculate z-scores
         z = (w - u) / (stddev + 1e-12)
 
-        if not self.training:
-            return z * sigma + u
+        return z * sigma + u
         
-        if torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0:
-            return weights
-        
-        # Add probabilistic noise to sigma
-        sigma = sigma + torch.normal(mean=0.0, std=noise_std * sigma, size=(1,), device=w.device).item()
-        # Rescale the weights
-        rescaled_weights = z * sigma + u
-
-        # Create a dropout mask
-        mask = torch.bernoulli(torch.full_like(rescaled_weights,
-                                               1 - weight_dropout_prob,
-                                               dtype=rescaled_weights.dtype, 
-                                               device=rescaled_weights.device))
-
-        # Apply the dropout mask: only rescale where the mask is 1
-        final_weights = mask * rescaled_weights + (1 - mask) * w
-        
-        return final_weights
     
     def regularize(self,
                    weights: torch.Tensor, 
                    noise_std: float = 0.01, 
-                   weight_dropout_prob: float = 0.01,
+                   weight_dropout_prob: float = 0.03,
                    skip_prob: float = 0.05) -> torch.Tensor:
         
-        if not self.training:
-            return weights
-        
-        if torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0:
+        if not self.training or torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0:
             return weights
         
         w = torch.nan_to_num(weights)
@@ -488,27 +465,28 @@ class LoRA(nn.Module):
         if self.training:
             if self.epoch == 1:
                 self.sigma_w = self.sigma_w + weights.std().item()
-                
+                    
                 if self._epoch_end():
                     self.sigma_w = (self.sigma_w / self.batches_per_epoch)
-                w = self.regularize(weights,
-                                    noise_std=self.noise_std,
-                                    weight_dropout_prob=self.weight_dropout_prob,
-                                    skip_prob=0.0)
-            else:   
-                if self._epoch_start() and weights.std().item() > self.sigma_w:
-                    w = self.rescale(weights, 
-                                     sigma=self.sigma_w, 
-                                     noise_std=self.noise_std, 
-                                     weight_dropout_prob=self.weight_dropout_prob, 
-                                     skip_prob=0.0)
-                else:
-                    w = self.regularize(weights, 
-                                        noise_std=self.noise_std, 
-                                        weight_dropout_prob=self.weight_dropout_prob, 
-                                        skip_prob=0.0)
+            if self.epoch > 1 and self._epoch_start() and weights.std().item() > self.sigma_w:
+                w = self.rescale(weights=weights, 
+                                sigma=self.sigma_w, 
+                                skip_prob=0.0)
+                
+            w = self.regularize(weights=weights,
+                                noise_std=self.noise_std,
+                                weight_dropout_prob=self.weight_dropout_prob,
+                                skip_prob=self.skip_prob)  
         else:
             w = weights
+        '''
+        else:
+            w = self.regularize(weights, 
+                                noise_std=self.noise_std, 
+                                weight_dropout_prob=self.weight_dropout_prob, 
+                                skip_prob=0.0)
+        '''
+        
 
         if scaling is None:
             scaling = self.scaling
@@ -556,27 +534,26 @@ class LoRA(nn.Module):
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
             sigma_dw = normed_dw.std().item()
-            if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = sigma_dw 
-                self.sigma_h = torch.mean(self.batch_sigmas).item()
-            elif self.training and self.epoch > 1:
-                self.sigma_h = min(self.sigma_h,self.sigma_w/self.batches_per_epoch)
+            if self.training:
+                if self.epoch == 1:
+                    self.batch_sigmas[self.n_batches - 1] = sigma_dw 
+                    self.sigma_h = torch.mean(self.batch_sigmas).item()
+                else:
+                    self.sigma_h = min(self.sigma_h,self.sigma_w/self.batches_per_epoch)
                  
-                # Rescale delta_w if its standard deviation is greater than sigma_h
+                    # Rescale delta_w if its standard deviation is greater than sigma_h
                 if sigma_dw > self.sigma_h:
-                    hidden_states = self.rescale(weights=normed_dw, 
-                                                sigma=self.sigma_h,
+                    normed_dw = self.rescale(weights=normed_dw, 
+                                            sigma=self.sigma_h,
+                                            skip_prob=self.skip_prob) 
+                hidden_states = self.regularize(weights=normed_dw,
                                                 noise_std=self.noise_std,
                                                 weight_dropout_prob=self.weight_dropout_prob,
-                                                skip_prob=self.skip_prob) 
-                else:
-                    hidden_states = self.regularize(weights=normed_dw,
-                                                    noise_std=self.noise_std,
-                                                    weight_dropout_prob=self.weight_dropout_prob,
-                                                    skip_prob=0.5)
+                                                skip_prob=self.skip_prob)   
             else:
-                hidden_states = normed_dw.clone()
-                
+                hidden_states = normed_dw
+
+                   
             if self.training:
                 self.record_var(hidden_states.std().item(), "hidden_std")
                 self.record_var(sigma_dw, "sigma_dw")   
