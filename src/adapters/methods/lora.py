@@ -407,7 +407,7 @@ class LoRA(nn.Module):
                 weights: torch.Tensor, 
                 sigma: float = 0.02, 
                 skip_prob: float = 0.05,
-                weight_droput_prob: float = 0.01) -> torch.Tensor:
+                weight_dropout_prob: float = 0.01) -> torch.Tensor:
         """
         Rescales the weights to have a standard deviation of sigma using the z-score.
         A method to control the variance of the weights with probabilistic rescaling
@@ -434,7 +434,7 @@ class LoRA(nn.Module):
         
         return self._mask_overlay(original_weights=weights,
                                   new_weights=self._rescale(weights=weights, sigma=sigma), 
-                                  weight_dropout_prob=weight_droput_prob)
+                                  weight_dropout_prob=weight_dropout_prob)
     
     def inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> float:
         if not self.training:
@@ -543,7 +543,7 @@ class LoRA(nn.Module):
                 weights=normed_dw, 
                 sigma=self.sigma_h,
                 skip_prob=self.pdw,
-                weight_droput_prob=self.weight_dropout_prob) 
+                weight_dropout_prob=self.weight_dropout_prob) 
                 
             hidden_states = self.regularize(weights=normed_dw,
                                             noise_std=self.noise_std,
@@ -559,7 +559,7 @@ class LoRA(nn.Module):
             hidden_states = self.rescale(weights=scaling_vector,
                                          sigma=self.sigma,
                                          skip_prob=self.pdw,
-                                         weight_droput_prob=self.weight_dropout_prob)
+                                         weight_dropout_prob=self.weight_dropout_prob)
             hidden_states = self.regularize(weights=scaling_vector, 
                                             noise_std=self.noise_std, 
                                             weight_dropout_prob=self.weight_dropout_prob, 
