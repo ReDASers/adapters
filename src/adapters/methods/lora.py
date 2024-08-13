@@ -89,6 +89,10 @@ class LoRA(nn.Module):
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
+
+        self.p = config.p
+        self.pW = 1 - self.p
+        self.pdw = self.p if self.location == "selfattn" else 1.0 - self.p
         
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
@@ -478,7 +482,7 @@ class LoRA(nn.Module):
             if self._epoch_end():
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
         if self.epoch > 1:
-            w = self.rescale(weights=weights, sigma=self.sigma_w, skip_prob=1 - self.skip_prob)
+            w = self.rescale(weights=weights, sigma=self.sigma_w, skip_prob=self.pW)
         else:
             w = weights
         w = self.regularize(weights=w, 
@@ -539,7 +543,7 @@ class LoRA(nn.Module):
             
             normed_dw = self.rescale(weights=normed_dw, 
                                     sigma=self.sigma_h,
-                                    skip_prob=self.skip_prob) 
+                                    skip_prob=self.pdw) 
                 
             hidden_states = self.regularize(weights=normed_dw,
                                             noise_std=self.noise_std,
@@ -552,10 +556,13 @@ class LoRA(nn.Module):
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             scaling_vector = scaling_vector * (1.0 - self.scalar_scaler) 
+            hidden_states = self.rescale(weights=scaling_vector,
+                                         sigma=self.sigma,
+                                         skip_prob=self.pdw)
             hidden_states = self.regularize(weights=scaling_vector, 
                                             noise_std=self.noise_std, 
                                             weight_dropout_prob=self.weight_dropout_prob, 
-                                            skip_prob=1 - self.skip_prob)
+                                            skip_prob=self.skip_prob)
 
         self.delta_w = hidden_states.clone()
         if self.training:
