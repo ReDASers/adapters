@@ -436,6 +436,8 @@ class LoRA(nn.Module):
         return z * sigma + u
     
     def inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01, skip_prob: float = 0.05) -> float:
+        if not self.training:
+            return weights
         s = weights.std().item()
         s = s + torch.normal(mean=0.0, std=noise_std * s, size=(1,), device=weights.device).item()
         return self.rescale(weights=weights, sigma=s, skip_prob=skip_prob, with_noise=True)
@@ -451,10 +453,10 @@ class LoRA(nn.Module):
             return weights
         
         w = self.inject_noise(weights=weights, noise_std=noise_std, skip_prob=skip_prob)
-        mask = torch.bernoulli(torch.full_like(weights,
+        mask = torch.bernoulli(torch.full_like(w,
                                                1 - weight_dropout_prob,
-                                               dtype=weights.dtype, 
-                                               device=weights.device))
+                                               dtype=w.dtype, 
+                                               device=w.device))
         # Apply the dropout mask: only rescale where the mask is 1
         return mask * w + (1 - mask) * weights
     
@@ -476,13 +478,13 @@ class LoRA(nn.Module):
             if self._epoch_end():
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
         if self.epoch > 1:
-            w = self.rescale(weights=weights, sigma=self.sigma_w, skip_prob=self.skip_prob)
+            w = self.rescale(weights=weights, sigma=self.sigma_w, skip_prob=1 - self.skip_prob)
         else:
             w = weights
         w = self.regularize(weights=w, 
                             noise_std=self.noise_std, 
                             weight_dropout_prob=self.weight_dropout_prob, 
-                            skip_prob=1 - self.skip_prob)       
+                            skip_prob=self.skip_prob)       
         
 
         if scaling is None:
@@ -534,14 +536,10 @@ class LoRA(nn.Module):
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = sigma_dw 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
-                
-                # self.sigma_h = min(self.sigma_h,self.sigma_w/self.batches_per_epoch)
-                 
-                    # Rescale delta_w if its standard deviation is greater than sigma_h
-            if sigma_dw > self.sigma_h:
-                normed_dw = self.rescale(weights=normed_dw, 
-                                            sigma=self.sigma_h,
-                                            skip_prob=self.skip_prob) 
+            
+            normed_dw = self.rescale(weights=normed_dw, 
+                                    sigma=self.sigma_h,
+                                    skip_prob=self.skip_prob) 
                 
             hidden_states = self.regularize(weights=normed_dw,
                                             noise_std=self.noise_std,
