@@ -534,24 +534,23 @@ class LoRA(nn.Module):
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
             sigma_dw = normed_dw.std().item()
-            if self.training:
-                if self.epoch == 1:
-                    self.batch_sigmas[self.n_batches - 1] = sigma_dw 
-                    self.sigma_h = torch.mean(self.batch_sigmas).item()
-                else:
-                    self.sigma_h = min(self.sigma_h,self.sigma_w/self.batches_per_epoch)
+            if self.training and self.epoch == 1:
+                self.batch_sigmas[self.n_batches - 1] = sigma_dw 
+                self.sigma_h = torch.mean(self.batch_sigmas).item()
+                
+                # self.sigma_h = min(self.sigma_h,self.sigma_w/self.batches_per_epoch)
                  
                     # Rescale delta_w if its standard deviation is greater than sigma_h
-                if sigma_dw > self.sigma_h:
-                    normed_dw = self.rescale(weights=normed_dw, 
+            if sigma_dw > self.sigma_h:
+                normed_dw = self.rescale(weights=normed_dw, 
                                             sigma=self.sigma_h,
                                             skip_prob=self.skip_prob) 
-                hidden_states = self.regularize(weights=normed_dw,
-                                                noise_std=self.noise_std,
-                                                weight_dropout_prob=self.weight_dropout_prob,
-                                                skip_prob=self.skip_prob)   
-            else:
-                hidden_states = normed_dw
+                
+            hidden_states = self.regularize(weights=normed_dw,
+                                            noise_std=self.noise_std,
+                                            weight_dropout_prob=self.weight_dropout_prob,
+                                            skip_prob=self.skip_prob)   
+            
 
                    
             if self.training:
