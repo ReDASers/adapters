@@ -460,13 +460,11 @@ class LoRA(nn.Module):
         """
         if self.training and self.epoch == 1:
             self.sigma_w = self.sigma_w + weights.std().item()
-            sigma_w = self.sigma_w / self.n_batches
-            if self._epoch_end:
-                self.sigma_w = sigma_w
-        else:
-            sigma_w = self.sigma_w
-        if weights.std().item() > sigma_w:
-            w = self.rescale(weights=weights, sigma=sigma_w, skip_prob=0.0)
+            if self._epoch_end():
+                self.sigma_w = self.sigma_w / self.batches_per_epoch
+
+        if self.epoch > 1 and weights.std().item() > self.sigma_w:
+            w = self.rescale(weights=weights, sigma=self.sigma_w, skip_prob=0.0)
         else:
             w = weights
         w = self.regularize(weights=w, 
