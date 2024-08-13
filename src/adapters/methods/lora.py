@@ -398,12 +398,16 @@ class LoRA(nn.Module):
             return False
         return torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0
             
-
+    def _rescale(self, weights: torch.Tensor, sigma: float):
+        u = torch.mean(weights, dtype=weights.dtype)
+        z = (weights - u) / (torch.std(weights) + 1e-12)
+        return z * sigma + u
+    
     def rescale(self, 
                 weights: torch.Tensor, 
                 sigma: float = 0.02, 
                 skip_prob: float = 0.05,
-                with_noise: bool = False) -> torch.Tensor:
+                with_noise: float = 0.01) -> torch.Tensor:
         """
         Rescales the weights to have a standard deviation of sigma using the z-score.
         A method to control the variance of the weights with probabilistic rescaling
@@ -424,27 +428,24 @@ class LoRA(nn.Module):
         
         if sigma == 0 or self.skip(skip_prob):
             return weights
-        
-        stddev = torch.std(weights)
 
-        if not with_noise and stddev.item() < sigma and self.skip(1 - skip_prob):
+        if torch.std(weights).item() < sigma and self.skip(1 - self.noise_std):
             return weights
         
-        # calculate the mean of the weights (this is not W, can be dw or any other weight)
-        u = torch.mean(weights, dtype=weights.dtype)
-        # calculate the standard deviation of the weights
-        
-        # calculate z-scores
-        z = (weights - u) / (stddev + 1e-12)
-
-        return z * sigma + u
+        w = self._rescale(weights=weights, sigma=sigma)
+        mask = torch.bernoulli(torch.full_like(w,
+                                               1 - with_noise,
+                                               dtype=w.dtype, 
+                                               device=w.device))
+        # Apply the dropout mask: only rescale where the mask is 1
+        return mask * w + (1 - mask) * weights
     
-    def inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01, skip_prob: float = 0.05) -> float:
+    def inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> float:
         if not self.training:
             return weights
         s = weights.std().item()
         s = s + torch.normal(mean=0.0, std=noise_std * s, size=(1,), device=weights.device).item()
-        return self.rescale(weights=weights, sigma=s, skip_prob=skip_prob, with_noise=True)
+        return self._rescale(weights=weights, sigma=s)
         
     
     def regularize(self,
@@ -517,14 +518,7 @@ class LoRA(nn.Module):
             Tuple[torch.Tensor, Optional[torch.Tensor]]: Processed hidden states and gate (if applicable).
         """
         self._increment_training_step_maybe()
-        '''
-        if self._epoch_start() and self.location is not "selfattn":
-            self.lora_C.data = self.rescale(self.lora_C.data, 
-                                            self.sigma, 
-                                            noise_std=self.noise_std,
-                                            weight_dropout_prob=0.0,
-                                            skip_prob=self.skip_prob)
-        '''
+    
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
             if hidden_states is None:
@@ -541,9 +535,11 @@ class LoRA(nn.Module):
                 self.batch_sigmas[self.n_batches - 1] = sigma_dw 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
             
-            normed_dw = self.rescale(weights=normed_dw, 
-                                    sigma=self.sigma_h,
-                                    skip_prob=self.pdw) 
+            normed_dw = self.rescale(
+                weights=normed_dw, 
+                sigma=self.sigma_h,
+                skip_prob=self.pdw,
+                with_noise=self.noise_std) 
                 
             hidden_states = self.regularize(weights=normed_dw,
                                             noise_std=self.noise_std,
@@ -558,7 +554,8 @@ class LoRA(nn.Module):
             scaling_vector = scaling_vector * (1.0 - self.scalar_scaler) 
             hidden_states = self.rescale(weights=scaling_vector,
                                          sigma=self.sigma,
-                                         skip_prob=self.pdw)
+                                         skip_prob=self.pdw,
+                                         with_noise=self.noise_std)
             hidden_states = self.regularize(weights=scaling_vector, 
                                             noise_std=self.noise_std, 
                                             weight_dropout_prob=self.weight_dropout_prob, 
