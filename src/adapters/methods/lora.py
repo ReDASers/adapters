@@ -91,8 +91,8 @@ class LoRA(nn.Module):
         self._setup_gating_maybe(gating_heads)
 
         self.p = config.p
-        self.pW = 1 - self.p
-        self.pdw = self.p if self.location == "selfattn" else 1.0 - self.p
+        self.pW =  self.p if self.p is not None else 1 - 1/self.batches_per_epoch
+        self.pdw = self.skip_prob if self.location == "selfattn" else 1.0 - self.skip_prob
         
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
@@ -556,10 +556,6 @@ class LoRA(nn.Module):
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             scaling_vector = scaling_vector * (1.0 - self.scalar_scaler) 
-            hidden_states = self.rescale(weights=scaling_vector,
-                                         sigma=self.sigma,
-                                         skip_prob=self.pdw,
-                                         weight_dropout_prob=self.weight_dropout_prob)
             hidden_states = self.regularize(weights=scaling_vector, 
                                             noise_std=self.noise_std, 
                                             weight_dropout_prob=self.weight_dropout_prob, 
