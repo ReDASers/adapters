@@ -407,7 +407,7 @@ class LoRA(nn.Module):
                 weights: torch.Tensor, 
                 sigma: float = 0.02, 
                 skip_prob: float = 0.05,
-                with_noise: float = 0.01) -> torch.Tensor:
+                weight_droput_prob: float = 0.01) -> torch.Tensor:
         """
         Rescales the weights to have a standard deviation of sigma using the z-score.
         A method to control the variance of the weights with probabilistic rescaling
@@ -432,13 +432,9 @@ class LoRA(nn.Module):
         if torch.std(weights).item() < sigma and self.skip(1 - self.noise_std):
             return weights
         
-        w = self._rescale(weights=weights, sigma=sigma)
-        mask = torch.bernoulli(torch.full_like(w,
-                                               1 - with_noise,
-                                               dtype=w.dtype, 
-                                               device=w.device))
-        # Apply the dropout mask: only rescale where the mask is 1
-        return mask * w + (1 - mask) * weights
+        return self._mask_overlay(original_weights=weights,
+                                  new_weights=self._rescale(weights=weights, sigma=sigma), 
+                                  weight_dropout_prob=weight_droput_prob)
     
     def inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> float:
         if not self.training:
@@ -447,6 +443,15 @@ class LoRA(nn.Module):
         s = s + torch.normal(mean=0.0, std=noise_std * s, size=(1,), device=weights.device).item()
         return self._rescale(weights=weights, sigma=s)
         
+    def _mask_overlay(self, 
+                      original_weights: torch.Tensor, 
+                      new_weights: torch.Tensor, 
+                      weight_dropout_prob: float = 0.01):
+        mask = torch.bernoulli(torch.full_like(original_weights,
+                                               1 - weight_dropout_prob,
+                                               dtype=original_weights.dtype, 
+                                               device=original_weights.device))
+        return mask * new_weights + (1 - mask) * original_weights
     
     def regularize(self,
                    weights: torch.Tensor, 
@@ -457,13 +462,9 @@ class LoRA(nn.Module):
         if not self.training or self.skip(skip_prob):
             return weights
         
-        w = self.inject_noise(weights=weights, noise_std=noise_std, skip_prob=skip_prob)
-        mask = torch.bernoulli(torch.full_like(w,
-                                               1 - weight_dropout_prob,
-                                               dtype=w.dtype, 
-                                               device=w.device))
-        # Apply the dropout mask: only rescale where the mask is 1
-        return mask * w + (1 - mask) * weights
+        return self._mask_overlay(original_weights=weights, 
+                                  new_weights=self.inject_noise(weights=weights, noise_std=noise_std), 
+                                  weight_dropout_prob=weight_dropout_prob)
     
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
@@ -483,7 +484,10 @@ class LoRA(nn.Module):
             if self._epoch_end():
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
         if self.epoch > 1:
-            w = self.rescale(weights=weights, sigma=self.sigma_w, skip_prob=self.pW)
+            w = self.rescale(weights=weights, 
+                             sigma=self.sigma_w, 
+                             skip_prob=self.pW, 
+                             weight_dropout_prob=self.weight_dropout_prob)
         else:
             w = weights
         w = self.regularize(weights=w, 
@@ -539,7 +543,7 @@ class LoRA(nn.Module):
                 weights=normed_dw, 
                 sigma=self.sigma_h,
                 skip_prob=self.pdw,
-                with_noise=self.noise_std) 
+                weight_droput_prob=self.weight_dropout_prob) 
                 
             hidden_states = self.regularize(weights=normed_dw,
                                             noise_std=self.noise_std,
@@ -555,7 +559,7 @@ class LoRA(nn.Module):
             hidden_states = self.rescale(weights=scaling_vector,
                                          sigma=self.sigma,
                                          skip_prob=self.pdw,
-                                         with_noise=self.noise_std)
+                                         weight_droput_prob=self.weight_dropout_prob)
             hidden_states = self.regularize(weights=scaling_vector, 
                                             noise_std=self.noise_std, 
                                             weight_dropout_prob=self.weight_dropout_prob, 
