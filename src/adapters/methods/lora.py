@@ -441,7 +441,7 @@ class LoRA(nn.Module):
                    noise_std: float = 0.01, 
                    weight_dropout_prob: float = 0.01,
                    skip_prob: float = 0.05) -> torch.Tensor:
-        if torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0:
+        if torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0 or not self.training:
             return weights
         
         w = torch.nan_to_num(weights)
