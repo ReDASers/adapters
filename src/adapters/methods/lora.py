@@ -562,19 +562,21 @@ class LoRA(nn.Module):
             elif self.training and self.epoch > 1:
                 self.sigma_h = min(self.sigma_h,self.sigma_w/self.batches_per_epoch)
                  
-            # Rescale delta_w if its standard deviation is greater than sigma_h
-            if sigma_dw > self.sigma_h:
-                hidden_states = self.rescale(weights=normed_dw, 
-                                             sigma=self.sigma_h,
-                                             noise_std=self.noise_std,
-                                             weight_dropout_prob=self.weight_dropout_prob,
-                                             skip_prob=self.skip_prob) 
-            else:
-                hidden_states = self.regularize(weights=normed_dw,
+                # Rescale delta_w if its standard deviation is greater than sigma_h
+                if sigma_dw > self.sigma_h:
+                    hidden_states = self.rescale(weights=normed_dw, 
+                                                sigma=self.sigma_h,
                                                 noise_std=self.noise_std,
                                                 weight_dropout_prob=self.weight_dropout_prob,
-                                                skip_prob=0.5)
-            
+                                                skip_prob=self.skip_prob) 
+                else:
+                    hidden_states = self.regularize(weights=normed_dw,
+                                                    noise_std=self.noise_std,
+                                                    weight_dropout_prob=self.weight_dropout_prob,
+                                                    skip_prob=0.5)
+            else:
+                hidden_states = normed_dw.clone()
+                
             if self.training:
                 self.record_var(hidden_states.std().item(), "hidden_std")
                 self.record_var(sigma_dw, "sigma_dw")   
