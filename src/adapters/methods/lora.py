@@ -380,6 +380,20 @@ class LoRA(nn.Module):
             case _:
                 return weights
             
+    def skip(self, skip_prob: float = 0.05) -> bool:
+        """
+        Decides whether to skip the next action based on the skip probability.
+
+        Args:
+            skip_prob (float, optional): Skip probability. Defaults to 0.05.
+
+        Returns:
+            bool: True if the rescaling should be skipped, False otherwise.
+        """
+        if not self.training:
+            return False
+        return torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0
+            
 
     def rescale(self, 
                 weights: torch.Tensor, 
@@ -400,18 +414,15 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Rescaled weights
         """
-        
-        if sigma == 0 or (self.training and torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0):
+        if sigma == 0 or self.skip(skip_prob):
             return weights
         
-        w = torch.nan_to_num(weights)
-
         # calculate the mean of the weights (this is not W, can be dw or any other weight)
-        u = torch.mean(w, dtype=w.dtype)
+        u = torch.mean(weights, dtype=weights.dtype)
         # calculate the standard deviation of the weights
-        stddev = torch.std(w)
+        stddev = torch.std(weights)
         # calculate z-scores
-        z = (w - u) / (stddev + 1e-12)
+        z = (weights - u) / (stddev + 1e-12)
 
         return z * sigma + u
         
@@ -422,33 +433,18 @@ class LoRA(nn.Module):
                    weight_dropout_prob: float = 0.03,
                    skip_prob: float = 0.05) -> torch.Tensor:
         
-        if not self.training or torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0:
+        if not self.training or self.skip(skip_prob):
             return weights
         
-        w = torch.nan_to_num(weights)
-
-        # calculate the mean of the weights (this is not W, can be dw or any other weight)
-        u = torch.mean(w, dtype=w.dtype)
-        # calculate the standard deviation of the weights
-        stddev = torch.std(w)
-        # calculate z-scores
-        z = (w - u) / (stddev + 1e-12)
-        
-        sigma = stddev.item()
-        # Add probabilistic noise to sigma
-        sigma = sigma + torch.normal(mean=0.0, std=noise_std * sigma, size=(1,), device=w.device).item()
-        # Rescale the weights by noisy sigma
-        noisy_w = z * sigma + u
-        mask = torch.bernoulli(torch.full_like(w,
+        s = weights.std().item()
+        s = s + torch.normal(mean=0.0, std=noise_std * s, size=(1,), device=weights.device).item()
+        w = self.rescale(weights=weights, sigma=s, skip_prob=self.skip_prob)
+        mask = torch.bernoulli(torch.full_like(weights,
                                                1 - weight_dropout_prob,
-                                               dtype=w.dtype, 
-                                               device=w.device))
-
+                                               dtype=weights.dtype, 
+                                               device=weights.device))
         # Apply the dropout mask: only rescale where the mask is 1
-        return mask * noisy_w + (1 - mask) * w
-
-
-   
+        return mask * w + (1 - mask) * weights
     
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
@@ -462,23 +458,20 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
-        if self.training:
-            if self.epoch == 1:
-                self.sigma_w = self.sigma_w + weights.std().item()
+        if self.training and self.epoch == 1:
+            self.sigma_w = self.sigma_w + weights.std().item()
                     
-                if self._epoch_end():
-                    self.sigma_w = (self.sigma_w / self.batches_per_epoch)
-            if self.epoch > 1 and self._epoch_start() and weights.std().item() > self.sigma_w:
-                w = self.rescale(weights=weights, 
-                                sigma=self.sigma_w, 
-                                skip_prob=0.0)
-                
-            w = self.regularize(weights=weights,
-                                noise_std=self.noise_std,
-                                weight_dropout_prob=self.weight_dropout_prob,
-                                skip_prob=self.skip_prob)  
+            if self._epoch_end():
+                self.sigma_w = (self.sigma_w / self.batches_per_epoch)
+        if self.epoch > 1 and weights.std().item() > self.sigma_w:
+            w = self.rescale(weights=weights, sigma=self.sigma_w, skip_prob=0.0)
         else:
             w = weights
+        w = self.regularize(weights=w, 
+                            noise_std=self.noise_std, 
+                            weight_dropout_prob=self.weight_dropout_prob, 
+                            skip_prob=self.skip_prob)       
+      
         '''
         else:
             w = self.regularize(weights, 
