@@ -427,7 +427,7 @@ class LoRA(nn.Module):
         if sigma == 0 or self.skip(skip_prob):
             return weights
 
-        if torch.std(weights).item() < sigma:
+        if torch.std(weights).item() < sigma and self.skip(1 - self.noise_std):
             return weights
         
         return self._mask_overlay(original_weights=weights,
