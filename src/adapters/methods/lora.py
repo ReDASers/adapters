@@ -91,7 +91,7 @@ class LoRA(nn.Module):
         self._setup_gating_maybe(gating_heads)
 
         self.p = config.p
-        self.pW =  1 - 1/self.batches_per_epoch  
+        self.pW =  1 - 1/self.batches_per_epoch if self.location == "selfattn" else (1 - 1/self.batches_per_epoch) * self.p
         self.pdw = 1/self.batches_per_epoch
         
         
@@ -561,7 +561,7 @@ class LoRA(nn.Module):
             hidden_states = self.regularize(weights=scaling_vector, 
                                             noise_std=self.noise_std, 
                                             weight_dropout_prob=self.weight_dropout_prob, 
-                                            skip_prob=self.p)
+                                            skip_prob=self.skip_prob)
 
         self.delta_w = hidden_states.clone()
         if self.training:
