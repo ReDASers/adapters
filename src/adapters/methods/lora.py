@@ -90,8 +90,8 @@ class LoRA(nn.Module):
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
 
-        self.pW =  0.5
-        self.pdw = float(config.p)
+        self.pW =  float(config.p)
+        
         
         
         
@@ -481,10 +481,10 @@ class LoRA(nn.Module):
                     
             if self._epoch_end():
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
-        if self._epoch_start() and self.epoch > 1:
+        if self.training and self.epoch > 1:
             w = self.rescale(weights=weights, 
                              sigma=self.sigma_w, 
-                             skip_prob=0.0, 
+                             skip_prob=self.pW, 
                              weight_dropout_prob=self.weight_dropout_prob)
         else:
             w = weights
@@ -540,7 +540,7 @@ class LoRA(nn.Module):
             normed_dw = self.rescale(
                 weights=normed_dw, 
                 sigma=self.sigma_h,
-                skip_prob=self.pdw,
+                skip_prob=0.0,
                 weight_dropout_prob=self.weight_dropout_prob) 
                 
             hidden_states = self.regularize(weights=normed_dw,
