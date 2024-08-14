@@ -445,6 +445,9 @@ class LoRA(nn.Module):
                       original_weights: torch.Tensor, 
                       new_weights: torch.Tensor, 
                       weight_dropout_prob: float = 0.01):
+        if not self.training:
+            return original_weights
+        
         mask = torch.bernoulli(torch.full_like(original_weights,
                                                1 - weight_dropout_prob,
                                                dtype=original_weights.dtype, 
