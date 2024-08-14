@@ -424,9 +424,6 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Rescaled weights
         """
-        if not self.training:
-            return weights
-        
         if sigma == 0 or self.skip(skip_prob):
             return weights
 
