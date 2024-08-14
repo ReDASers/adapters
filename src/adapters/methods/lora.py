@@ -487,7 +487,7 @@ class LoRA(nn.Module):
         if self.training and self.epoch > 1:
             w = self.rescale(weights=weights, 
                              sigma=self.sigma_w, 
-                             skip_prob=self.pW, 
+                             skip_prob=0.0, 
                              weight_dropout_prob=self.weight_dropout_prob)
         else:
             w = weights
