@@ -489,12 +489,13 @@ class LoRA(nn.Module):
                              sigma=self.sigma_w, 
                              skip_prob=0.0, 
                              weight_dropout_prob=self.weight_dropout_prob)
-        else:
-            w = weights
-        w = self.regularize(weights=w, 
+            w = self.regularize(weights=w, 
                             noise_std=self.noise_std, 
                             weight_dropout_prob=self.weight_dropout_prob, 
-                            skip_prob=self.skip_prob)       
+                            skip_prob=self.skip_prob) 
+        else:
+            w = weights
+              
         
 
         if scaling is None:
