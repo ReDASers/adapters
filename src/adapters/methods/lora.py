@@ -397,7 +397,7 @@ class LoRA(nn.Module):
         """
         if not self.training:
             return False
-        return torch.bernoulli(torch.tensor(1 - skip_prob)).item() == 0
+        return torch.bernoulli(torch.tensor(skip_prob)).item() == 1
             
     def _rescale(self, weights: torch.Tensor, sigma: float):
         u = torch.mean(weights, dtype=weights.dtype)
@@ -430,7 +430,7 @@ class LoRA(nn.Module):
         if sigma == 0 or self.skip(skip_prob):
             return weights
 
-        if torch.std(weights).item() < sigma and self.skip(1 - self.noise_std):
+        if torch.std(weights).item() < sigma:
             return weights
         
         return self._mask_overlay(original_weights=weights,
