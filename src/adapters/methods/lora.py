@@ -491,6 +491,9 @@ class LoRA(nn.Module):
                              weight_dropout_prob=self.weight_dropout_prob)
         else: 
             w = weights
+
+        if not self.training:
+            w = self._rescale(weights=w, sigma=self.sigma_w)
         
         w = self.regularize(weights=w, 
                             noise_std=self.noise_std, 
