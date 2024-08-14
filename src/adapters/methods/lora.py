@@ -503,7 +503,7 @@ class LoRA(nn.Module):
         if scaling is None:
             scaling = self.scaling
 
-        if self._epoch_end:
+        if self._epoch_end():
             self.record_var(added, "delta_W")
             self.record_var(w, "W")
             self.record_weights_var_maybe()
