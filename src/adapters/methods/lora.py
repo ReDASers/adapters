@@ -484,21 +484,26 @@ class LoRA(nn.Module):
                     
             if self._epoch_end():
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
-        if self.training and self.epoch > 1 and self._epoch_end():
+        if self.training and self._epoch_end():
             w = self.rescale(weights=weights, 
                              sigma=self.sigma_w, 
                              skip_prob=0.0, 
                              weight_dropout_prob=self.weight_dropout_prob)
  
-        else:
+        elif not self.training:
+            w = self.rescale(weights=weights, 
+                             sigma=self.sigma_w, 
+                             skip_prob=0.0, 
+                             weight_dropout_prob=0.0)
+        else: 
             w = weights
-              
+        
         
         w = self.regularize(weights=w, 
                             noise_std=self.noise_std, 
                             weight_dropout_prob=self.weight_dropout_prob, 
                             skip_prob=self.skip_prob) 
-        
+                            
         if scaling is None:
             scaling = self.scaling
 
