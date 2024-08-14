@@ -90,8 +90,8 @@ class LoRA(nn.Module):
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
 
-        self.p = config.p
-        self.pW =  1 - 1/self.batches_per_epoch if self.location == "selfattn" else (1 - 1/self.batches_per_epoch) * self.p
+        self.p = float(config.p) if config.p <= self.batches_per_epoch and config.p >= 0 else 1.0
+        self.pW =  1 - 1/self.batches_per_epoch if self.location == "selfattn" else (1 - self.p/self.batches_per_epoch)
         self.pdw = 1/self.batches_per_epoch
         
         
