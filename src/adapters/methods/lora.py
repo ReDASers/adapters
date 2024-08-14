@@ -90,9 +90,8 @@ class LoRA(nn.Module):
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
 
-        self.p = float(config.p) if config.p <= self.batches_per_epoch and config.p >= 0 else 1.0
-        self.pW =  1 - self.p/self.batches_per_epoch
-        self.pdw = 1/self.batches_per_epoch
+        self.pW =  1/self.batches_per_epoch
+        self.pdw = float(config.p)
         
         
         
@@ -485,10 +484,10 @@ class LoRA(nn.Module):
                     
             if self._epoch_end():
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
-        if self.epoch > 1:
+        if self.epoch > 1 and self._epoch_start():
             w = self.rescale(weights=weights, 
                              sigma=self.sigma_w, 
-                             skip_prob=self.pW, 
+                             skip_prob=0.0, 
                              weight_dropout_prob=self.weight_dropout_prob)
         else:
             w = weights
