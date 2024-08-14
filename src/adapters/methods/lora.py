@@ -90,7 +90,7 @@ class LoRA(nn.Module):
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
 
-        self.pW =  1/self.batches_per_epoch
+        self.pW =  0.5
         self.pdw = float(config.p)
         
         
