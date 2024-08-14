@@ -91,7 +91,7 @@ class LoRA(nn.Module):
         self._setup_gating_maybe(gating_heads)
 
         self.p = config.p
-        self.pW =  1 - 1/self.batches_per_epoch  if self.location == "selfattn" else config.p
+        self.pW =  1 - 1/self.batches_per_epoch  
         self.pdw = 1/self.batches_per_epoch
         
         
