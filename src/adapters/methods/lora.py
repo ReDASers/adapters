@@ -488,9 +488,7 @@ class LoRA(nn.Module):
                
         if self.training and self.epoch > 1:
             if self.location == "output":
-                p = 0.0
-            elif self.location == "intermediate":
-                p = 0.0
+                p = 1 - self.p
             else:
                 p = self.p
             w = self.rescale(weights=weights, 
