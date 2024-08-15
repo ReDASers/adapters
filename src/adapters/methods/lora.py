@@ -89,8 +89,6 @@ class LoRA(nn.Module):
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
-
-        self.pW =  float(config.p)
         
         
         
@@ -488,14 +486,14 @@ class LoRA(nn.Module):
             w = self.rescale(weights=weights, 
                              sigma=self.sigma_w, 
                              skip_prob=0.9, 
-                             weight_dropout_prob=0.01)
+                             weight_dropout_prob=self.weight_dropout_prob)
         else: 
             w = weights
 
         if self.training:
             w = self.regularize(weights=w, 
                                 noise_std=self.noise_std,
-                                weight_dropout_prob=self.pW,
+                                weight_dropout_prob=0.05,
                                 skip_prob=self.skip_prob)
                             
         if scaling is None:
@@ -545,11 +543,11 @@ class LoRA(nn.Module):
                 weights=normed_dw, 
                 sigma=self.sigma_h,
                 skip_prob=0.0,
-                weight_dropout_prob=0.01)
+                weight_dropout_prob=self.weight_dropout_prob)
                 
             hidden_states = self.regularize(weights=normed_dw,
                                             noise_std=self.noise_std,
-                                            weight_dropout_prob=0.01,
+                                            weight_dropout_prob=self.weight_dropout_prob,
                                             skip_prob=self.skip_prob)   
           
            

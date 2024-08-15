@@ -495,8 +495,6 @@ class LoRAConfig(AdapterConfig):
 
     skip_prob: float = 0.05
 
-    p: float = 0.05
-
     noise_std: float = 0.01
     
     # Type of non-linearity to use
