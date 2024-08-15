@@ -559,10 +559,10 @@ class LoRA(nn.Module):
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler) 
-            hidden_states = self.regularize(weights=scaling_vector, 
-                                            noise_std=self.noise_std, 
-                                            weight_dropout_prob=self.weight_dropout_prob,
-                                            skip_prob=self.skip_prob)
+            #hidden_states = self.regularize(weights=scaling_vector, 
+            #                                noise_std=self.noise_std, 
+            #                                weight_dropout_prob=self.weight_dropout_prob,
+            #                                skip_prob=self.skip_prob)
 
         self.delta_w = hidden_states.clone()
         if self.training:
