@@ -89,6 +89,9 @@ class LoRA(nn.Module):
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
+        assert config.p >= 0 and config.p <= 1.0, "p must be between in R[0, 1]"
+
+        self.p = float(1 - config.p) 
         
         
         
@@ -485,7 +488,7 @@ class LoRA(nn.Module):
         if self.training and self.epoch > 1:
             w = self.rescale(weights=weights, 
                              sigma=self.sigma_w, 
-                             skip_prob=0.9, 
+                             skip_prob=self.p, # here we use 1 - p since we want to skip a lot and high p is confusing
                              weight_dropout_prob=self.weight_dropout_prob)
         else: 
             w = weights
@@ -493,7 +496,7 @@ class LoRA(nn.Module):
         if self.training:
             w = self.regularize(weights=w, 
                                 noise_std=self.noise_std,
-                                weight_dropout_prob=0.05,
+                                weight_dropout_prob=self.weight_dropout_prob/2.0,
                                 skip_prob=self.skip_prob)
                             
         if scaling is None:
