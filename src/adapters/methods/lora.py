@@ -490,7 +490,7 @@ class LoRA(nn.Module):
             if self.location == "output":
                 p = 0.0
             elif self.location == "intermediate":
-                p = 0.5
+                p = 0.0
             else:
                 p = self.p
             w = self.rescale(weights=weights, 
@@ -553,7 +553,7 @@ class LoRA(nn.Module):
             normed_dw = self.rescale(
                 weights=normed_dw, 
                 sigma=self.sigma_h,
-                skip_prob=1 - self.p,
+                skip_prob=0.0,
                 weight_dropout_prob=self.weight_dropout_prob)
                 
             hidden_states = self.regularize(weights=normed_dw,
