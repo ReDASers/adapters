@@ -94,6 +94,8 @@ class LoRA(nn.Module):
         self.p = float(config.p) 
         
         
+        
+        
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
         Calculates the number of batches per epoch based on the batch size and training set size.
@@ -549,7 +551,7 @@ class LoRA(nn.Module):
             normed_dw = self.rescale(
                 weights=normed_dw, 
                 sigma=self.sigma_h,
-                skip_prob=self.p,
+                skip_prob=0.0,
                 weight_dropout_prob=self.weight_dropout_prob)
                 
             hidden_states = self.regularize(weights=normed_dw,
