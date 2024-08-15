@@ -487,9 +487,13 @@ class LoRA(nn.Module):
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
                
         if self.training and self.epoch > 1:
+            if self.location == "output":
+                p = 0.1
+            else:
+                p = 0.9
             w = self.rescale(weights=weights, 
                              sigma=self.sigma_w, 
-                             skip_prob=0.1, # here we use 1 - p since we want to skip a lot and high p is confusing
+                             skip_prob=p, # here we use 1 - p since we want to skip a lot and high p is confusing
                              weight_dropout_prob=self.weight_dropout_prob)
         else: 
             w = weights
