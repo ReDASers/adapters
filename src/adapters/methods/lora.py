@@ -485,10 +485,11 @@ class LoRA(nn.Module):
                     
             if self._epoch_end():
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
+               
         if self.training and self.epoch > 1:
             w = self.rescale(weights=weights, 
                              sigma=self.sigma_w, 
-                             skip_prob=self.p, # here we use 1 - p since we want to skip a lot and high p is confusing
+                             skip_prob=0.1, # here we use 1 - p since we want to skip a lot and high p is confusing
                              weight_dropout_prob=self.weight_dropout_prob)
         else: 
             w = weights
@@ -542,10 +543,11 @@ class LoRA(nn.Module):
                 self.batch_sigmas[self.n_batches - 1] = sigma_dw 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
             
+                
             normed_dw = self.rescale(
                 weights=normed_dw, 
                 sigma=self.sigma_h,
-                skip_prob=0.0,
+                skip_prob=self.p,
                 weight_dropout_prob=self.weight_dropout_prob)
                 
             hidden_states = self.regularize(weights=normed_dw,
