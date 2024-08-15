@@ -91,7 +91,7 @@ class LoRA(nn.Module):
         self._setup_gating_maybe(gating_heads)
         assert config.p >= 0 and config.p <= 1.0, "p must be between in R[0, 1]"
 
-        self.p = float(1 - config.p) 
+        self.p = float(config.p) 
         
         
         
@@ -488,9 +488,9 @@ class LoRA(nn.Module):
                
         if self.training and self.epoch > 1:
             if self.location == "output":
-                p = 1 - self.p
-            else:
                 p = self.p
+            else:
+                p = 1 - self.p
             w = self.rescale(weights=weights, 
                              sigma=self.sigma_w, 
                              skip_prob=p, # here we use 1 - p since we want to skip a lot and high p is confusing
@@ -551,7 +551,7 @@ class LoRA(nn.Module):
             normed_dw = self.rescale(
                 weights=normed_dw, 
                 sigma=self.sigma_h,
-                skip_prob=1 - self.p,
+                skip_prob=self.p,
                 weight_dropout_prob=self.weight_dropout_prob)
                 
             hidden_states = self.regularize(weights=normed_dw,
