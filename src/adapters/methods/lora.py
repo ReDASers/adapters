@@ -488,9 +488,9 @@ class LoRA(nn.Module):
                
         if self.training and self.epoch > 1:
             if self.location == "output":
-                p = 0.1
+                p = 0.5
             else:
-                p = 0.9
+                p = self.p
             w = self.rescale(weights=weights, 
                              sigma=self.sigma_w, 
                              skip_prob=p, # here we use 1 - p since we want to skip a lot and high p is confusing
@@ -551,7 +551,7 @@ class LoRA(nn.Module):
             normed_dw = self.rescale(
                 weights=normed_dw, 
                 sigma=self.sigma_h,
-                skip_prob=self.p,
+                skip_prob=1 - self.p,
                 weight_dropout_prob=self.weight_dropout_prob)
                 
             hidden_states = self.regularize(weights=normed_dw,
