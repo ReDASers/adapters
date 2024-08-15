@@ -495,7 +495,7 @@ class LoRA(nn.Module):
         if self.training:
             w = self.regularize(weights=w, 
                                 noise_std=self.noise_std,
-                                weight_dropout_prob=0.01,
+                                weight_dropout_prob=self.pW,
                                 skip_prob=self.skip_prob)
                             
         if scaling is None:
@@ -549,7 +549,7 @@ class LoRA(nn.Module):
                 
             hidden_states = self.regularize(weights=normed_dw,
                                             noise_std=self.noise_std,
-                                            weight_dropout_prob=self.pW,
+                                            weight_dropout_prob=0.01,
                                             skip_prob=self.skip_prob)   
           
            
