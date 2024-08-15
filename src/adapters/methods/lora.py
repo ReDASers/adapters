@@ -91,7 +91,7 @@ class LoRA(nn.Module):
         self._setup_gating_maybe(gating_heads)
         assert config.p >= 0 and config.p <= 1.0, "p must be between in R[0, 1]"
 
-        self.p = float(config.p) 
+        self.p = nn.Parameter(torch.tensor(float(config.p), dtype=torch.float32))
         
         
         
