@@ -488,7 +488,7 @@ class LoRA(nn.Module):
             w = self.rescale(weights=weights, 
                              sigma=self.sigma_w, 
                              skip_prob=0.9, 
-                             weight_dropout_prob=0.01)
+                             weight_dropout_prob=0.0)
         else: 
             w = weights
 
@@ -545,7 +545,7 @@ class LoRA(nn.Module):
                 weights=normed_dw, 
                 sigma=self.sigma_h,
                 skip_prob=0.0,
-                weight_dropout_prob=0.01) 
+                weight_dropout_prob=0.0)
                 
             hidden_states = self.regularize(weights=normed_dw,
                                             noise_std=self.noise_std,
