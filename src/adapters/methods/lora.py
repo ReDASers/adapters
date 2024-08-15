@@ -91,7 +91,13 @@ class LoRA(nn.Module):
         self._setup_gating_maybe(gating_heads)
         assert config.p >= 0 and config.p <= 1.0, "p must be between in R[0, 1]"
 
-        self.p = nn.Parameter(torch.tensor(float(config.p), dtype=torch.float32))
+        
+        if self.location == "output":
+            self.p = nn.Parameter(torch.tensor(float(config.p), dtype=torch.float32))
+        else:
+            self.p = nn.Parameter(torch.tensor(1 - float(config.p), dtype=torch.float32))
+            if self.location == "selfattn":
+                self.pd = nn.Parameter(torch.tensor(float(config.p), dtype=torch.float32))
         
         
         
@@ -487,13 +493,10 @@ class LoRA(nn.Module):
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
                
         if self.training and self.epoch > 1:
-            if self.location == "output":
-                p = self.p
-            else:
-                p = 1 - self.p
+
             w = self.rescale(weights=weights, 
                              sigma=self.sigma_w, 
-                             skip_prob=p, # here we use 1 - p since we want to skip a lot and high p is confusing
+                             skip_prob=self.p, # here we use 1 - p since we want to skip a lot and high p is confusing
                              weight_dropout_prob=self.weight_dropout_prob)
         else: 
             w = weights
@@ -551,7 +554,7 @@ class LoRA(nn.Module):
             normed_dw = self.rescale(
                 weights=normed_dw, 
                 sigma=self.sigma_h,
-                skip_prob=self.p,
+                skip_prob=self.pd,
                 weight_dropout_prob=self.weight_dropout_prob)
                 
             hidden_states = self.regularize(weights=normed_dw,
