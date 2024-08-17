@@ -435,7 +435,7 @@ class LoRA(nn.Module):
                                   new_weights=self._rescale(weights=weights, sigma=sigma), 
                                   weight_dropout_prob=weight_dropout_prob)
     
-    def inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> float:
+    def inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
         if not self.training:
             return weights
         s = weights.std().item()
@@ -488,7 +488,7 @@ class LoRA(nn.Module):
                
         if self.training and self.epoch > 1:
             if self.location == "output":
-                p = self.p
+                p = 1 - self.p
             else:
                 p = 1 - self.p
             w = self.rescale(weights=weights, 
