@@ -487,7 +487,7 @@ class LoRA(nn.Module):
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
                
         if self.training and self.epoch > 1:
-            if self.location == "intermediate":
+            if self.location == "output":
                 p = self.p
             else:
                 p = 1 - self.p
