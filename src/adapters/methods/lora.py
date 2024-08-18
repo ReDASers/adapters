@@ -74,7 +74,6 @@ class LoRA(nn.Module):
         self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
         
         self.n_batches = 0 # have not trained yet   
-        self.training_steps = 0
         self.epoch = 1
         # List to store variance for each LoRA instance
         
@@ -91,7 +90,10 @@ class LoRA(nn.Module):
         self._setup_gating_maybe(gating_heads)
         assert config.p >= 0 and config.p <= 1.0, "p must be between in R[0, 1]"
 
-        self.p = float(config.p) 
+        self.p = float(config.p)
+        self.log = config.log
+        assert self.epoch, "Epoch must be greater than 0."
+        assert self.epoch == 1, "Epoch must be 1." 
         
         
         
@@ -286,7 +288,6 @@ class LoRA(nn.Module):
 
     def _increment_training_step_maybe(self):
         if self.training:
-            self.training_steps = self.training_steps + 1
             self.n_batches = self.n_batches + 1
             if self.n_batches > self.batches_per_epoch:
                 self.n_batches = 1
@@ -480,30 +481,31 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
-        if self.training and self.epoch == 1:
-            self.sigma_w = self.sigma_w + weights.std().item()
-                    
-            if self._epoch_end():
-                self.sigma_w = (self.sigma_w / self.batches_per_epoch)
-               
-        if self.training and self.epoch > 1:
-            w = self.rescale(weights=weights, 
-                             sigma=self.sigma_w, 
-                             skip_prob=1 - self.p if self.location != "output" else self.p, # here we use 1 - p since we want to skip a lot and high p is confusing
-                             weight_dropout_prob=self.weight_dropout_prob)
-        else: 
-            w = weights
-
         if self.training:
+            if self.epoch == 1:
+                self.sigma_w = self.sigma_w + weights.std().item()
+                        
+                if self._epoch_end():
+                    self.sigma_w = (self.sigma_w / self.batches_per_epoch)
+
+                w = weights
+            else:
+                w = self.rescale(weights=weights, 
+                                sigma=self.sigma_w, 
+                                skip_prob=1 - self.p if self.location != "output" else self.p, # here we use 1 - p since we want to skip a lot and high p is confusing
+                                weight_dropout_prob=self.weight_dropout_prob)
+                
             w = self.regularize(weights=w, 
                                 noise_std=self.noise_std,
                                 weight_dropout_prob=self.weight_dropout_prob,
                                 skip_prob=self.skip_prob)
+        else: 
+            w = weights
                             
         if scaling is None:
             scaling = self.scaling
 
-        if self._epoch_end():
+        if self.log and self._epoch_end():
             self.record_var(added, "delta_W")
             self.record_var(w, "W")
             self.record_weights_var_maybe()
@@ -547,9 +549,10 @@ class LoRA(nn.Module):
             normed_dw = self.rescale(
                 weights=normed_dw, 
                 sigma=self.sigma_h,
-                skip_prob=self.p,
+                skip_prob=self.p, # will not skip on eval
                 weight_dropout_prob=self.weight_dropout_prob)
-                
+            
+            # does nothing if not training
             hidden_states = self.regularize(weights=normed_dw,
                                             noise_std=self.noise_std,
                                             weight_dropout_prob=self.weight_dropout_prob,
@@ -561,16 +564,14 @@ class LoRA(nn.Module):
             # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler) 
-            #hidden_states = self.regularize(weights=scaling_vector, 
-            #                                noise_std=self.noise_std, 
-            #                                weight_dropout_prob=self.weight_dropout_prob,
-            #                                skip_prob=self.skip_prob)
 
         self.delta_w = hidden_states.clone()
-        if self.training:
-            self.record_var(hidden_states.std().item(), "hidden_std-train")
-        else:
-            self.record_var(hidden_states.std().item(), "hidden_std-eval")
+
+        if self.log:
+            if self.training:
+                self.record_var(hidden_states.std().item(), "hidden_std-train")
+            else:
+                self.record_var(hidden_states.std().item(), "hidden_std-eval")
 
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:

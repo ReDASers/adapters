@@ -506,6 +506,8 @@ class LoRAConfig(AdapterConfig):
 
     batch_size: Optional[int] = None
 
+    log: bool = False
+
 
 @dataclass(eq=False)
 class IA3Config(LoRAConfig):
