@@ -489,7 +489,7 @@ class LoRA(nn.Module):
         if self.training and self.epoch > 1:
             w = self.rescale(weights=weights, 
                              sigma=self.sigma_w, 
-                             skip_prob=1 - self.p, # here we use 1 - p since we want to skip a lot and high p is confusing
+                             skip_prob=1 - self.p if self.location != "output" else self.p, # here we use 1 - p since we want to skip a lot and high p is confusing
                              weight_dropout_prob=self.weight_dropout_prob)
         else: 
             w = weights
