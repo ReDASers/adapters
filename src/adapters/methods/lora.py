@@ -490,9 +490,10 @@ class LoRA(nn.Module):
                 if self.location == "selfattn":
                     p = 1 - self.p
                 elif self.location == "output":
-                    p = 1 - 1/self.batches_per_epoch
+                    p = 1 - 1/self.batches_per_epoch - 1e-6
                 else:
-                    p = 0.0
+                    p = 1 - 1/self.batches_per_epoch - 1e-6
+
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
                                 skip_prob=p,
