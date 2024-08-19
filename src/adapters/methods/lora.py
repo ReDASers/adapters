@@ -90,12 +90,19 @@ class LoRA(nn.Module):
         self._setup_gating_maybe(gating_heads)
         assert config.p >= 0 and config.p <= 1.0, "p must be between in R[0, 1]"
 
-        self.p = float(config.p)
+        self.set_p(float(config.p))
+        
         self.log = config.log
         assert self.epoch, "Epoch must be greater than 0."
         assert self.epoch == 1, "Epoch must be 1." 
         
-        
+
+    def set_p(self, p:float):
+        if self.location == "selfattn":
+            self.p = 1 - p
+            self.h = p
+        else:
+            self.p = 1 - 1/self.batches_per_epoch
         
         
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
@@ -104,8 +111,12 @@ class LoRA(nn.Module):
         """
         if batch_size is not None and training_set_size is not None:
             batches_per_epoch = training_set_size // batch_size
+            
             if batches_per_epoch < 1:
-                logging.warning("Turning off rescaling...")
+                logging.warning("Training set size is less than batch size. \
+                                Setting batches per epoch to 1. \
+                                This may lead to incorrect rescaling and suboptimal performance.")
+                return 1
             return batches_per_epoch
         
         logging.warning("Batch size or training set size is None. \
@@ -487,16 +498,9 @@ class LoRA(nn.Module):
 
                 w = weights
             else:
-                if self.location == "selfattn":
-                    p = 1 - self.p
-                elif self.location == "output":
-                    p = 1 - 1/self.batches_per_epoch - 1e-6
-                else:
-                    p = 1 - 1/self.batches_per_epoch - 1e-6
-
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
-                                skip_prob=p,
+                                skip_prob=self.p,
                                 weight_dropout_prob=self.weight_dropout_prob)
                 
             w = self.regularize(weights=w, 
@@ -513,13 +517,11 @@ class LoRA(nn.Module):
             self.record_var(added, "delta_W")
             self.record_var(w, "W")
             self.record_weights_var_maybe()
-        match self.location:
-            case "selfattn":
-                return w + added * scaling
-            case "output" | "intermediate": 
-                return w * (added * scaling)
-            case _:
-                raise ValueError(f"Invalid location key: {self.location}")
+
+        if self.location == "selfattn":
+            return w + added * scaling
+        else: 
+            return w * (added * scaling)
     
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         """Forward pass of the LoRA module.
@@ -544,25 +546,23 @@ class LoRA(nn.Module):
             # Normalize delta_w by its L2 norm
             dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
-            sigma_dw = normed_dw.std().item()
+            
             if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = sigma_dw 
+                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item() 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
             
-                
-            normed_dw = self.rescale(
+            rescaled_dw = self.rescale(
                 weights=normed_dw, 
                 sigma=self.sigma_h,
-                skip_prob=self.p, # will not skip on eval
+                skip_prob=self.h, # will not skip on eval
                 weight_dropout_prob=self.weight_dropout_prob)
             
             # does nothing if not training
-            hidden_states = self.regularize(weights=normed_dw,
+            hidden_states = self.regularize(weights=rescaled_dw,
                                             noise_std=self.noise_std,
                                             weight_dropout_prob=self.weight_dropout_prob,
                                             skip_prob=self.skip_prob)   
-          
-           
+                
         # scaling mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
