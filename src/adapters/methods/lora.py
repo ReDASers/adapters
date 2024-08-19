@@ -33,6 +33,25 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
 
 
+@torch.jit.script
+def _rescale(weights: torch.Tensor, sigma: float):
+    mean = weights.mean(dtype=weights.dtype)
+    std = weights.std(unbiased=False)
+    return (weights - mean) / std * sigma + mean
+
+@torch.jit.script
+def _inject_noise(weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
+    s = weights.std(unbiased=False).item()
+    return _rescale(weights=weights, 
+                            sigma=s + torch.normal(
+                                         mean=0.0, 
+                                         std=noise_std * s, 
+                                         size=(1,), 
+                                         dtype=weights.dtype, 
+                                         device=weights.device,
+                                      ).item(),
+                    )
+
 class LoRA(nn.Module):
     def __init__(
         self,
@@ -402,13 +421,6 @@ class LoRA(nn.Module):
     def skip(self, skip_prob: float = 0.05) -> bool:
         return not self.training or random.random() > skip_prob
     
-    @staticmethod
-    @torch.jit.script
-    def _rescale(weights: torch.Tensor, sigma: float):
-        mean = weights.mean(dtype=weights.dtype)
-        std = weights.std(unbiased=False)
-        return (weights - mean) / std * sigma + mean
-    
     def rescale(self, 
                 weights: torch.Tensor, 
                 sigma: float = 0.02, 
@@ -436,22 +448,11 @@ class LoRA(nn.Module):
             return weights
         
         return self._mask_overlay(original_weights=weights,
-                                  new_weights=LoRA._rescale(weights=weights, sigma=sigma), 
+                                  new_weights=_rescale(weights=weights, sigma=sigma), 
                                   weight_dropout_prob=weight_dropout_prob)
     
-    @staticmethod
-    @torch.jit.script
-    def _inject_noise(weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
-        s = weights.std(unbiased=False).item()
-        return LoRA._rescale(weights=weights, 
-                             sigma=s + torch.normal(
-                                mean=0.0, 
-                                std=noise_std * s, 
-                                size=(1,), 
-                                dtype=weights.dtype, 
-                                device=weights.device,
-                                ).item(),
-                            )
+    
+ 
     
     def _mask_overlay(self, 
                       original_weights: torch.Tensor, 
@@ -475,7 +476,7 @@ class LoRA(nn.Module):
             return weights
         
         return self._mask_overlay(original_weights=weights, 
-                                  new_weights=LoRA._inject_noise(weights=weights, noise_std=noise_std), 
+                                  new_weights=_inject_noise(weights=weights, noise_std=noise_std), 
                                   weight_dropout_prob=weight_dropout_prob)
     
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
