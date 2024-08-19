@@ -476,7 +476,7 @@ class LoRA(nn.Module):
             return weights
         
         return self._mask_overlay(original_weights=weights, 
-                                  new_weights=_inject_noise(weights=weights, noise_std=noise_std), 
+                                  new_weights=_inject_noise(weights=weights.clone(), noise_std=noise_std), 
                                   weight_dropout_prob=weight_dropout_prob)
     
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
@@ -491,16 +491,17 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
+        w = torch.nan_to_num(weights)
         if self.training:
             if self.epoch == 1:
-                self.sigma_w = self.sigma_w + weights.std(unbiased=False).item()
+                self.sigma_w = self.sigma_w + w.std(unbiased=False).item()
                         
                 if self._epoch_end():
                     self.sigma_w = (self.sigma_w / self.batches_per_epoch)
 
-                w = weights
+                
             else:
-                w = self.rescale(weights=weights, 
+                w = self.rescale(weights=w, 
                                 sigma=self.sigma_w, 
                                 skip_prob=self.p,
                                 weight_dropout_prob=self.weight_dropout_prob)
@@ -509,8 +510,7 @@ class LoRA(nn.Module):
                                 noise_std=self.noise_std,
                                 weight_dropout_prob=self.weight_dropout_prob,
                                 skip_prob=self.skip_prob)
-        else: 
-            w = weights
+   
                             
         if scaling is None:
             scaling = self.scaling if self.scaling is not None else 1.0
