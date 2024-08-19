@@ -413,7 +413,7 @@ class LoRA(nn.Module):
             
     def _rescale(self, weights: torch.Tensor, sigma: float):
         u = torch.mean(weights, dtype=weights.dtype)
-        z = (weights - u) / (torch.std(weights) + 1e-12)
+        z = (weights - u) / (torch.std(weights, unbiased=False) + 1e-12)
         return z * sigma + u
     
     def rescale(self, 
@@ -439,7 +439,7 @@ class LoRA(nn.Module):
         if sigma == 0 or self.skip(skip_prob):
             return weights
 
-        if torch.std(weights).item() < sigma:
+        if torch.std(weights, unbiased=False).item() < sigma:
             return weights
         
         return self._mask_overlay(original_weights=weights,
@@ -447,14 +447,20 @@ class LoRA(nn.Module):
                                   weight_dropout_prob=weight_dropout_prob)
     
     def _inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
-        s = weights.std().item()
-        s = s + torch.normal(mean=0.0, std=noise_std * s, size=(1,), device=weights.device).item()
-        return self._rescale(weights=weights, sigma=s)
+        return self._rescale(weights=weights, 
+                             sigma=torch.normal(
+                                mean=0.0, 
+                                std=noise_std * weights.std(unbiased=False).item(), 
+                                size=(), 
+                                dtype=weights.dtype, 
+                                device=weights.device,
+                                ).item(),
+                            )
         
     def _mask_overlay(self, 
                       original_weights: torch.Tensor, 
                       new_weights: torch.Tensor, 
-                      weight_dropout_prob: float = 0.01):
+                      weight_dropout_prob: float = 0.01) -> torch.Tensor:
         if not self.training:
             return new_weights
         
@@ -548,7 +554,7 @@ class LoRA(nn.Module):
             normed_dw = dw / dw_norm
             
             if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item() 
+                self.batch_sigmas[self.n_batches - 1] = normed_dw.std(unbiased=False).item() 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
             
             rescaled_dw = self.rescale(
