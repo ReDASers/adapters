@@ -487,6 +487,12 @@ class LoRA(nn.Module):
 
                 w = weights
             else:
+                if self.location == "selfattn":
+                    p = 1 - self.p
+                elif self.location == "output":
+                    p = 1 - self.skip_prob
+                else:
+                    p = 0.0
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
                                 skip_prob=1 - self.p if self.location != "intermediate" else 0.0, # here we use 1 - p since we want to skip a lot and high p is confusing
