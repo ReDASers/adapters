@@ -495,7 +495,7 @@ class LoRA(nn.Module):
                     p = 0.0
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
-                                skip_prob=1 - self.p if self.location != "intermediate" else 0.0, # here we use 1 - p since we want to skip a lot and high p is confusing
+                                skip_prob=p
                                 weight_dropout_prob=self.weight_dropout_prob)
                 
             w = self.regularize(weights=w, 
