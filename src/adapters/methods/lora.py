@@ -36,12 +36,12 @@ logging.basicConfig(level=logging.WARNING)
 @torch.jit.script
 def _rescale(weights: torch.Tensor, sigma: float):
     mean = weights.mean(dtype=weights.dtype)
-    std = weights.std(unbiased=False)
+    std = weights.std()
     return (weights - mean) / std * sigma + mean
 
 @torch.jit.script
 def _inject_noise(weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
-    s = weights.std(unbiased=False).item()
+    s = weights.std().item()
     return _rescale(weights=weights, 
                             sigma=s + torch.normal(
                                          mean=0.0, 
@@ -443,7 +443,7 @@ class LoRA(nn.Module):
         if sigma == 0 or self.skip(skip_prob):
             return weights
 
-        if torch.std(weights, unbiased=False).item() < sigma:
+        if torch.std(weights).item() < sigma:
             return weights
         
         return self._mask_overlay(original_weights=weights,
@@ -493,7 +493,7 @@ class LoRA(nn.Module):
         w = torch.nan_to_num(weights)
         if self.training:
             if self.epoch == 1:
-                self.sigma_w = self.sigma_w + w.std(unbiased=False).item()
+                self.sigma_w = self.sigma_w + w.std().item()
                         
                 if self._epoch_end():
                     self.sigma_w = (self.sigma_w / self.batches_per_epoch)
@@ -550,7 +550,7 @@ class LoRA(nn.Module):
             normed_dw = dw / dw_norm
             
             if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = normed_dw.std(unbiased=False).item() 
+                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item() 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
             
             rescaled_dw = self.rescale(
@@ -575,7 +575,7 @@ class LoRA(nn.Module):
         self.delta_w = hidden_states.clone()
 
         if self.log:
-            self.record_var(hidden_states.std(unbiased=False).item(), "hidden_std-train" if self.training else "hidden_std-eval")
+            self.record_var(hidden_states.std().item(), "hidden_std-train" if self.training else "hidden_std-eval")
 
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
