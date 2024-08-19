@@ -207,8 +207,7 @@ class LoRA(nn.Module):
         """
         self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
         self.scalar_scaler = nn.Parameter(torch.tensor(1e-9, dtype=torch.float32))
-        self.sigma = self._estimate_scaling_sigma()
-        nn.init.normal_(self.lora_C, mean=1.0, std=self.sigma)
+        nn.init.normal_(self.lora_C, mean=1.0, std=self._estimate_scaling_sigma())
         self.variances[self.location+"_lora_C"] = [self.lora_C.var().item()]
 
     def _estimate_scaling_sigma(self) -> float:
@@ -359,7 +358,7 @@ class LoRA(nn.Module):
                 else:
                     raise ValueError("weights_or_num must be a tensor or a float.")
 
-    def get_variances(self) -> Dict[str, List[float]]:
+    def get_variances(self) -> dict[str, list[float]]:
         """
         Returns the recorded variances for each parameter.
 
@@ -436,9 +435,7 @@ class LoRA(nn.Module):
                                   new_weights=self._rescale(weights=weights, sigma=sigma), 
                                   weight_dropout_prob=weight_dropout_prob)
     
-    def inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
-        if not self.training:
-            return weights
+    def _inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
         s = weights.std().item()
         s = s + torch.normal(mean=0.0, std=noise_std * s, size=(1,), device=weights.device).item()
         return self._rescale(weights=weights, sigma=s)
@@ -466,7 +463,7 @@ class LoRA(nn.Module):
             return weights
         
         return self._mask_overlay(original_weights=weights, 
-                                  new_weights=self.inject_noise(weights=weights, noise_std=noise_std), 
+                                  new_weights=self._inject_noise(weights=weights, noise_std=noise_std), 
                                   weight_dropout_prob=weight_dropout_prob)
     
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
