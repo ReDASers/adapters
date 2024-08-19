@@ -495,7 +495,7 @@ class LoRA(nn.Module):
                     p = 0.0
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
-                                skip_prob=p
+                                skip_prob=p,
                                 weight_dropout_prob=self.weight_dropout_prob)
                 
             w = self.regularize(weights=w, 
