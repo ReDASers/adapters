@@ -101,8 +101,10 @@ class LoRA(nn.Module):
         if self.location == "selfattn":
             self.p = 1 - p
             self.h = p
-        else:
+        elif self.location == "output":
             self.p = 1 - 1/self.batches_per_epoch
+        else:
+            self.p = 0.0
         
         
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
