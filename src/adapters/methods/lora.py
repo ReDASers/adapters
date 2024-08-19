@@ -486,13 +486,13 @@ class LoRA(nn.Module):
                 self.sigma_w = self.sigma_w + weights.std().item()
                         
                 if self._epoch_end():
-                    self.sigma_w = (self.sigma_w / self.batches_per_epoch) * (1 - self.p)
+                    self.sigma_w = (self.sigma_w / self.batches_per_epoch)
 
                 w = weights
             else:
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
-                                skip_prob=1 - self.p if self.location == "selfattn" else 0.0, # here we use 1 - p since we want to skip a lot and high p is confusing
+                                skip_prob=1 - self.p if self.location != "output" else 0.0, # here we use 1 - p since we want to skip a lot and high p is confusing
                                 weight_dropout_prob=self.weight_dropout_prob)
                 
             w = self.regularize(weights=w, 
