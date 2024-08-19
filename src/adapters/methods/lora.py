@@ -429,7 +429,7 @@ class LoRA(nn.Module):
         if sigma == 0 or self.skip(skip_prob):
             return weights
 
-        if torch.std(weights).item() < sigma * (1 - self.p):
+        if torch.std(weights).item() < sigma:
             return weights
         
         return self._mask_overlay(original_weights=weights,
@@ -486,7 +486,7 @@ class LoRA(nn.Module):
                 self.sigma_w = self.sigma_w + weights.std().item()
                         
                 if self._epoch_end():
-                    self.sigma_w = (self.sigma_w / self.batches_per_epoch)
+                    self.sigma_w = (self.sigma_w / self.batches_per_epoch) * (1 - self.p)
 
                 w = weights
             else:
