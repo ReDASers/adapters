@@ -144,8 +144,6 @@ class LoRA(nn.Module):
                             This may lead to incorrect rescaling and suboptimal performance.")
             return 1
         return batches_per_epoch
-        
-    
             
     def _get_valid_location_key(self, config, location_key) -> bool:
         """
@@ -548,7 +546,7 @@ class LoRA(nn.Module):
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
-            dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
+            dw_norm = torch.clamp(dw.norm(p=2, dim=1, keepdim=True), min=1e-9)
             normed_dw = dw / dw_norm
             
             if self.training and self.epoch == 1:
@@ -563,7 +561,7 @@ class LoRA(nn.Module):
             
             # does nothing if not training
             hidden_states = self.regularize(
-                weights=rescaled_dw,
+                weights=torch.nan_to_num(rescaled_dw),
                 noise_std=self.noise_std,
                 weight_dropout_prob=self.weight_dropout_prob,
                 skip_prob=self.skip_prob)   
