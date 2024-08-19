@@ -543,9 +543,8 @@ class LoRA(nn.Module):
     
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
-            if hidden_states is None:
-                hidden_states = layer_input
-            
+            hidden_states = hidden_states if hidden_states is not None else layer_input
+                
             x = torch.nan_to_num(hidden_states)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
@@ -561,34 +560,31 @@ class LoRA(nn.Module):
                 weights=normed_dw, 
                 sigma=self.sigma_h,
                 skip_prob=self.h, # will not skip on eval
-                weight_dropout_prob=self.weight_dropout_prob)
+                weight_dropout_prob=self.weight_dropout_prob,
+            )
             
             # does nothing if not training
-            hidden_states = self.regularize(weights=rescaled_dw,
-                                            noise_std=self.noise_std,
-                                            weight_dropout_prob=self.weight_dropout_prob,
-                                            skip_prob=self.skip_prob)   
+            hidden_states = self.regularize(
+                weights=rescaled_dw,
+                noise_std=self.noise_std,
+                weight_dropout_prob=self.weight_dropout_prob,
+                skip_prob=self.skip_prob,
+            )   
                 
         # scaling mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
-            scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.shape[0], 1, 1))
+            scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).expand(layer_input.size(0), -1, -1))
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler) 
 
         self.delta_w = hidden_states.clone()
 
         if self.log:
-            if self.training:
-                self.record_var(hidden_states.std().item(), "hidden_std-train")
-            else:
-                self.record_var(hidden_states.std().item(), "hidden_std-eval")
+            self.record_var(hidden_states.std().item(), "hidden_std-train" if self.training else "hidden_std-eval")
 
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
-            # Compute gate values using a sigmoid function applied to the layer input
-            gate = torch.sigmoid(self.gate(layer_input))
-            # Average gate values across the second dimension and add a new dimension at the end
-            gate = torch.mean(gate, dim=1).unsqueeze(-1)
+            gate = torch.sigmoid(self.gate(layer_input)).mean(dim=1, keepdim=True)
             # Multiply hidden_states by the gate values
             hidden_states = hidden_states * gate
         else:
