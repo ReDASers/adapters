@@ -413,7 +413,7 @@ class LoRA(nn.Module):
             
     def _rescale(self, weights: torch.Tensor, sigma: float):
         u = torch.mean(weights, dtype=weights.dtype)
-        z = (weights - u) / (torch.std(weights, unbiased=False) + 1e-12)
+        z = (weights - u) / (torch.std(weights) + 1e-12)
         return z * sigma + u
     
     def rescale(self, 
@@ -439,7 +439,7 @@ class LoRA(nn.Module):
         if sigma == 0 or self.skip(skip_prob):
             return weights
 
-        if torch.std(weights, unbiased=False).item() < sigma:
+        if torch.std(weights).item() < sigma:
             return weights
         
         return self._mask_overlay(original_weights=weights,
@@ -450,7 +450,7 @@ class LoRA(nn.Module):
         return self._rescale(weights=weights, 
                              sigma=torch.normal(
                                 mean=0.0, 
-                                std=noise_std * weights.std(unbiased=False).item(), 
+                                std=noise_std * weights.std().item(), 
                                 size=(), 
                                 dtype=weights.dtype, 
                                 device=weights.device,
@@ -553,28 +553,26 @@ class LoRA(nn.Module):
             normed_dw = dw / dw_norm
             
             if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = normed_dw.std(unbiased=False).item() 
+                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item() 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
             
             rescaled_dw = self.rescale(
                 weights=normed_dw, 
                 sigma=self.sigma_h,
                 skip_prob=self.h, # will not skip on eval
-                weight_dropout_prob=self.weight_dropout_prob,
-            )
+                weight_dropout_prob=self.weight_dropout_prob)
             
             # does nothing if not training
             hidden_states = self.regularize(
                 weights=rescaled_dw,
                 noise_std=self.noise_std,
                 weight_dropout_prob=self.weight_dropout_prob,
-                skip_prob=self.skip_prob,
-            )   
+                skip_prob=self.skip_prob)   
                 
         # scaling mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
-            scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).expand(layer_input.size(0), -1, -1))
+            scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.size(0), 1, 1))
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler) 
 
         self.delta_w = hidden_states.clone()
