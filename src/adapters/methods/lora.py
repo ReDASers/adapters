@@ -449,11 +449,12 @@ class LoRA(nn.Module):
                                   weight_dropout_prob=weight_dropout_prob)
     
     def _inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
+        s = weights.std().item()
         return self._rescale(weights=weights, 
-                             sigma=torch.normal(
+                             sigma=s + torch.normal(
                                 mean=0.0, 
-                                std=noise_std * weights.std().item(), 
-                                size=(), 
+                                std=noise_std * s, 
+                                size=(1,), 
                                 dtype=weights.dtype, 
                                 device=weights.device,
                                 ).item(),
