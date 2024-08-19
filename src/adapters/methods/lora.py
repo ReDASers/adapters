@@ -398,12 +398,13 @@ class LoRA(nn.Module):
             case _:
                 return weights
 
-    @torch.jit.script        
+          
     def skip(self, skip_prob: float = 0.05) -> bool:
         return not self.training or random.random() > skip_prob
     
+    @staticmethod
     @torch.jit.script
-    def _rescale(self, weights: torch.Tensor, sigma: float):
+    def _rescale(weights: torch.Tensor, sigma: float):
         mean = weights.mean(dtype=weights.dtype)
         std = weights.std(unbiased=False)
         return (weights - mean) / std * sigma + mean
@@ -435,12 +436,14 @@ class LoRA(nn.Module):
             return weights
         
         return self._mask_overlay(original_weights=weights,
-                                  new_weights=self._rescale(weights=weights, sigma=sigma), 
+                                  new_weights=LoRA._rescale(weights=weights, sigma=sigma), 
                                   weight_dropout_prob=weight_dropout_prob)
     
-    def _inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
+    @staticmethod
+    @torch.jit.script
+    def _inject_noise(weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
         s = weights.std(unbiased=False).item()
-        return self._rescale(weights=weights, 
+        return LoRA._rescale(weights=weights, 
                              sigma=s + torch.normal(
                                 mean=0.0, 
                                 std=noise_std * s, 
@@ -449,7 +452,7 @@ class LoRA(nn.Module):
                                 device=weights.device,
                                 ).item(),
                             )
-    @torch.jit.script
+    
     def _mask_overlay(self, 
                       original_weights: torch.Tensor, 
                       new_weights: torch.Tensor, 
@@ -472,7 +475,7 @@ class LoRA(nn.Module):
             return weights
         
         return self._mask_overlay(original_weights=weights, 
-                                  new_weights=self._inject_noise(weights=weights, noise_std=noise_std), 
+                                  new_weights=LoRA._inject_noise(weights=weights, noise_std=noise_std), 
                                   weight_dropout_prob=weight_dropout_prob)
     
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
