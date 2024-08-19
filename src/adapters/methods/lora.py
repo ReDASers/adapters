@@ -490,7 +490,7 @@ class LoRA(nn.Module):
                 if self.location == "selfattn":
                     p = 1 - self.p
                 elif self.location == "output":
-                    p = 1 - self.skip_prob
+                    p = 1 - self.p * 2
                 else:
                     p = 0.0
                 w = self.rescale(weights=weights, 
