@@ -131,20 +131,21 @@ class LoRA(nn.Module):
         """
         Calculates the number of batches per epoch based on the batch size and training set size.
         """
-        if batch_size is not None and training_set_size is not None:
-            batches_per_epoch = training_set_size // batch_size
-            
-            if batches_per_epoch < 1:
-                logging.warning("Training set size is less than batch size. \
-                                Setting batches per epoch to 1. \
-                                This may lead to incorrect rescaling and suboptimal performance.")
-                return 1
-            return batches_per_epoch
+        if batch_size is None:
+            raise ValueError("Batch size is None. ")
+        if training_set_size is None:
+            raise ValueError("Training set size is None. ")
         
-        logging.warning("Batch size or training set size is None. \
-                        Cannot calculate batches per epoch. Setting to 1. \
-                        This may lead to incorrect rescaling and suboptimal performance.")
-        return 1
+        batches_per_epoch = training_set_size // batch_size
+        
+        if batches_per_epoch < 1:
+            logging.warning("Training set size is less than batch size. \
+                            Setting batches per epoch to 1. \
+                            This may lead to incorrect rescaling and suboptimal performance.")
+            return 1
+        return batches_per_epoch
+        
+    
             
     def _get_valid_location_key(self, config, location_key) -> bool:
         """
