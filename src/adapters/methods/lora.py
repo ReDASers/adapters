@@ -446,17 +446,10 @@ class LoRA(nn.Module):
         if torch.std(weights).item() < sigma:
             return weights
         
-        rescaled_weights = self._mask_overlay(original_weights=weights,
+        return  self._mask_overlay(original_weights=weights,
                                   new_weights=_rescale(weights=weights, sigma=sigma), 
                                   weight_dropout_prob=weight_dropout_prob)
         
-        return self.regularize(weights=rescaled_weights, 
-                            noise_std=self.noise_std,
-                            weight_dropout_prob=self.weight_dropout_prob,
-                            skip_prob=self.skip_prob)
-    
-    
- 
     
     def _mask_overlay(self, 
                       original_weights: torch.Tensor, 
@@ -480,7 +473,7 @@ class LoRA(nn.Module):
             return weights
         
         return self._mask_overlay(original_weights=weights, 
-                                  new_weights=_inject_noise(weights=weights.clone(), noise_std=noise_std), 
+                                  new_weights=_inject_noise(weights=weights, noise_std=noise_std), 
                                   weight_dropout_prob=weight_dropout_prob)
     
     def try_compute_avg_std_of_weights(self, weights: torch.Tensor) -> float:
@@ -503,19 +496,23 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
+        w = weights
+
         if self.training:
             if self.epoch == 1:
-                self.try_compute_avg_std_of_weights(weights)
+                self.try_compute_avg_std_of_weights(w)
      
             if self.epoch > 1:
-                w = self.rescale(weights=weights, 
+                w = self.rescale(weights=w, 
                             sigma=self.sigma_w, 
                             skip_prob=self.p,
                             weight_dropout_prob=self.weight_dropout_prob)
-            else:
-                w = weights
-        else:
-            w = weights
+            
+            w = self.regularize(weights=w, 
+                                noise_std=self.noise_std, 
+                                weight_dropout_prob=self.weight_dropout_prob, 
+                                skip_prob=self.skip_prob)
+
    
                             
         if scaling is None:
@@ -566,7 +563,12 @@ class LoRA(nn.Module):
                 weights=normed_dw, 
                 sigma=self.sigma_h,
                 skip_prob=self.h, # will not skip on eval
-                weight_dropout_prob=self.weight_dropout_prob)    
+                weight_dropout_prob=self.weight_dropout_prob)   
+
+            hidden_states = self.regularize(weights=hidden_states, 
+                    noise_std=self.noise_std, 
+                    weight_dropout_prob=self.weight_dropout_prob, 
+                    skip_prob=self.skip_prob) 
         # scaling mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
