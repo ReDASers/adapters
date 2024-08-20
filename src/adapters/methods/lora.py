@@ -41,18 +41,18 @@ def _rescale(weights: torch.Tensor, sigma: float):
 
 @torch.jit.script
 def _inject_noise(weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
-    if weights is None:
-        raise ValueError("'weights' cannot be None")
+    if weights is None or torch.isnan(weights).any():
+        raise ValueError("'weights' tensor contains NaN values") 
     s = weights.std().item()
     noise_std = float(noise_std)
     device = weights.device
     dtype = weights.dtype
     if s == 0.0:
-        logging.warning("Standard deviation of weights is zero. No noise will be injected.")
-        return weights
+        raise RuntimeError("Standard deviation of weights is zero. No noise will be injected.")
+        
     if noise_std == 0.0:
-        logging.warning("Noise standard deviation is zero. No noise will be injected.")
-        return weights
+        raise RuntimeError("Noise standard deviation is zero. No noise will be injected.")
+    
     if not torch.isfinite(weights).all():
         raise ValueError("'weights' tensor contains non-finite values")
     if not torch.isfinite(noise_std):
