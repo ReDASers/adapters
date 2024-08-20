@@ -453,14 +453,13 @@ class LoRA(nn.Module):
                                   weight_dropout_prob=weight_dropout_prob)
     
     def _inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
-        w = torch.nan_to_num(weights, nan=0.0)
-        s = w.std().item() 
+        s = weights.std().item() 
         std = noise_std * s
         sigma = s + torch.normal(mean=0.0, 
                             std=std, 
                             size=(1,), 
                             ).item()
-        return _rescale(weights=w, sigma=sigma)
+        return _rescale(weights=weights, sigma=sigma)
         
     def _mask_overlay(self, 
                       original_weights: torch.Tensor, 
