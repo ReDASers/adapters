@@ -80,7 +80,7 @@ class LoRA(nn.Module):
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         self.noise_std = config.noise_std
         self.weight_dropout_prob = config.weight_dropout_prob
-        self.skip_prob = config.skip_prob
+        self.skip_prob = torch.tensor(config.skip_prob)
 
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
@@ -99,12 +99,15 @@ class LoRA(nn.Module):
 
     def set_p(self, p:float):
         if self.location == "selfattn":
-            self.p = 1 - p
-            self.h = p
+            self.p = torch.tensor(1 - p)
+            self.h = torch.tensor(p)
         elif self.location == "output":
-            self.p = 1 - 1/self.batches_per_epoch
+            self.p = torch.tensor(1 - 1/self.batches_per_epoch)
         else:
-            self.p = 1 - 1/self.batches_per_epoch
+            self.lp =nn.Linear(self.connections_out, 1, dtype=torch.float32)
+            nn.init.normal_(self.lp, 
+                            mean=1 - 1/self.batches_per_epoch,
+                            std=0.02)
         
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
@@ -390,7 +393,7 @@ class LoRA(nn.Module):
             case _:
                 return weights
             
-    def skip(self, skip_prob: float = 0.05) -> bool:
+    def skip(self, skip_prob: torch.Tensor) -> bool:
         """
         Decides whether to skip the next action based on the skip probability.
 
@@ -402,7 +405,7 @@ class LoRA(nn.Module):
         """
         if not self.training:
             return False
-        return torch.bernoulli(torch.tensor(skip_prob)).item() == 1
+        return torch.bernoulli(skip_prob).item() == 1
             
     def _rescale(self, weights: torch.Tensor, sigma: float):
         u = torch.mean(weights, dtype=weights.dtype)
@@ -410,9 +413,9 @@ class LoRA(nn.Module):
         return z * sigma + u
     
     def rescale(self, 
-                weights: torch.Tensor, 
+                weights: torch.Tensor,
+                skip_prob: torch.Tensor, 
                 sigma: float = 0.02, 
-                skip_prob: float = 0.05,
                 weight_dropout_prob: float = 0.01) -> torch.Tensor:
         """
         Rescales the weights to have a standard deviation of sigma using the z-score.
@@ -465,10 +468,11 @@ class LoRA(nn.Module):
         return mask * new_weights + (1 - mask) * original_weights
     
     def regularize(self,
-                   weights: torch.Tensor, 
+                   weights: torch.Tensor,
+                   skip_prob: torch.Tensor,
                    noise_std: float = 0.03, 
                    weight_dropout_prob: float = 0.01,
-                   skip_prob: float = 0.03) -> torch.Tensor:
+                   ) -> torch.Tensor:
         
         if not self.training or self.skip(skip_prob):
             return weights
@@ -500,7 +504,7 @@ class LoRA(nn.Module):
             else:
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
-                                skip_prob=self.p,
+                                skip_prob=self.p if self.location == "selfattn" else F.sigmoid(self.lp(weights)).squeeze(),
                                 weight_dropout_prob=self.weight_dropout_prob)
                 
             w = self.regularize(weights=w, 
@@ -566,7 +570,7 @@ class LoRA(nn.Module):
 
         # Apply gating mechanism if use_gating is enabled
         if self.use_gating:
-            gate = torch.sigmoid(self.gate(layer_input)).mean(dim=1, keepdim=True)
+            gate = F.sigmoid(self.gate(layer_input)).mean(dim=1, keepdim=True)
             # Multiply hidden_states by the gate values
             hidden_states = hidden_states * gate
         else:
