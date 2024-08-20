@@ -438,16 +438,16 @@ class LoRA(nn.Module):
                                   weight_dropout_prob=weight_dropout_prob)
     
     def _inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
-        s = weights.std(unbiased=False).item()
-        std = s * noise_std
-        sigma = s + torch.normal(
-                            mean=0.0, 
-                            std=std, 
-                            size=(1,), 
-                            dtype=weights.dtype, 
-                            device=weights.device,
-                    ).item()
-        return self._rescale(weights=weights, sigma=sigma)
+        s = weights.std().item()
+        return self._rescale(weights=weights, 
+                             sigma=s + torch.normal(
+                                mean=0.0, 
+                                std=noise_std * s, 
+                                size=(1,), 
+                                dtype=weights.dtype, 
+                                device=weights.device,
+                                ).item(),
+                            )
     
     def _mask_overlay(self, 
                       original_weights: torch.Tensor, 
@@ -456,10 +456,12 @@ class LoRA(nn.Module):
         if not self.training:
             return new_weights
         
-        mask = torch.empty_like(original_weights, 
-                                dtype=torch.bool, 
-                                device=original_weights.device).bernoulli_(1 - weight_dropout_prob)
-        return torch.where(mask, new_weights, original_weights)
+        mask = torch.bernoulli(torch.full_like(original_weights,
+                                               1 - weight_dropout_prob,
+                                               dtype=original_weights.dtype, 
+                                               device=original_weights.device))
+        return mask * new_weights + (1 - mask) * original_weights
+    
     
     def regularize(self,
                    weights: torch.Tensor, 
