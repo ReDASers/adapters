@@ -459,7 +459,7 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Weights with injected noise.
         """
-        std = torch.std(weights).item()
+        std = torch.std(weights, unbiased=False).item()
         noise_factor = torch.normal(mean=0.0, std=noise_std * std, size=(1,), dtype=weights.dtype, device=weights.device)
         return _rescale(weights, sigma=std + noise_factor.item())
         
