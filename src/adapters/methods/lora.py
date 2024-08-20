@@ -105,9 +105,10 @@ class LoRA(nn.Module):
             self.p = torch.tensor(1 - 1/self.batches_per_epoch)
         else:
             self.lp =nn.Linear(self.connections_out, 1, dtype=torch.float32)
-            nn.init.normal_(self.lp, 
+            nn.init.normal_(self.lp.weight, 
                             mean=1 - 1/self.batches_per_epoch,
                             std=0.02)
+            nn.init.zeros_(self.lp.bias)
         
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
