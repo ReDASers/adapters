@@ -10,7 +10,7 @@ from typing import Dict, List, NamedTuple, Optional, Union, Literal
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import matplotlib.pyplot as plt
+import torch.linalg as linalg
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.pytorch_utils import Conv1D
@@ -446,9 +446,14 @@ class LoRA(nn.Module):
         if torch.std(weights).item() < sigma:
             return weights
         
-        return self._mask_overlay(original_weights=weights,
+        rescaled_weights = self._mask_overlay(original_weights=weights,
                                   new_weights=_rescale(weights=weights, sigma=sigma), 
                                   weight_dropout_prob=weight_dropout_prob)
+        
+        return self.regularize(weights=rescaled_weights, 
+                            noise_std=self.noise_std,
+                            weight_dropout_prob=self.weight_dropout_prob,
+                            skip_prob=self.skip_prob)
     
     
  
@@ -478,6 +483,14 @@ class LoRA(nn.Module):
                                   new_weights=_inject_noise(weights=weights.clone(), noise_std=noise_std), 
                                   weight_dropout_prob=weight_dropout_prob)
     
+    def try_compute_avg_std_of_weights(self, weights: torch.Tensor) -> float:
+        if self.epoch == 1 and self.training:
+            self.sigma_w = self.sigma_w + weights.std().item()
+                    
+            if self._epoch_end():
+                self.sigma_w = (self.sigma_w / self.batches_per_epoch)
+
+    
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
 
@@ -490,29 +503,23 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
-        w = torch.nan_to_num(weights)
         if self.training:
             if self.epoch == 1:
-                self.sigma_w = self.sigma_w + w.std().item()
-                        
-                if self._epoch_end():
-                    self.sigma_w = (self.sigma_w / self.batches_per_epoch)
-
-                
+                self.try_compute_avg_std_of_weights(weights)
+     
+            if self.epoch > 1:
+                w = self.rescale(weights=weights, 
+                            sigma=self.sigma_w, 
+                            skip_prob=self.p,
+                            weight_dropout_prob=self.weight_dropout_prob)
             else:
-                w = self.rescale(weights=w, 
-                                sigma=self.sigma_w, 
-                                skip_prob=self.p,
-                                weight_dropout_prob=self.weight_dropout_prob)
-                
-            w = self.regularize(weights=w, 
-                                noise_std=self.noise_std,
-                                weight_dropout_prob=self.weight_dropout_prob,
-                                skip_prob=self.skip_prob)
+                w = weights
+        else:
+            w = weights
    
                             
         if scaling is None:
-            scaling = self.scaling if self.scaling is not None else 1.0
+            scaling = self.scaling
 
         if self.log and self._epoch_end():
             self.record_var(added, "delta_W")
@@ -545,27 +552,21 @@ class LoRA(nn.Module):
             x = torch.nan_to_num(hidden_states)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
-            # Normalize delta_w by its L2 norm
-            dw_norm = torch.clamp(dw.norm(p=2, dim=1, keepdim=True), min=1e-9)
+
+            # Normalize delta_w byits L2 norm
+            dw_norm = torch.norm(dw, p=2, dim=1, keepdim=True, dtype=torch.float32) + 1e-9
+            #dw_norm = torch.clamp(dw.norm(p=2, dim=1, keepdim=True), min=1e-9)
             normed_dw = dw / dw_norm
             
             if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item() 
-                self.sigma_h = torch.mean(self.batch_sigmas).item()
+                self.batch_sigmas[self.n_batches - 1] = torch.std(normed_dw).item() 
+                self.sigma_h = torch.mean(self.batch_sigmas, dtype=torch.float32).item()
             
             rescaled_dw = self.rescale(
                 weights=normed_dw, 
                 sigma=self.sigma_h,
                 skip_prob=self.h, # will not skip on eval
-                weight_dropout_prob=self.weight_dropout_prob)
-            
-            # does nothing if not training
-            hidden_states = self.regularize(
-                weights=torch.nan_to_num(rescaled_dw),
-                noise_std=self.noise_std,
-                weight_dropout_prob=self.weight_dropout_prob,
-                skip_prob=self.skip_prob)   
-                
+                weight_dropout_prob=self.weight_dropout_prob)    
         # scaling mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
