@@ -457,7 +457,7 @@ class LoRA(nn.Module):
         s = w.std().item() 
         std = noise_std * s
         sigma = torch.normal(mean=0.0, 
-                            std=std if not torch.isnan(std) else noise_std**2, 
+                            std=std, 
                             size=(1,), 
                             ).item()
         return _rescale(weights=w, sigma=sigma)
