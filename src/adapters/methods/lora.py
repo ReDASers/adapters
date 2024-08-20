@@ -31,6 +31,13 @@ except ImportError:
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
 
+@torch.jit.script
+def _rescale(weights: torch.Tensor, sigma: float):
+    if sigma == 0:
+        return weights
+    u = torch.mean(weights, dtype=weights.dtype)
+    z = (weights - u) / (torch.std(weights) + 1e-9)
+    return z * sigma + u
 
 class LoRA(nn.Module):
     def __init__(
@@ -413,10 +420,7 @@ class LoRA(nn.Module):
             return False
         return torch.bernoulli(torch.tensor(skip_prob)).item() == 1
             
-    def _rescale(self, weights: torch.Tensor, sigma: float):
-        u = torch.mean(weights, dtype=weights.dtype)
-        z = (weights - u) / (torch.std(weights) + 1e-12)
-        return z * sigma + u
+
     
     def rescale(self, 
                 weights: torch.Tensor, 
@@ -449,15 +453,15 @@ class LoRA(nn.Module):
                                   weight_dropout_prob=weight_dropout_prob)
     
     def _inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
-        s = weights.std().item()
-        return self._rescale(weights=weights, 
-                             sigma=s + torch.normal(
-                                mean=0.0, 
-                                std=noise_std * s, 
-                                size=(1,), 
-                                dtype=weights.dtype, 
-                                device=weights.device,
-                                ).item(),
+        w = torch.nan_to_num(weights, nan=0.0, posinf=1.0, neginf=-1.0)
+        s = w.std().item() 
+        std = noise_std * s
+        sigma = torch.normal(mean=0.0, 
+                            std=std if not torch.isnan(std) else noise_std**2, 
+                            size=(1,), 
+                            ).item()
+        return self._rescale(weights=w, 
+                             sigma=sigma,
                             )
         
     def _mask_overlay(self, 
