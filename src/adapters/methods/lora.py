@@ -57,13 +57,12 @@ def _inject_noise(weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tenso
         raise ValueError("'weights' tensor contains non-finite values")
     if not torch.isfinite(noise_std):
         raise ValueError("'noise_std' must be finite")
-    try:
-        noise = torch.normal(
+    
+    noise = torch.normal(
             mean=0.0, std=noise_std * s, size=(1,), dtype=dtype, device=device
-        )
-    except RuntimeError as e:
-        raise ValueError(f"Failed to generate noise: {str(e)}") from e
-    return _rescale(weights=weights, sigma=s + noise.item())
+    )
+    s = s + noise.item()
+    return _rescale(weights=weights, sigma=s.item())
 
 class LoRA(nn.Module):
     def __init__(
