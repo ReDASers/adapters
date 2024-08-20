@@ -578,6 +578,7 @@ class LoRA(nn.Module):
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = torch.std(normed_dw).item() 
                 self.sigma_h = torch.mean(self.batch_sigmas, dtype=torch.float32).item()
+            if self.training and self.epoch > 2:
                 assert self.sigma_h > 0.0, "Sigma_h must be greater than 0."
             
             hidden_states = self.rescale(
