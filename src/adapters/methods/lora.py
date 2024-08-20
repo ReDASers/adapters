@@ -399,10 +399,10 @@ class LoRA(nn.Module):
                 return weights
 
     def skip(self, skip_prob: float = 0.05) -> bool:
-        if not self.training:
-            return False
-        return torch.bernoulli(torch.tensor(skip_prob)).item() == 1
-        #return not self.training or random.random() > skip_prob
+        #if not self.training:
+        #    return False
+        #return torch.bernoulli(torch.tensor(skip_prob)).item() == 1
+        return not self.training or random.random() > skip_prob
     
 
     def _rescale(self, weights: torch.Tensor, sigma: float):
@@ -547,7 +547,7 @@ class LoRA(nn.Module):
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
-            dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-10
+            dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
             
             if self.training and self.epoch == 1:
