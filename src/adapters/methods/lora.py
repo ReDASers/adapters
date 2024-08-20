@@ -571,7 +571,7 @@ class LoRA(nn.Module):
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
 
             # Normalize delta_w byits L2 norm
-            dw_norm = torch.norm(dw, p=2, dim=1, keepdim=True, dtype=torch.float32) + 1e-9
+            dw_norm = dw.norm(p=2, dim=1, keepdim=True, dtype=torch.float32) + 1e-9
             #dw_norm = torch.clamp(dw.norm(p=2, dim=1, keepdim=True), min=1e-9)
             normed_dw = dw / dw_norm
             
