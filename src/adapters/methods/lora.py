@@ -501,6 +501,7 @@ class LoRA(nn.Module):
                     
             if self._epoch_end():
                 self.sigma_w = (self.sigma_w / self.batches_per_epoch)
+                assert self.sigma_w > 0.0, "Sigma_w must be greater than 0."
 
     
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
@@ -527,10 +528,10 @@ class LoRA(nn.Module):
                             skip_prob=self.p,
                             weight_dropout_prob=self.weight_dropout_prob)
             
-                w = self.regularize(weights=w, 
-                                noise_std=self.noise_std, 
-                                weight_dropout_prob=self.weight_dropout_prob, 
-                                skip_prob=self.skip_prob)
+            w = self.regularize(weights=w, 
+                            noise_std=self.noise_std, 
+                            weight_dropout_prob=self.weight_dropout_prob, 
+                            skip_prob=self.skip_prob)
 
    
                             
@@ -577,6 +578,7 @@ class LoRA(nn.Module):
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = torch.std(normed_dw).item() 
                 self.sigma_h = torch.mean(self.batch_sigmas, dtype=torch.float32).item()
+                assert self.sigma_h > 0.0, "Sigma_h must be greater than 0."
             
             hidden_states = self.rescale(
                 weights=normed_dw, 
