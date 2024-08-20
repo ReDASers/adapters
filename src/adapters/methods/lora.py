@@ -448,7 +448,7 @@ class LoRA(nn.Module):
                                   new_weights=_rescale(weights=weights, sigma=sigma), 
                                   weight_dropout_prob=weight_dropout_prob)
     
-    def inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
+    def _inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
         """
         Adds Gaussian noise to the standard deviation of the weights.
 
