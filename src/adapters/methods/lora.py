@@ -399,7 +399,10 @@ class LoRA(nn.Module):
                 return weights
 
     def skip(self, skip_prob: float = 0.05) -> bool:
-        return not self.training or random.random() > skip_prob
+        if not self.training:
+            return False
+        return torch.bernoulli(torch.tensor(skip_prob)).item() == 1
+        #return not self.training or random.random() > skip_prob
     
 
     def _rescale(self, weights: torch.Tensor, sigma: float):
@@ -510,7 +513,7 @@ class LoRA(nn.Module):
             w = weights
                             
         if scaling is None:
-            scaling = self.scaling if self.scaling is not None else 1.0
+            scaling = self.scaling
 
         if self.log and self._epoch_end():
             self.record_var(added, "delta_W")
