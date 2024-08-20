@@ -453,10 +453,10 @@ class LoRA(nn.Module):
                                   weight_dropout_prob=weight_dropout_prob)
     
     def _inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
-        w = torch.nan_to_num(weights, nan=0.0, posinf=1.0, neginf=-1.0)
+        w = torch.nan_to_num(weights, nan=0.0)
         s = w.std().item() 
         std = noise_std * s
-        sigma = torch.normal(mean=0.0, 
+        sigma = s + torch.normal(mean=0.0, 
                             std=std, 
                             size=(1,), 
                             ).item()
@@ -502,12 +502,13 @@ class LoRA(nn.Module):
         """
         if self.training:
             if self.epoch == 1:
-                self.sigma_w = self.sigma_w + torch.nan_to_num(weights, nan=0.0, posinf=1.0, neginf=-1.0).std().item()
+                w =  torch.nan_to_num(weights, nan=0.0)
+                self.sigma_w = self.sigma_w + w.std().item()
                         
                 if self._epoch_end():
                     self.sigma_w = (self.sigma_w / self.batches_per_epoch)
 
-                w =  torch.nan_to_num(weights, nan=0.0, posinf=1.0, neginf=-1.0)
+                
             else:
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
@@ -519,7 +520,7 @@ class LoRA(nn.Module):
                                 weight_dropout_prob=self.weight_dropout_prob,
                                 skip_prob=self.skip_prob)
         else: 
-            w =  torch.nan_to_num(weights, nan=0.0, posinf=1.0, neginf=-1.0)
+            w =  weights
                             
         if scaling is None:
             scaling = self.scaling
