@@ -407,7 +407,7 @@ class LoRA(nn.Module):
 
     def _rescale(self, weights: torch.Tensor, sigma: float):
         u = torch.mean(weights, dtype=weights.dtype)
-        z = (weights - u) / (torch.std(weights) + 1e-9)
+        z = (weights - u) / (torch.std(weights) + 1e-12)
         return z * sigma + u
     
     def rescale(self, 
