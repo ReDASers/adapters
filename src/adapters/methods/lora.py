@@ -41,16 +41,29 @@ def _rescale(weights: torch.Tensor, sigma: float):
 
 @torch.jit.script
 def _inject_noise(weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
+    if weights is None:
+        raise ValueError("'weights' cannot be None")
     s = weights.std().item()
-    return _rescale(weights=weights, 
-                            sigma=s + torch.normal(
-                                         mean=0.0, 
-                                         std=noise_std * s, 
-                                         size=(1,), 
-                                         dtype=weights.dtype, 
-                                         device=weights.device,
-                                      ).item(),
-                    )
+    noise_std = float(noise_std)
+    device = weights.device
+    dtype = weights.dtype
+    if s == 0.0:
+        logger.warning("Standard deviation of weights is zero. No noise will be injected.")
+        return weights
+    if noise_std == 0.0:
+        logger.warning("Noise standard deviation is zero. No noise will be injected.")
+        return weights
+    if not torch.isfinite(weights).all():
+        raise ValueError("'weights' tensor contains non-finite values")
+    if not torch.isfinite(noise_std):
+        raise ValueError("'noise_std' must be finite")
+    try:
+        noise = torch.normal(
+            mean=0.0, std=noise_std * s, size=(1,), dtype=dtype, device=device
+        )
+    except RuntimeError as e:
+        raise ValueError(f"Failed to generate noise: {str(e)}") from e
+    return _rescale(weights=weights, sigma=s + noise.item())
 
 class LoRA(nn.Module):
     def __init__(
@@ -508,7 +521,7 @@ class LoRA(nn.Module):
                             skip_prob=self.p,
                             weight_dropout_prob=self.weight_dropout_prob)
             
-            w = self.regularize(weights=w, 
+                w = self.regularize(weights=w, 
                                 noise_std=self.noise_std, 
                                 weight_dropout_prob=self.weight_dropout_prob, 
                                 skip_prob=self.skip_prob)
