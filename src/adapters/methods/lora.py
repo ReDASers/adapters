@@ -449,7 +449,7 @@ class LoRA(nn.Module):
             return weights
         
         return self._mask_overlay(original_weights=weights,
-                                  new_weights=self._rescale(weights=weights, sigma=sigma), 
+                                  new_weights=_rescale(weights=weights, sigma=sigma), 
                                   weight_dropout_prob=weight_dropout_prob)
     
     def _inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
@@ -460,9 +460,7 @@ class LoRA(nn.Module):
                             std=std if not torch.isnan(std) else noise_std**2, 
                             size=(1,), 
                             ).item()
-        return self._rescale(weights=w, 
-                             sigma=sigma,
-                            )
+        return _rescale(weights=w, sigma=sigma)
         
     def _mask_overlay(self, 
                       original_weights: torch.Tensor, 
@@ -504,12 +502,12 @@ class LoRA(nn.Module):
         """
         if self.training:
             if self.epoch == 1:
-                self.sigma_w = self.sigma_w + weights.std().item()
+                self.sigma_w = self.sigma_w + torch.nan_to_num(weights, nan=0.0, posinf=1.0, neginf=-1.0).std().item()
                         
                 if self._epoch_end():
                     self.sigma_w = (self.sigma_w / self.batches_per_epoch)
 
-                w = weights
+                w =  torch.nan_to_num(weights, nan=0.0, posinf=1.0, neginf=-1.0)
             else:
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
