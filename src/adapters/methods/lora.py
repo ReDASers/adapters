@@ -501,9 +501,11 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
+        w = torch.nan_to_num(weights)
+
         if self.training:
             if self.epoch == 1:
-                w = torch.nan_to_num(weights)
+                
                 self.sigma_w = self.sigma_w + torch.std(w).item()
                         
                 if self._epoch_end():
@@ -511,7 +513,7 @@ class LoRA(nn.Module):
 
                 
             else:
-                w = self.rescale(weights=weights, 
+                w = self.rescale(weights=w, 
                                 sigma=self.sigma_w, 
                                 skip_prob=self.p,
                                 weight_dropout_prob=self.weight_dropout_prob)
@@ -520,8 +522,6 @@ class LoRA(nn.Module):
                                 noise_std=self.noise_std,
                                 weight_dropout_prob=self.weight_dropout_prob,
                                 skip_prob=self.skip_prob)
-        else: 
-            w = weights
                             
         if scaling is None:
             scaling = self.scaling
@@ -596,7 +596,7 @@ class LoRA(nn.Module):
             gate = None
 
         # Return the processed hidden_states and gate
-        return hidden_states, gate
+        return torch.nan_to_num(hidden_states), gate
 
 class IA3(nn.Module):
     def __init__(
