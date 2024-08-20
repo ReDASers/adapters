@@ -5,12 +5,10 @@
 #  ------------------------------------------------------------------------------------------
 import logging
 import math
-import random
-from typing import Dict, List, NamedTuple, Optional, Union, Literal
+from typing import Dict, List, NamedTuple, Optional, Union
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.linalg as linalg
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.pytorch_utils import Conv1D
@@ -38,38 +36,6 @@ def _rescale(weights: torch.Tensor, sigma: float):
     mean = weights.mean(dtype=weights.dtype)
     std = weights.std()
     return (weights - mean) / std * sigma + mean
-
-@torch.jit.script
-def _inject_noise(weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
-    if weights is None or torch.isnan(weights).any():
-        raise ValueError("'weights' tensor contains NaN values") 
-    s = weights.std().item()
-    noise_std = float(noise_std)
-    device = weights.device
-    dtype = weights.dtype
-    if s == 0.0:
-        raise RuntimeError("Standard deviation of weights is zero. No noise will be injected.")
-        
-    if noise_std == 0.0:
-        raise RuntimeError("Noise standard deviation is zero. No noise will be injected.")
-    
-    if not torch.isfinite(weights).all():
-        raise ValueError("'weights' tensor contains non-finite values")
-    if not torch.isfinite(noise_std):
-        raise ValueError("'noise_std' must be finite")
-    
-    noise = torch.normal(
-            mean=0.0, std=noise_std * s, size=(1,), dtype=dtype, device=device
-    )
-    s = s + noise.item()
-
-    if torch.isinf(s):
-        raise RuntimeError("Standard deviation of weights is infinite. No noise will be injected.")
-    if torch.isnan(s):
-        raise RuntimeError("Standard deviation of weights is NaN. No noise will be injected.")
-    if s == 0.0:
-        raise RuntimeError("Standard deviation of weights is zero. No noise will be injected.")
-    return _rescale(weights=weights, sigma=s)
 
 class LoRA(nn.Module):
     def __init__(
@@ -150,19 +116,20 @@ class LoRA(nn.Module):
         """
         Calculates the number of batches per epoch based on the batch size and training set size.
         """
-        if batch_size is None:
-            raise ValueError("Batch size is None. ")
-        if training_set_size is None:
-            raise ValueError("Training set size is None. ")
+        if batch_size is not None and training_set_size is not None:
+            batches_per_epoch = training_set_size // batch_size
+            
+            if batches_per_epoch < 1:
+                logging.warning("Training set size is less than batch size. \
+                                Setting batches per epoch to 1. \
+                                This may lead to incorrect rescaling and suboptimal performance.")
+                return 1
+            return batches_per_epoch
         
-        batches_per_epoch = training_set_size // batch_size
-        
-        if batches_per_epoch < 1:
-            logging.warning("Training set size is less than batch size. \
-                            Setting batches per epoch to 1. \
-                            This may lead to incorrect rescaling and suboptimal performance.")
-            return 1
-        return batches_per_epoch
+        logging.warning("Batch size or training set size is None. \
+                        Cannot calculate batches per epoch. Setting to 1. \
+                        This may lead to incorrect rescaling and suboptimal performance.")
+        return 1
             
     def _get_valid_location_key(self, config, location_key) -> bool:
         """
@@ -208,7 +175,8 @@ class LoRA(nn.Module):
         try:
             return nn.Sequential(*architectures[arch])
         except KeyError:
-            raise ValueError(f"Unknown autoencoder architecture: {arch}")   
+            raise ValueError(f"Unknown autoencoder architecture: {arch}")
+        
     
     def _layer_specific_setup(self, lora_A_shape, lora_B_shape):
          # Determine calculation mode and setup accordingly
@@ -238,6 +206,7 @@ class LoRA(nn.Module):
                 return 1.0
             case _:
                 return 0.0
+
             
     def _setup_gating_maybe(self, gating_heads: int):
         """
@@ -434,10 +403,20 @@ class LoRA(nn.Module):
                 return weights / (added * self.scaling)
             case _:
                 return weights
-
-          
+            
     def skip(self, skip_prob: float = 0.05) -> bool:
-        return not self.training or random.random() > skip_prob
+        """
+        Decides whether to skip the next action based on the skip probability.
+
+        Args:
+            skip_prob (float, optional): Skip probability. Defaults to 0.05.
+
+        Returns:
+            bool: True if the rescaling should be skipped, False otherwise.
+        """
+        if not self.training:
+            return False
+        return torch.bernoulli(torch.tensor(skip_prob)).item() == 1
     
     def rescale(self, 
                 weights: torch.Tensor, 
@@ -465,11 +444,22 @@ class LoRA(nn.Module):
         if torch.std(weights).item() < sigma:
             return weights
         
-        return  self._mask_overlay(original_weights=weights,
+        return self._mask_overlay(original_weights=weights,
                                   new_weights=_rescale(weights=weights, sigma=sigma), 
                                   weight_dropout_prob=weight_dropout_prob)
-        
     
+    def _inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
+        s = weights.std().item()
+        return _rescale(weights=weights, 
+                             sigma=s + torch.normal(
+                                mean=0.0, 
+                                std=noise_std * s, 
+                                size=(1,), 
+                                dtype=weights.dtype, 
+                                device=weights.device,
+                                ).item(),
+                            )
+        
     def _mask_overlay(self, 
                       original_weights: torch.Tensor, 
                       new_weights: torch.Tensor, 
@@ -477,10 +467,11 @@ class LoRA(nn.Module):
         if not self.training:
             return new_weights
         
-        mask = torch.empty_like(original_weights, 
-                                dtype=torch.bool, 
-                                device=original_weights.device).bernoulli_(1 - weight_dropout_prob)
-        return torch.where(mask, new_weights, original_weights)
+        mask = torch.bernoulli(torch.full_like(original_weights,
+                                               1 - weight_dropout_prob,
+                                               dtype=original_weights.dtype, 
+                                               device=original_weights.device))
+        return mask * new_weights + (1 - mask) * original_weights
     
     def regularize(self,
                    weights: torch.Tensor, 
@@ -492,17 +483,8 @@ class LoRA(nn.Module):
             return weights
         
         return self._mask_overlay(original_weights=weights, 
-                                  new_weights=_inject_noise(weights=weights, noise_std=noise_std), 
+                                  new_weights=self._inject_noise(weights=weights, noise_std=noise_std), 
                                   weight_dropout_prob=weight_dropout_prob)
-    
-    def try_compute_avg_std_of_weights(self, weights: torch.Tensor) -> float:
-        if self.epoch == 1 and self.training:
-            self.sigma_w = self.sigma_w + weights.std().item()
-                    
-            if self._epoch_end():
-                self.sigma_w = (self.sigma_w / self.batches_per_epoch)
-                assert self.sigma_w > 0.0, "Sigma_w must be greater than 0."
-
     
     def com(self, weights: torch.Tensor, added: torch.Tensor, scaling: Optional[float]=None) -> torch.Tensor:
         """Performs the composition operation between existing and injected weights.
@@ -516,24 +498,26 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
-        w = weights
-
         if self.training:
             if self.epoch == 1:
-                self.try_compute_avg_std_of_weights(w)
-     
-            if self.epoch > 1:
-                w = self.rescale(weights=w, 
-                            sigma=self.sigma_w, 
-                            skip_prob=self.p,
-                            weight_dropout_prob=self.weight_dropout_prob)
-            
-            w = self.regularize(weights=w, 
-                            noise_std=self.noise_std, 
-                            weight_dropout_prob=self.weight_dropout_prob, 
-                            skip_prob=self.skip_prob)
+                self.sigma_w = self.sigma_w + weights.std().item()
+                        
+                if self._epoch_end():
+                    self.sigma_w = (self.sigma_w / self.batches_per_epoch)
 
-   
+                w = weights
+            else:
+                w = self.rescale(weights=weights, 
+                                sigma=self.sigma_w, 
+                                skip_prob=self.p,
+                                weight_dropout_prob=self.weight_dropout_prob)
+                
+            w = self.regularize(weights=w, 
+                                noise_std=self.noise_std,
+                                weight_dropout_prob=self.weight_dropout_prob,
+                                skip_prob=self.skip_prob)
+        else: 
+            w = weights
                             
         if scaling is None:
             scaling = self.scaling
@@ -562,35 +546,32 @@ class LoRA(nn.Module):
     
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
-            if hidden_states is None:
-                hidden_states = layer_input
-            
-    
+            hidden_states = hidden_states if hidden_states is not None else layer_input
+                
             x = torch.nan_to_num(hidden_states)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
-
-            # Normalize delta_w byits L2 norm
-            dw_norm = dw.norm(p=2, dim=1, keepdim=True, dtype=torch.float32) + 1e-9
-            #dw_norm = torch.clamp(dw.norm(p=2, dim=1, keepdim=True), min=1e-9)
+            # Normalize delta_w by its L2 norm
+            dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
             normed_dw = dw / dw_norm
             
             if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = torch.std(normed_dw).item() 
-                self.sigma_h = torch.mean(self.batch_sigmas, dtype=torch.float32).item()
-            if self.training and self.epoch > 2:
-                assert self.sigma_h > 0.0, "Sigma_h must be greater than 0."
+                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item() 
+                self.sigma_h = torch.mean(self.batch_sigmas).item()
             
-            hidden_states = self.rescale(
+            rescaled_dw = self.rescale(
                 weights=normed_dw, 
                 sigma=self.sigma_h,
                 skip_prob=self.h, # will not skip on eval
-                weight_dropout_prob=self.weight_dropout_prob)   
-
-            hidden_states = self.regularize(weights=hidden_states, 
-                    noise_std=self.noise_std, 
-                    weight_dropout_prob=self.weight_dropout_prob, 
-                    skip_prob=self.skip_prob) 
+                weight_dropout_prob=self.weight_dropout_prob)
+            
+            # does nothing if not training
+            hidden_states = self.regularize(
+                weights=rescaled_dw,
+                noise_std=self.noise_std,
+                weight_dropout_prob=self.weight_dropout_prob,
+                skip_prob=self.skip_prob)   
+                
         # scaling mode
         else:
             # Create scaling vector from lora_C and repeat it across batch size
