@@ -399,10 +399,9 @@ class LoRA(nn.Module):
                 return weights
 
     def skip(self, skip_prob: float = 0.05) -> bool:
-        #if not self.training:
-        #    return False
-        #return torch.bernoulli(torch.tensor(skip_prob)).item() == 1
-        return not self.training or random.random() > skip_prob
+        return self.training and random.random() < skip_prob
+    #torch.bernoulli(torch.tensor(skip_prob)).item() == 1
+        #return not self.training or 
     
 
     def _rescale(self, weights: torch.Tensor, sigma: float):
