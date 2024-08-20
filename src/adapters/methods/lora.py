@@ -562,7 +562,7 @@ class LoRA(nn.Module):
                 self.batch_sigmas[self.n_batches - 1] = torch.std(normed_dw).item() 
                 self.sigma_h = torch.mean(self.batch_sigmas, dtype=torch.float32).item()
             
-            rescaled_dw = self.rescale(
+            hidden_states = self.rescale(
                 weights=normed_dw, 
                 sigma=self.sigma_h,
                 skip_prob=self.h, # will not skip on eval
