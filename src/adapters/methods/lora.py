@@ -448,17 +448,20 @@ class LoRA(nn.Module):
                                   new_weights=_rescale(weights=weights, sigma=sigma), 
                                   weight_dropout_prob=weight_dropout_prob)
     
-    def _inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
-        s = weights.std().item()
-        return _rescale(weights=weights, 
-                             sigma=s + torch.normal(
-                                mean=0.0, 
-                                std=noise_std * s, 
-                                size=(1,), 
-                                dtype=weights.dtype, 
-                                device=weights.device,
-                                ).item(),
-                            )
+    def inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
+        """
+        Adds Gaussian noise to the standard deviation of the weights.
+
+        Args:
+            weights (torch.Tensor): Weights to add noise to.
+            noise_std (float, optional): Standard deviation of the Gaussian noise. Defaults to 0.01.
+
+        Returns:
+            torch.Tensor: Weights with injected noise.
+        """
+        std = torch.std(weights).item()
+        noise_factor = torch.normal(mean=0.0, std=noise_std * std, size=(1,), dtype=weights.dtype, device=weights.device)
+        return _rescale(weights, sigma=std + noise_factor.item())
         
     def _mask_overlay(self, 
                       original_weights: torch.Tensor, 
@@ -500,12 +503,13 @@ class LoRA(nn.Module):
         """
         if self.training:
             if self.epoch == 1:
-                self.sigma_w = self.sigma_w + weights.std().item()
+                w = torch.nan_to_num(weights)
+                self.sigma_w = self.sigma_w + torch.std(w).item()
                         
                 if self._epoch_end():
                     self.sigma_w = (self.sigma_w / self.batches_per_epoch)
 
-                w = weights
+                
             else:
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
