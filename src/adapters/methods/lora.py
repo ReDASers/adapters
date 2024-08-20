@@ -5,7 +5,6 @@
 #  ------------------------------------------------------------------------------------------
 import logging
 import math
-import random
 from typing import Dict, List, NamedTuple, Optional, Union, Literal
 import torch
 import torch.nn as nn
@@ -171,7 +170,8 @@ class LoRA(nn.Module):
         try:
             return nn.Sequential(*architectures[arch])
         except KeyError:
-            raise ValueError(f"Unknown autoencoder architecture: {arch}")   
+            raise ValueError(f"Unknown autoencoder architecture: {arch}")
+        
     
     def _layer_specific_setup(self, lora_A_shape, lora_B_shape):
          # Determine calculation mode and setup accordingly
@@ -201,6 +201,7 @@ class LoRA(nn.Module):
                 return 1.0
             case _:
                 return 0.0
+
             
     def _setup_gating_maybe(self, gating_heads: int):
         """
@@ -397,13 +398,21 @@ class LoRA(nn.Module):
                 return weights / (added * self.scaling)
             case _:
                 return weights
-
+            
     def skip(self, skip_prob: float = 0.05) -> bool:
-        return self.training and random.random() < skip_prob
-    #torch.bernoulli(torch.tensor(skip_prob)).item() == 1
-        #return not self.training or 
-    
+        """
+        Decides whether to skip the next action based on the skip probability.
 
+        Args:
+            skip_prob (float, optional): Skip probability. Defaults to 0.05.
+
+        Returns:
+            bool: True if the rescaling should be skipped, False otherwise.
+        """
+        if not self.training:
+            return False
+        return torch.bernoulli(torch.tensor(skip_prob)).item() == 1
+            
     def _rescale(self, weights: torch.Tensor, sigma: float):
         u = torch.mean(weights, dtype=weights.dtype)
         z = (weights - u) / (torch.std(weights) + 1e-12)
@@ -450,7 +459,7 @@ class LoRA(nn.Module):
                                 device=weights.device,
                                 ).item(),
                             )
-    
+        
     def _mask_overlay(self, 
                       original_weights: torch.Tensor, 
                       new_weights: torch.Tensor, 
@@ -463,7 +472,6 @@ class LoRA(nn.Module):
                                                dtype=original_weights.dtype, 
                                                device=original_weights.device))
         return mask * new_weights + (1 - mask) * original_weights
-    
     
     def regularize(self,
                    weights: torch.Tensor, 
@@ -538,10 +546,8 @@ class LoRA(nn.Module):
     
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
-            if hidden_states is None:
-                hidden_states = layer_input
-            
-    
+            hidden_states = hidden_states if hidden_states is not None else layer_input
+                
             x = torch.nan_to_num(hidden_states)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
