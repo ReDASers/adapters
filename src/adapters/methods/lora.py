@@ -102,13 +102,18 @@ class LoRA(nn.Module):
             self.p = torch.tensor(1 - p)
             self.h = torch.tensor(p)
         elif self.location == "intermediate":
+            '''
             self.lp =nn.Linear(self.connections_out, 1, dtype=torch.float32)
             nn.init.normal_(self.lp.weight, 
                             mean=1 - 1/self.batches_per_epoch,
                             std=math.sqrt(2/self.connections_out))
             nn.init.zeros_(self.lp.bias)
+            '''
+            self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch))
+            nn.init.normal_(self.p, mean=1 - 1/self.batches_per_epoch, std=math.sqrt(1/self.connections_out))
         else:
             self.p = torch.tensor(1 - 1/self.batches_per_epoch)
+
         
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
