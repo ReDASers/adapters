@@ -62,7 +62,14 @@ def _inject_noise(weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tenso
             mean=0.0, std=noise_std * s, size=(1,), dtype=dtype, device=device
     )
     s = s + noise.item()
-    return _rescale(weights=weights, sigma=s.item())
+
+    if torch.isinf(s):
+        raise RuntimeError("Standard deviation of weights is infinite. No noise will be injected.")
+    if torch.isnan(s):
+        raise RuntimeError("Standard deviation of weights is NaN. No noise will be injected.")
+    if s == 0.0:
+        raise RuntimeError("Standard deviation of weights is zero. No noise will be injected.")
+    return _rescale(weights=weights, sigma=s)
 
 class LoRA(nn.Module):
     def __init__(
