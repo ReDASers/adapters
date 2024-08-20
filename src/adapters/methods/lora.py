@@ -560,11 +560,8 @@ class LoRA(nn.Module):
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
-            dw_norm = dw.norm(p=2, dim=1, keepdim=True)
-            if dw_norm < 1e-9:
-                normed_dw = dw
-            else:
-                normed_dw = dw / dw_norm
+            dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
+            normed_dw = dw / dw_norm
             
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item() 
