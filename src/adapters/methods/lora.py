@@ -104,8 +104,8 @@ class LoRA(nn.Module):
         elif self.location == "intermediate":
             self.lp =nn.Linear(self.connections_out, 1, dtype=torch.float32)
             nn.init.normal_(self.lp.weight, 
-                            mean=0.0,
-                            std=math.sqrt(1/self.connections_out))
+                            mean=1 - 1/self.batches_per_epoch,
+                            std=math.sqrt(2/self.connections_out))
             nn.init.zeros_(self.lp.bias)
         else:
             self.p = torch.tensor(1 - 1/self.batches_per_epoch)
