@@ -106,25 +106,22 @@ class LoRA(nn.Module):
         else:
             self.p = 0.0
         
-        
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
         Calculates the number of batches per epoch based on the batch size and training set size.
         """
-        if batch_size is not None and training_set_size is not None:
-            batches_per_epoch = training_set_size // batch_size
-            
-            if batches_per_epoch < 1:
-                logging.warning("Training set size is less than batch size. \
-                                Setting batches per epoch to 1. \
-                                This may lead to incorrect rescaling and suboptimal performance.")
-                return 1
-            return batches_per_epoch
+        if batch_size is None:
+            raise ValueError("Batch size cannot be None.")
+        if training_set_size is None:
+            raise ValueError("Training set size cannot be None.")
+        batches_per_epoch = training_set_size // batch_size
         
-        logging.warning("Batch size or training set size is None. \
-                        Cannot calculate batches per epoch. Setting to 1. \
-                        This may lead to incorrect rescaling and suboptimal performance.")
-        return 1
+        if batches_per_epoch < 1:
+            logging.warning("Training set size is less than batch size. \
+                            Setting batches per epoch to 1. \
+                            This may lead to incorrect rescaling and suboptimal performance.")
+            return 1
+        return batches_per_epoch
             
     def _get_valid_location_key(self, config, location_key) -> bool:
         """
@@ -172,7 +169,6 @@ class LoRA(nn.Module):
         except KeyError:
             raise ValueError(f"Unknown autoencoder architecture: {arch}")
         
-    
     def _layer_specific_setup(self, lora_A_shape, lora_B_shape):
          # Determine calculation mode and setup accordingly
         match self.location:
@@ -201,8 +197,7 @@ class LoRA(nn.Module):
                 return 1.0
             case _:
                 return 0.0
-
-            
+ 
     def _setup_gating_maybe(self, gating_heads: int):
         """
         Sets up the gating mechanism if use_gating is enabled.
@@ -238,8 +233,6 @@ class LoRA(nn.Module):
         self._initialize_autoencoder_weights(self.f)
         self._setup_lora_matrices(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
         
-        
-
     def _setup_lora_matrices(self, lora_A_shape, lora_B_shape):
         """
         Sets up the LoRA matrices A and B.
@@ -281,7 +274,6 @@ class LoRA(nn.Module):
                 self.variances[f"{self.location}_autoencoder_{i}"] = [layer.weight.var().item()]
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
-
     
     @property
     def delta_w(self) -> torch.Tensor:
@@ -356,7 +348,6 @@ class LoRA(nn.Module):
                             self.variances[f"{self.location}_autoencoder_{i}"].append(torch.var(layer.weight).item())
                 else:
                     self.variances[self.location+"_lora_C"].append(torch.var(self.lora_C).item())
-        
 
     def record_var(self, weights_or_num: torch.Tensor | float, param_name: str):
         if self.training:
@@ -547,34 +538,24 @@ class LoRA(nn.Module):
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
             hidden_states = hidden_states if hidden_states is not None else layer_input
-                
             x = torch.nan_to_num(hidden_states)
             fx = self.f(self.dropout(x))
-            dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
-            # Normalize delta_w by its L2 norm
-            dw_norm = dw.norm(p=2, dim=1, keepdim=True) + 1e-9
-            normed_dw = dw / dw_norm
-            
+            dw = fx @ torch.t(self.lora_A)
+            dw = dw @ torch.t(self.lora_B)
+            dw = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
             if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = normed_dw.std().item() 
+                self.batch_sigmas[self.n_batches - 1] = dw.std().item() 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
-            
-            rescaled_dw = self.rescale(
-                weights=normed_dw, 
-                sigma=self.sigma_h,
-                skip_prob=self.h, # will not skip on eval
-                weight_dropout_prob=self.weight_dropout_prob)
-            
-            # does nothing if not training
+            dw = self.rescale(weights=dw, 
+                              sigma=self.sigma_h,
+                              skip_prob=self.h, # will not skip on eval
+                              weight_dropout_prob=self.weight_dropout_prob)
             hidden_states = self.regularize(
-                weights=rescaled_dw,
+                weights=dw,
                 noise_std=self.noise_std,
                 weight_dropout_prob=self.weight_dropout_prob,
                 skip_prob=self.skip_prob)   
-                
-        # scaling mode
         else:
-            # Create scaling vector from lora_C and repeat it across batch size
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.size(0), 1, 1))
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler) 
 
@@ -593,6 +574,8 @@ class LoRA(nn.Module):
 
         # Return the processed hidden_states and gate
         return hidden_states, gate
+    
+## END OF CLASS "LoRA" ##
 
 class IA3(nn.Module):
     def __init__(
