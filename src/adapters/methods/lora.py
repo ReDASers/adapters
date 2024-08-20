@@ -552,7 +552,7 @@ class LoRA(nn.Module):
             if hidden_states is None:
                 hidden_states = layer_input
                 
-            x = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
+            x = torch.nan_to_num(hidden_states, nan=0.0)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
