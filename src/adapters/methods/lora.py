@@ -519,7 +519,7 @@ class LoRA(nn.Module):
                                 weight_dropout_prob=self.weight_dropout_prob,
                                 skip_prob=self.skip_prob)
         else: 
-            w = weights
+            w =  torch.nan_to_num(weights, nan=0.0, posinf=1.0, neginf=-1.0)
                             
         if scaling is None:
             scaling = self.scaling
@@ -548,9 +548,10 @@ class LoRA(nn.Module):
     
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
-            hidden_states = hidden_states if hidden_states is not None else layer_input
+            if hidden_states is None:
+                hidden_states = layer_input
                 
-            x = torch.nan_to_num(hidden_states)
+            x = torch.nan_to_num(hidden_states, nan=0.0, posinf=1.0, neginf=-1.0)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A) @ torch.t(self.lora_B)
             # Normalize delta_w by its L2 norm
