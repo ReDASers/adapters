@@ -48,10 +48,10 @@ def _inject_noise(weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tenso
     device = weights.device
     dtype = weights.dtype
     if s == 0.0:
-        logger.warning("Standard deviation of weights is zero. No noise will be injected.")
+        logging.warning("Standard deviation of weights is zero. No noise will be injected.")
         return weights
     if noise_std == 0.0:
-        logger.warning("Noise standard deviation is zero. No noise will be injected.")
+        logging.warning("Noise standard deviation is zero. No noise will be injected.")
         return weights
     if not torch.isfinite(weights).all():
         raise ValueError("'weights' tensor contains non-finite values")
