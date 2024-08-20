@@ -504,7 +504,7 @@ class LoRA(nn.Module):
             else:
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
-                                skip_prob=self.p if self.location == "selfattn" else F.sigmoid(self.lp(weights)).squeeze(),
+                                skip_prob=self.p if self.location != "intermediate" else F.sigmoid(self.lp(weights)).squeeze(),
                                 weight_dropout_prob=self.weight_dropout_prob)
                 
             w = self.regularize(weights=w, 
