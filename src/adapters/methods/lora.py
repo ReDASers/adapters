@@ -5,10 +5,11 @@
 #  ------------------------------------------------------------------------------------------
 import logging
 import math
-from typing import Dict, List, NamedTuple, Optional, Union
+from typing import Dict, List, NamedTuple, Optional, Union, Literal
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import matplotlib.pyplot as plt
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.pytorch_utils import Conv1D
@@ -30,12 +31,6 @@ except ImportError:
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.WARNING)
 
-
-@torch.jit.script
-def _rescale(weights: torch.Tensor, sigma: float):
-    mean = weights.mean(dtype=weights.dtype)
-    std = weights.std()
-    return (weights - mean) / std * sigma + mean
 
 class LoRA(nn.Module):
     def __init__(
@@ -417,6 +412,11 @@ class LoRA(nn.Module):
         if not self.training:
             return False
         return torch.bernoulli(torch.tensor(skip_prob)).item() == 1
+            
+    def _rescale(self, weights: torch.Tensor, sigma: float):
+        u = torch.mean(weights, dtype=weights.dtype)
+        z = (weights - u) / (torch.std(weights) + 1e-12)
+        return z * sigma + u
     
     def rescale(self, 
                 weights: torch.Tensor, 
@@ -445,23 +445,20 @@ class LoRA(nn.Module):
             return weights
         
         return self._mask_overlay(original_weights=weights,
-                                  new_weights=_rescale(weights=weights, sigma=sigma), 
+                                  new_weights=self._rescale(weights=weights, sigma=sigma), 
                                   weight_dropout_prob=weight_dropout_prob)
     
     def _inject_noise(self, weights: torch.Tensor, noise_std: float = 0.01) -> torch.Tensor:
-        """
-        Adds Gaussian noise to the standard deviation of the weights.
-
-        Args:
-            weights (torch.Tensor): Weights to add noise to.
-            noise_std (float, optional): Standard deviation of the Gaussian noise. Defaults to 0.01.
-
-        Returns:
-            torch.Tensor: Weights with injected noise.
-        """
-        std = torch.std(weights, unbiased=False).item()
-        noise_factor = torch.normal(mean=0.0, std=noise_std * std, size=(1,), dtype=weights.dtype, device=weights.device)
-        return _rescale(weights, sigma=std + noise_factor.item())
+        s = weights.std().item()
+        return self._rescale(weights=weights, 
+                             sigma=s + torch.normal(
+                                mean=0.0, 
+                                std=noise_std * s, 
+                                size=(1,), 
+                                dtype=weights.dtype, 
+                                device=weights.device,
+                                ).item(),
+                            )
         
     def _mask_overlay(self, 
                       original_weights: torch.Tensor, 
@@ -501,19 +498,16 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
-        w = torch.nan_to_num(weights)
-
         if self.training:
             if self.epoch == 1:
-                
-                self.sigma_w = self.sigma_w + torch.std(w).item()
+                self.sigma_w = self.sigma_w + weights.std().item()
                         
                 if self._epoch_end():
                     self.sigma_w = (self.sigma_w / self.batches_per_epoch)
 
-                
+                w = weights
             else:
-                w = self.rescale(weights=w, 
+                w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
                                 skip_prob=self.p,
                                 weight_dropout_prob=self.weight_dropout_prob)
@@ -522,6 +516,8 @@ class LoRA(nn.Module):
                                 noise_std=self.noise_std,
                                 weight_dropout_prob=self.weight_dropout_prob,
                                 skip_prob=self.skip_prob)
+        else: 
+            w = weights
                             
         if scaling is None:
             scaling = self.scaling
@@ -596,7 +592,7 @@ class LoRA(nn.Module):
             gate = None
 
         # Return the processed hidden_states and gate
-        return torch.nan_to_num(hidden_states), gate
+        return hidden_states, gate
 
 class IA3(nn.Module):
     def __init__(
