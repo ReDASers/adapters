@@ -508,7 +508,7 @@ class LoRA(nn.Module):
                         
                 if self._epoch_end():
                     self.sigma_w = (self.sigma_w / self.batches_per_epoch)
-                logging.warning(f"Epoch: {self.epoch}, batch: {self.n_batches}, sigma_w: {self.sigma_w}")
+                    logging.warning(f"Epoch: {self.epoch}, batch: {self.n_batches}, sigma_h: {self.sigma_h}, sigma_w: {self.sigma_w}")
                 w = weights
             else:
                 w = self.rescale(weights=weights, 
@@ -550,7 +550,9 @@ class LoRA(nn.Module):
     
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
-            hidden_states = hidden_states if hidden_states is not None else layer_input
+            if hidden_states is None:
+                hidden_states = layer_input
+            
             x = torch.nan_to_num(hidden_states)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A)
@@ -559,8 +561,7 @@ class LoRA(nn.Module):
             
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = dw.std().item() + 1e-12
-                self.sigma_h = torch.mean(self.batch_sigmas).item() + 1e-12
-                logging.warning(f"Epoch {self.epoch}, batch {self.n_batches}, sigma_h = {self.sigma_h}")
+                self.sigma_h = torch.mean(self.batch_sigmas).item()
                 p_skip = torch.zeros(1)
             else:
                 p_skip = self.h
