@@ -532,7 +532,7 @@ class LoRA(nn.Module):
                                 skip_prob=0.0,
                                 weight_dropout_prob=0.0)
 
-        return w
+        return torch.nan_to_num(w, nan=0.0)
         
     
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
@@ -571,6 +571,7 @@ class LoRA(nn.Module):
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.size(0), 1, 1))
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler) 
 
+        hidden_states = torch.nan_to_num(hidden_states, nan=0.0)
         self.delta_w = hidden_states.clone()
 
         if self.log:
