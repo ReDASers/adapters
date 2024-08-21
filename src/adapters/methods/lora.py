@@ -561,13 +561,10 @@ class LoRA(nn.Module):
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = dw.std().item()
                 self.sigma_h = torch.mean(self.batch_sigmas).item() + 1e-12
-                p_skip = torch.zeros(1)
-            else:
-                p_skip = self.h
             
             dw = self.rescale(weights=dw, 
                               sigma=self.sigma_h,
-                              skip_prob=p_skip, # will not skip on eval
+                              skip_prob=self.h, # will not skip on eval
                               weight_dropout_prob=self.weight_dropout_prob)
             hidden_states = self.regularize(
                 weights=dw,
