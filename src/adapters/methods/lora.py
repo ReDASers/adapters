@@ -415,8 +415,11 @@ class LoRA(nn.Module):
         return torch.bernoulli(skip_prob).item() == 1
             
     def _rescale(self, weights: torch.Tensor, sigma: float):
-        u = torch.mean(weights, dtype=weights.dtype)
-        z = (weights - u) / (torch.std(weights) + 1e-12)
+        u = torch.mean(weights, dtype=torch.float32)
+        std = torch.std(weights) 
+        if std == 0:
+            std = 1e-9
+        z = (weights - u) / std
         return z * sigma + u
     
     def rescale(self, 
