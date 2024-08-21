@@ -505,7 +505,7 @@ class LoRA(nn.Module):
                 self.sigma_w = self.sigma_w + weights.std().item()
                         
                 if self._epoch_end():
-                    self.sigma_w = (self.sigma_w / self.batches_per_epoch)
+                    self.sigma_w = (self.sigma_w / self.batches_per_epoch) + 1e-12
 
                 w = weights
             else:
@@ -556,7 +556,7 @@ class LoRA(nn.Module):
             dw = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = dw.std().item() 
-                self.sigma_h = torch.mean(self.batch_sigmas).item()
+                self.sigma_h = torch.mean(self.batch_sigmas).item() + 1e-12
             dw = self.rescale(weights=dw, 
                               sigma=self.sigma_h,
                               skip_prob=self.h, # will not skip on eval
