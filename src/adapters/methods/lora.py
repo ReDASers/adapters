@@ -418,7 +418,7 @@ class LoRA(nn.Module):
         u = torch.mean(weights, dtype=torch.float32)
         std = torch.std(weights) 
         if std < 1e-9:
-            std = 1e-9
+            return weights
         z = (weights - u) / std
         return z * sigma + u
     
