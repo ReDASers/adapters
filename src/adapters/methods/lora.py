@@ -112,7 +112,7 @@ class LoRA(nn.Module):
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch))
             nn.init.normal_(self.p, 
                             mean=1 - 1/self.batches_per_epoch,
-                            std=(1/self.batches_per_epoch)**2)
+                            std=math.sqrt(2/self.connections_out))
         
 
         
