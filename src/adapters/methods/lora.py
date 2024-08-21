@@ -440,7 +440,7 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Rescaled weights
         """
-        if sigma < 1e-9 or self.skip(skip_prob):
+        if sigma == 0 or self.skip(skip_prob):
             return weights
 
         if torch.std(weights).item() < sigma:
