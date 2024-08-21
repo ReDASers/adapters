@@ -417,7 +417,7 @@ class LoRA(nn.Module):
     def _rescale(self, weights: torch.Tensor, sigma: float):
         u = torch.mean(weights, dtype=torch.float32)
         std = torch.std(weights) 
-        if std == 0:
+        if torch.isnan(std) or std < 1e-9:
             std = 1e-9
         z = (weights - u) / std
         return z * sigma + u
