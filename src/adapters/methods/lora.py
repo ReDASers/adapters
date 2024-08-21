@@ -562,7 +562,7 @@ class LoRA(nn.Module):
                 p_skip = torch.zeros(1)
             else:
                 p_skip = self.h
-            dw = self.com(weights=dw, added=self.delta_w, scaling=self.scaling)
+            
             dw = self.rescale(weights=dw, 
                               sigma=self.sigma_h,
                               skip_prob=p_skip, # will not skip on eval
