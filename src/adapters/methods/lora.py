@@ -80,8 +80,7 @@ class LoRA(nn.Module):
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         self.noise_std = config.noise_std
         self.weight_dropout_prob = config.weight_dropout_prob
-        self.skip_prob = nn.Parameter(torch.tensor(config.skip_prob, dtype=torch.float32))
-        nn.init.normal_(self.skip_prob, mean=config.skip_prob, std=config.skip_prob/100.0)
+        self.skip_prob = torch.tensor(config.skip_prob, dtype=torch.float32)
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
         
