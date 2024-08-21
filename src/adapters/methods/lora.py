@@ -110,7 +110,7 @@ class LoRA(nn.Module):
             nn.init.zeros_(self.lp.bias)
             '''
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch))
-            nn.init.normal_(self.p, mean=1 - 1/self.batches_per_epoch, std=math.sqrt(1/self.connections_out))
+            nn.init.normal_(self.p, mean=1 - 1/self.batches_per_epoch, std=0.02)
         
 
         
