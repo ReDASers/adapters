@@ -415,9 +415,8 @@ class LoRA(nn.Module):
         return torch.bernoulli(skip_prob).item() == 1
             
     def _rescale(self, weights: torch.Tensor, sigma: float):
-        u = torch.mean(weights, dtype=torch.float32)
-        std = torch.std(weights) + 1e-12
-        z = (weights - u) / std
+        u = torch.mean(weights, dtype=weights.dtype)
+        z = (weights - u) / (torch.std(weights) + 1e-12)
         return z * sigma + u
     
     def rescale(self, 
@@ -503,11 +502,11 @@ class LoRA(nn.Module):
         """
         if self.training:
             if self.epoch == 1:
-                self.sigma_w = self.sigma_w + weights.std().item() 
-                
+                self.sigma_w = self.sigma_w + weights.std().item()
+                        
                 if self._epoch_end():
-                    self.sigma_w = (self.sigma_w / self.batches_per_epoch) 
-                    
+                    self.sigma_w = (self.sigma_w / self.batches_per_epoch)
+
                 w = weights
             else:
                 w = self.rescale(weights=weights, 
@@ -549,22 +548,18 @@ class LoRA(nn.Module):
     
         if self.location == "selfattn":
             # If hidden_states is None, use layer_input instead
-            if hidden_states is None:
-                hidden_states = layer_input
-            
+            hidden_states = hidden_states if hidden_states is not None else layer_input
             x = torch.nan_to_num(hidden_states)
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A)
             dw = dw @ torch.t(self.lora_B)
             dw = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
-            
             if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = dw.std().item()
+                self.batch_sigmas[self.n_batches - 1] = dw.std().item() 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
-            
             dw = self.rescale(weights=dw, 
                               sigma=self.sigma_h,
-                              skip_prob=self.h,  #  will not skip on eval
+                              skip_prob=self.h, # will not skip on eval
                               weight_dropout_prob=self.weight_dropout_prob)
             hidden_states = self.regularize(
                 weights=dw,
