@@ -98,7 +98,7 @@ class LoRA(nn.Module):
 
     def set_p(self, p:float):
         if self.location == "selfattn":
-            self.p = torch.tensor(p, dtype=torch.float32)
+            self.p = torch.tensor(1 - p, dtype=torch.float32)
             self.h = torch.tensor(p, dtype=torch.float32)
         else:
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
