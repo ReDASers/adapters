@@ -416,7 +416,7 @@ class LoRA(nn.Module):
             
     def _rescale(self, weights: torch.Tensor, sigma: float):
         u = torch.mean(weights, dtype=torch.float32)
-        std = torch.std(weights) + 1e-9
+        std = torch.std(weights) + 1e-8
         z = (weights - u) / std
         return z * sigma + u
     
@@ -440,7 +440,7 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Rescaled weights
         """
-        if sigma == 0 or self.skip(skip_prob):
+        if sigma < 5e-8 or self.skip(skip_prob):
             return weights
 
         if torch.std(weights).item() < sigma:
