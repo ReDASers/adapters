@@ -416,7 +416,7 @@ class LoRA(nn.Module):
             
     def _rescale(self, weights: torch.Tensor, sigma: float):
         u = torch.mean(weights, dtype=torch.float32)
-        std = torch.std(weights) + 5e-8
+        std = torch.std(weights) + 1e-12
         z = (weights - u) / std
         return z * sigma + u
     
@@ -440,7 +440,7 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Rescaled weights
         """
-        if sigma < 5e-8 or self.skip(skip_prob):
+        if sigma < 1e-9 or self.skip(skip_prob):
             return weights
 
         if torch.std(weights).item() < sigma:
@@ -504,10 +504,11 @@ class LoRA(nn.Module):
         if self.training:
             if self.epoch == 1:
                 self.sigma_w = self.sigma_w + weights.std().item()
+                
                         
                 if self._epoch_end():
                     self.sigma_w = (self.sigma_w / self.batches_per_epoch)
-
+                logging.warning(f"Epoch: {self.epoch}, batch: {self.n_batches}, sigma_w: {self.sigma_w}")
                 w = weights
             else:
                 w = self.rescale(weights=weights, 
@@ -557,8 +558,9 @@ class LoRA(nn.Module):
             dw = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
             
             if self.training and self.epoch == 1:
-                self.batch_sigmas[self.n_batches - 1] = dw.std().item() + 5e-8
-                self.sigma_h = torch.mean(self.batch_sigmas).item() + 5e-8
+                self.batch_sigmas[self.n_batches - 1] = dw.std().item() + 1e-12
+                self.sigma_h = torch.mean(self.batch_sigmas).item() + 1e-12
+                logging.warning(f"Epoch {self.epoch}, batch {self.n_batches}, sigma_h = {self.sigma_h}")
                 p_skip = torch.zeros(1)
             else:
                 p_skip = self.h
