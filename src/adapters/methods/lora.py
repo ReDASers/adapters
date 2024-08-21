@@ -564,7 +564,7 @@ class LoRA(nn.Module):
             
             dw = self.rescale(weights=dw, 
                               sigma=self.sigma_h,
-                              skip_prob=self.h, # will not skip on eval
+                              skip_prob=0.5 if self.epoch == 1 else self.h, # will not skip on eval
                               weight_dropout_prob=self.weight_dropout_prob)
             hidden_states = self.regularize(
                 weights=dw,
