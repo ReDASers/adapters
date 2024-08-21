@@ -503,12 +503,11 @@ class LoRA(nn.Module):
         """
         if self.training:
             if self.epoch == 1:
-                self.sigma_w = self.sigma_w + weights.std().item()
+                self.sigma_w = self.sigma_w + weights.std().item() + 1e-12
                 
-                        
                 if self._epoch_end():
                     self.sigma_w = (self.sigma_w / self.batches_per_epoch)
-                    logging.warning(f"Epoch: {self.epoch}, batch: {self.n_batches}, sigma_h: {self.sigma_h}, sigma_w: {self.sigma_w}")
+                    
                 w = weights
             else:
                 w = self.rescale(weights=weights, 
