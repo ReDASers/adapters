@@ -99,7 +99,7 @@ class LoRA(nn.Module):
 
     def set_p(self, p:float):
         if self.location == "selfattn":
-            self.p = 1 - p
+            self.p = torch.tensor(1 - p)
             self.h = nn.Parameter(torch.tensor(p, dtype=torch.float32))
             nn.init.normal_(self.h, mean=p, std=0.02)
         else:
