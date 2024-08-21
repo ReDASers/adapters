@@ -101,7 +101,7 @@ class LoRA(nn.Module):
         if self.location == "selfattn":
             self.p = torch.tensor(1 - p, dtype=torch.float32)
             self.h = nn.Parameter(torch.tensor(p, dtype=torch.float32))
-            nn.init.normal_(self.h, mean=p, std=0.01)
+            nn.init.normal_(self.h, mean=p, std=0.001)
         else:
             '''
             self.lp =nn.Linear(self.connections_out, 1, dtype=torch.float32)
