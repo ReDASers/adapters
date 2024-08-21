@@ -81,7 +81,7 @@ class LoRA(nn.Module):
         self.noise_std = config.noise_std
         self.weight_dropout_prob = config.weight_dropout_prob
         self.skip_prob = nn.Parameter(torch.tensor(config.skip_prob, dtype=torch.float32))
-        nn.init.normal_(self.skip_prob, mean=config.skip_prob, std=config.skip_prob/20.0)
+        nn.init.normal_(self.skip_prob, mean=config.skip_prob, std=config.skip_prob/100.0)
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
         
