@@ -99,7 +99,7 @@ class LoRA(nn.Module):
 
     def set_p(self, p:float):
         if self.location == "selfattn":
-            self.p = torch.tensor(1 - p)
+            self.p = torch.tensor(1 - p, dtype=torch.float32)
             self.h = nn.Parameter(torch.tensor(p, dtype=torch.float32))
             nn.init.normal_(self.h, mean=p, std=0.02)
         else:
@@ -560,7 +560,7 @@ class LoRA(nn.Module):
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
             dw = self.rescale(weights=dw, 
                               sigma=self.sigma_h,
-                              skip_prob=torch.clamp(1 - self.p, min = 0.0, max = 1.0), # will not skip on eval
+                              skip_prob=torch.clamp(self.h, min = 0.0, max = 1.0), # will not skip on eval
                               weight_dropout_prob=self.weight_dropout_prob)
             hidden_states = self.regularize(
                 weights=dw,
