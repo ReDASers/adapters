@@ -101,7 +101,7 @@ class LoRA(nn.Module):
         if self.location == "selfattn":
             self.p = torch.tensor(1 - p)
             self.h = torch.tensor(p)
-        elif self.location == "intermediate":
+        elif self.location == "output":
             '''
             self.lp =nn.Linear(self.connections_out, 1, dtype=torch.float32)
             nn.init.normal_(self.lp.weight, 
@@ -112,7 +112,7 @@ class LoRA(nn.Module):
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch))
             nn.init.normal_(self.p, mean=1 - 1/self.batches_per_epoch, std=math.sqrt(1/self.connections_out))
         else:
-            self.p = torch.tensor(1 - 1/self.batches_per_epoch)
+            self.p = torch.tensor(0.0)
 
         
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
@@ -510,7 +510,7 @@ class LoRA(nn.Module):
             else:
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
-                                skip_prob=self.p if self.location != "intermediate" else self.p.clamp(min=0.0, max=1.0),
+                                skip_prob=self.p.clamp(min=0.0, max=1.0),
                                 weight_dropout_prob=self.weight_dropout_prob)
                 
             w = self.regularize(weights=w, 
