@@ -503,7 +503,7 @@ class LoRA(nn.Module):
             else:
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
-                                skip_prob=torch.clamp(self.p, min=0.0, max=1.0),
+                                skip_prob=torch.clamp(self.p, min=0.87, max=0.99),
                                 weight_dropout_prob=self.weight_dropout_prob)
                 
             w = self.regularize(weights=w, 
