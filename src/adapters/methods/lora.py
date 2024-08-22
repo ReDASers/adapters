@@ -100,12 +100,16 @@ class LoRA(nn.Module):
         if self.location == "selfattn":
             self.p = torch.tensor(1 - p)
             self.h = torch.tensor(p)
+            self.lbound = 0.0
+            self.ubound = 1.0
         else:
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
             self.mu = 1 - 1/self.batches_per_epoch
             self.std = math.sqrt(2*self.mu/self.connections_out)
             #nn.init.uniform_(self.p, a=max(0,self.mu-self.std*math.sqrt(3)), b=min(1,self.mu+self.std*math.sqrt(3)))
             nn.init.normal_(self.p, mean=self.mu, std=self.std)
+            self.lbound = self.mu - self.std * 5
+            self.ubound = 1.0
         
 
         
@@ -504,10 +508,7 @@ class LoRA(nn.Module):
             else:
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
-                                skip_prob=torch.clamp(self.p, 
-                                                      min=max(0.0, self.mu - self.std*2 - 0.5*self.std*self.epoch),
-                                                      max=min(self.mu+self.std*2+0.5*self.std*self.epoch, 1 - 0.5*self.std),
-                                                      ) if self.location != "selfattn" else torch.clamp(self.p, min=0.0, max=1.0),
+                                skip_prob= torch.clamp(self.p, min=self.lbound, max=self.ubound),
                                 weight_dropout_prob=self.weight_dropout_prob)
                 
             w = self.regularize(weights=w, 
