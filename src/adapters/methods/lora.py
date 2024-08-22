@@ -105,7 +105,7 @@ class LoRA(nn.Module):
         else:
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
             self.mu = 1 - 1/self.batches_per_epoch
-            self.std = math.sqrt(2*self.mu/self.connections_out)
+            self.std = math.sqrt(self.mu/self.connections_out)
             nn.init.uniform_(self.p, a=max(1 - p, self.mu-self.std*math.sqrt(3)), b=min(1.0,self.mu+self.std*math.sqrt(3)))
             #nn.init.normal_(self.p, mean=self.mu, std=self.std)
             self.lbound = max(1 - p, self.mu - math.sqrt(3)*self.std * 5)
