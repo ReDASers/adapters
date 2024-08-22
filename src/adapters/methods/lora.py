@@ -80,8 +80,7 @@ class LoRA(nn.Module):
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         self.noise_std = config.noise_std
         self.weight_dropout_prob = config.weight_dropout_prob
-        self.skip_prob = torch.tensor(config.skip_prob)
-
+        self.skip_prob = torch.tensor(config.skip_prob, dtype=torch.float32)
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
         
@@ -99,18 +98,10 @@ class LoRA(nn.Module):
 
     def set_p(self, p:float):
         if self.location == "selfattn":
+            self.p = torch.tensor(1 - p, dtype=torch.float32)
             self.h = torch.tensor(p, dtype=torch.float32)
-            self.p = nn.Parameter(torch.tensor(1 -p, dtype=torch.float32))
-            nn.init.normal_(self.p, mean=1-p, std=0.02)
         else:
-            '''
-            self.lp =nn.Linear(self.connections_out, 1, dtype=torch.float32)
-            nn.init.normal_(self.lp.weight, 
-                            mean=1 - 1/self.batches_per_epoch,
-                            std=math.sqrt(2/self.connections_out))
-            nn.init.zeros_(self.lp.bias)
-            '''
-            self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch))
+            self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
             nn.init.normal_(self.p, 
                             mean=1 - 1/self.batches_per_epoch,
                             std=math.sqrt(2/self.connections_out))
@@ -560,7 +551,7 @@ class LoRA(nn.Module):
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
             dw = self.rescale(weights=dw, 
                               sigma=self.sigma_h,
-                              skip_prob=self.h, # will not skip on eval
+                              skip_prob=torch.clamp(self.h, min = 0.0, max = 1.0), # will not skip on eval
                               weight_dropout_prob=self.weight_dropout_prob)
             hidden_states = self.regularize(
                 weights=dw,
