@@ -492,6 +492,26 @@ class LoRA(nn.Module):
         Returns:
             torch.Tensor: Composed weights.
         """
+        if self.training:
+            if self.epoch == 1:
+                self.sigma_w = self.sigma_w + weights.std().item()
+                        
+                if self._epoch_end():
+                    self.sigma_w = (self.sigma_w / self.batches_per_epoch)
+
+                w = weights
+            else:
+                w = self.rescale(weights=weights, 
+                                sigma=self.sigma_w, 
+                                skip_prob=torch.clamp(self.p, min=0.0, max=1.0),
+                                weight_dropout_prob=self.weight_dropout_prob)
+                
+            w = self.regularize(weights=w, 
+                                noise_std=self.noise_std,
+                                weight_dropout_prob=self.weight_dropout_prob,
+                                skip_prob=self.skip_prob)
+        else: 
+            w = weights
                             
         if scaling is None:
             scaling = self.scaling
@@ -502,38 +522,9 @@ class LoRA(nn.Module):
             self.record_weights_var_maybe()
 
         if self.location == "selfattn":
-            combined = weights + added * scaling
+            return w + added * scaling
         else: 
-            combined = weights * (added * scaling)
-        
-        w = torch.nan_to_num(combined, nan=0.0)
-                            
-        if self.training:
-            if self.epoch == 1:
-                self.sigma_w = self.sigma_w + w.std().item()
-                        
-                if self._epoch_end():
-                    self.sigma_w = (self.sigma_w / self.batches_per_epoch)
-
-                
-            else:
-                w = self.rescale(weights=w, 
-                                sigma=self.sigma_w, 
-                                skip_prob=torch.clamp(self.p, min=0.0, max=1.0),
-                                weight_dropout_prob=self.weight_dropout_prob)
-                
-            w = self.regularize(weights=w, 
-                                noise_std=self.noise_std,
-                                weight_dropout_prob=self.weight_dropout_prob,
-                                skip_prob=self.skip_prob)
-        else: 
-            w = self.rescale(weights=w, 
-                                sigma=self.sigma_w, 
-                                skip_prob=0.0,
-                                weight_dropout_prob=0.0)
-
-        return torch.nan_to_num(w, nan=0.0)
-        
+            return w * (added * scaling)
     
     def forward(self, hidden_states: Optional[torch.Tensor], layer_input: torch.Tensor):
         """Forward pass of the LoRA module.
@@ -571,7 +562,6 @@ class LoRA(nn.Module):
             scaling_vector = torch.nan_to_num(self.lora_C.view(1, 1, -1).repeat(layer_input.size(0), 1, 1))
             hidden_states = scaling_vector * (1.0 - self.scalar_scaler) 
 
-        hidden_states = torch.nan_to_num(hidden_states, nan=0.0)
         self.delta_w = hidden_states.clone()
 
         if self.log:
