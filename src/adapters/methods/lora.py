@@ -105,7 +105,7 @@ class LoRA(nn.Module):
         else:
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
             self.mu = 1 - 1/self.batches_per_epoch
-            self.limit = math.sqrt(3*self.mu/self.connections_out)
+            self.limit = math.sqrt(3*self.mu/self.connections_out) # out is just number of neurons for scaling vector
             nn.init.uniform_(self.p, a=max(1 - p, self.mu-self.limit), b=min(1.0,self.mu+self.limit))
             #nn.init.normal_(self.p, mean=self.mu, std=self.std)
             self.lbound = max(1 - p, self.mu - self.limit * 2)
