@@ -105,8 +105,7 @@ class LoRA(nn.Module):
             a = (1 - 1/self.batches_per_epoch)-math.sqrt(1/self.connections_out)*math.sqrt(3)
             b = (1 - 1/self.batches_per_epoch)+math.sqrt(1/self.connections_out)*math.sqrt(3)
             nn.init.uniform_(self.p, a=a, b=b)
-            self.ubound = 1.0
-            self.lbound = 1 - 2/self.batches_per_epoch - 2*math.sqrt(1/self.connections_out)*math.sqrt(3)   
+            self.h = torch.tensor(2*(1/self.batches_per_epoch + math.sqrt(1/self.connections_out)*math.sqrt(3))) 
         
 
         
@@ -505,7 +504,7 @@ class LoRA(nn.Module):
             else:
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
-                                skip_prob=torch.clamp(self.p, min=self.lbound, max=self.ubound),
+                                skip_prob=torch.clamp(self.p, min=1 - self.h.item(), max=1.0),
                                 weight_dropout_prob=self.weight_dropout_prob)
                 
             w = self.regularize(weights=w, 
