@@ -505,8 +505,8 @@ class LoRA(nn.Module):
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
                                 skip_prob=torch.clamp(self.p, 
-                                                      min=max(0.0+self.std*math.sqrt(3), self.mu - self.std*math.sqrt(3) -self.std*math.sqrt(3)*self.epoch),
-                                                      max=min(self.mu+2*self.std*math.sqrt(3), 1.0-self.std*math.sqrt(3)),
+                                                      min=max(0.0+self.std*math.sqrt(3), self.mu - self.std*math.sqrt(3) -self.std*self.epoch),
+                                                      max=min(self.mu+self.std*math.sqrt(3), 1.0-self.std*math.sqrt(3)),
                                                       ) if self.location != "selfattn" else torch.clamp(self.p, min=0.0, max=1.0),
                                 weight_dropout_prob=self.weight_dropout_prob)
                 
