@@ -81,7 +81,6 @@ class LoRA(nn.Module):
         self.noise_std = config.noise_std
         self.weight_dropout_prob = config.weight_dropout_prob
         self.skip_prob = torch.tensor(config.skip_prob)
-
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
         
@@ -102,14 +101,7 @@ class LoRA(nn.Module):
             self.p = torch.tensor(1 - p)
             self.h = torch.tensor(p)
         else:
-            '''
-            self.lp =nn.Linear(self.connections_out, 1, dtype=torch.float32)
-            nn.init.normal_(self.lp.weight, 
-                            mean=1 - 1/self.batches_per_epoch,
-                            std=math.sqrt(2/self.connections_out))
-            nn.init.zeros_(self.lp.bias)
-            '''
-            self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch))
+            self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
             nn.init.normal_(self.p, 
                             mean=1 - 1/self.batches_per_epoch,
                             std=math.sqrt(2/self.connections_out))
@@ -216,7 +208,7 @@ class LoRA(nn.Module):
             gating_heads (int): Number of gating heads.
         """
         if self.use_gating:
-            self.gate = nn.Linear(self.connections_in, gating_heads, dtype=torch.float32)
+            self.gate = nn.Linear(self.connections_in, gating_heads)
             nn.init.normal_(self.gate.weight, std=0.02)
 
     def _setup_scaling(self):
@@ -511,7 +503,7 @@ class LoRA(nn.Module):
             else:
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
-                                skip_prob=self.p.clamp(min=0.0, max=1.0),
+                                skip_prob=torch.clamp(self.p, min=0.0, max=1.0),
                                 weight_dropout_prob=self.weight_dropout_prob)
                 
             w = self.regularize(weights=w, 
@@ -554,12 +546,14 @@ class LoRA(nn.Module):
             dw = fx @ torch.t(self.lora_A)
             dw = dw @ torch.t(self.lora_B)
             dw = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
+
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = dw.std().item() 
                 self.sigma_h = torch.mean(self.batch_sigmas).item()
+
             dw = self.rescale(weights=dw, 
                               sigma=self.sigma_h,
-                              skip_prob=self.h, # will not skip on eval
+                              skip_prob=self.h,
                               weight_dropout_prob=self.weight_dropout_prob)
             hidden_states = self.regularize(
                 weights=dw,
