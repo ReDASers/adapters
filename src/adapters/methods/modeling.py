@@ -90,7 +90,9 @@ class Activation_Function_Class(nn.Module):
     def __init__(self, hidden_act: str):
         super().__init__()
         act = hidden_act.lower()
-        if act == "leakyrelu":
+        if hidden_act is None:
+            self.f = nn.Identity()
+        elif act == "leakyrelu":
             self.f = nn.functional.leaky_relu
         elif act == "hardswish":
             self.f = nn.functional.hardswish

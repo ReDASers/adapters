@@ -1,7 +1,7 @@
 import logging
 from collections.abc import Mapping
 from dataclasses import FrozenInstanceError, asdict, dataclass, field, replace
-from typing import List, Optional, Union, Literal
+from typing import List, Literal, Optional, Union
 
 from ..utils import resolve_adapter_config
 
@@ -86,6 +86,8 @@ class AdapterConfig(Mapping):
             cls_new = ConfigUnion
         elif architecture == "prompt_tuning":
             cls_new = PromptTuningConfig
+        elif architecture == "reft":
+            cls_new = ReftConfig
         else:
             cls_new = BnConfig
 
@@ -425,6 +427,56 @@ class PromptTuningConfig(AdapterConfig):
     random_uniform_scale = 0.5
     combine: str = "prefix"
 
+'''
+@dataclass(eq=False)
+class LoRAConfig(AdapterConfig):
+    """
+    The Low-Rank Adaptation (LoRA) architecture proposed by Hu et al. (2021). See https://arxiv.org/pdf/2106.09685.pdf.
+    LoRA adapts a model by reparametrizing the weights of a layer matrix. You can merge the additional weights with the
+    original layer weights using ``model.merge_adapter("lora_name")``.
+
+    Args:
+        selfattn_lora (bool, optional): If True, add LoRA to the self-attention weights of a model.
+            Defaults to True.
+        intermediate_lora (bool, optional): If True, add LoRA to the intermediate MLP weights of a model.
+            Defaults to False.
+        output_lora (bool, optional): If True, add LoRA to the output MLP weights of a model.
+            Defaults to False.
+        leave_out (:obj:`List[int]`, optional):
+            The IDs of the layers (starting at 0) where NO adapter modules should be added.
+        r (int, optional): The rank of the LoRA layer. Defaults to 8.
+        alpha (int, optional): The hyperparameter used for scaling the LoRA reparametrization. Defaults to 8.
+        dropout (float, optional): The dropout rate used in the LoRA layer. Defaults to 0.0.
+        attn_matrices (List[str], optional): Determines which matrices of the self-attention module to adapt.
+            A list that may contain the strings "q" (query), "k" (key), "v" (value). Defaults to ["q", "v"].
+        composition_mode (str, optional):
+            Defines how the injected weights are composed with the original model weights. Can be either "add"
+            (addition of decomposed matrix, as in LoRA) or "scale" (element-wise multiplication of vector, as in
+            (IA)^3). "scale" can only be used together with r=1. Defaults to "add".
+        init_weights (:obj:`str`, optional): Initialization method for the weights of the LoRA modules.
+            Currently, this can be either "lora" (default) or "bert".
+        use_gating (:obj:`bool`, optional):
+            Place a trainable gating module besides the added parameter module to control module activation. This is
+            e.g. used for UniPELT. Defaults to False. Note that modules with use_gating=True cannot be merged using
+            `merge_adapter()`.
+    """
+
+    architecture: Optional[str] = "lora"
+
+    selfattn_lora: bool = True
+    intermediate_lora: bool = False
+    output_lora: bool = False
+    leave_out: List[int] = field(default_factory=list)
+
+    r: int = 8
+    alpha: int = 8
+    dropout: float = 0.0
+    attn_matrices: List[str] = field(default_factory=lambda: ["q", "v"])
+    composition_mode: str = "add"
+    init_weights: str = "lora"
+    use_gating: bool = False
+'''
+
 @dataclass(eq=False)
 class LoRAConfig(AdapterConfig):
     """
@@ -508,6 +560,268 @@ class LoRAConfig(AdapterConfig):
 
     log: bool = False
 
+
+
+@dataclass(eq=False)
+class IA3Config(LoRAConfig):
+    """
+    The 'Infused Adapter by Inhibiting and Amplifying Inner Activations' ((IA)^3) architecture proposed by Liu et al.
+    (2022). See https://arxiv.org/pdf/2205.05638.pdf. (IA)^3 builds on top of LoRA, however, unlike the additive
+    composition of LoRA, it scales weights of a layer using an injected vector.
+    """
+
+    selfattn_lora: bool = True
+    intermediate_lora: bool = True
+    output_lora: bool = False
+    leave_out: List[int] = field(default_factory=list)
+
+    r: int = 1
+    alpha: int = 1
+    dropout: float = 0.0
+    attn_matrices: List[str] = field(default_factory=lambda: ["k", "v"])
+    composition_mode: str = "scale"
+    init_weights: str = "ia3"
+    use_gating: bool = False
+
+
+@dataclass(eq=False)
+class ReftConfig(AdapterConfig):
+    """
+    Base class for Representation Fine-Tuning (ReFT) methods proposed in Wu et al. (2024). See https://arxiv.org/pdf/2404.03592.
+    ReFT methods have in common that they add "interventions" after selected model layers and at selected sequence positions to adapt the representations produced by module outputs.
+
+    Args:
+        layers (Union[Literal["all"], List[int]]): The IDs of the layers where interventions should be added.
+            If "all", interventions are added after all layers (default).
+        prefix_positions (int): The number of prefix positions to add interventions to.
+        suffix_positions (int): The number of suffix positions to add interventions to.
+        r (int): The rank of the intervention layer.
+        orthogonality (bool): If True, enforce an orthogonality constraint for the projection matrix.
+        tied_weights (bool): If True, share intervention parameters between prefix and suffix positions in each layer.
+        subtract_projection (bool): If True, subtract the projection of the input.
+        dropout (float): The dropout rate used in the intervention layer.
+        non_linearity (str): The activation function used in the intervention layer.
+    """
+
+    layers: Union[Literal["all"], List[int]]
+    prefix_positions: int
+    suffix_positions: int
+    r: int
+    orthogonality: bool
+    tied_weights: bool = False
+    subtract_projection = True
+    dropout: float = 0.05
+    non_linearity: Optional[str] = None
+
+    architecture: str = "reft"
+
+    output_reft: bool = True
+
+
+@dataclass(eq=False)
+class LoReftConfig(ReftConfig):
+    """
+    Low-Rank Linear Subspace ReFT method proposed in Wu et al. (2024). See https://arxiv.org/pdf/2404.03592.
+    """
+
+    layers: Union[Literal["all"], List[int]] = "all"
+    prefix_positions: int = 3
+    suffix_positions: int = 0
+    r: int = 1
+    orthogonality: bool = True
+    tied_weights: bool = False
+
+
+@dataclass(eq=False)
+class NoReftConfig(ReftConfig):
+    """
+    Variation of LoReft without orthogonality constraint.
+    """
+
+    layers: Union[Literal["all"], List[int]] = "all"
+    prefix_positions: int = 3
+    suffix_positions: int = 0
+    r: int = 1
+    orthogonality: bool = False
+    tied_weights: bool = False
+
+
+@dataclass(eq=False)
+class DiReftConfig(ReftConfig):
+    """
+    Variation of LoReft without orthogonality constraint and projection subtraction as proposed in Wu et al. (2024). See https://arxiv.org/pdf/2404.03592.
+    """
+
+    layers: Union[Literal["all"], List[int]] = "all"
+    prefix_positions: int = 3
+    suffix_positions: int = 0
+    r: int = 1
+    orthogonality: bool = False
+    tied_weights: bool = False
+    subtract_projection = False
+
+
+class ConfigUnion(AdapterConfig):
+    """
+    Composes multiple adaptation method configurations into one. This class can be used to define complex adaptation
+    method setups.
+    """
+
+    architecture: Optional[str] = "union"
+
+    configs: List[AdapterConfig]
+
+    def __init__(self, *configs: List[AdapterConfig]):
+        self.validate(configs)
+        self.configs = configs
+
+    @staticmethod
+    def validate(configs):
+        """
+        Performs simple validations of a list of configurations to check whether they can be combined to a common
+        setup.
+
+        Args:
+            configs (List[AdapterConfig]): list of configs to check.
+
+        Raises:
+            TypeError: One of the configurations has a wrong type. ValueError: At least two given configurations
+            conflict.
+        """
+        # perform single config checks
+        for config in configs:
+            if not isinstance(config, AdapterConfig):
+                raise TypeError(f"{config} is not an instance of AdapterConfig")
+            elif isinstance(config, ConfigUnion):
+                raise TypeError(f"{config} of type {type(config)} is not supported in a config union.")
+        # perform pairwise check
+        for c_a, c_b in [(c_a, c_b) for i, c_a in enumerate(configs) for j, c_b in enumerate(configs) if i > j]:
+            if c_a.architecture != c_b.architecture:
+                continue
+            # if at least one config specifies a leave_out, we cannot make a final decision at this point
+            elif c_a.get("leave_out", []) or c_b.get("leave_out", []):
+                continue
+            elif c_a.architecture is None or c_a.architecture == "bottleneck":
+                is_valid = c_a.mh_adapter != c_b.mh_adapter and c_a.output_adapter != c_b.output_adapter
+                if not is_valid:
+                    raise ValueError(f"{c_a} and {c_b} cannot be combined.")
+                else:
+                    continue
+            # at this point, we know that the architectures are the same
+            raise ValueError(f"{c_a} and {c_b} have the same adapter architecture and cannot be combined.")
+
+    def __getitem__(self, key):
+        if isinstance(key, int):
+            return self.configs[key]
+        elif hasattr(self, key):
+            return getattr(self, key)
+        else:
+            i, k = key.split(".")
+            return self.configs[int(i)][k]
+
+    def __iter__(self):
+        for i, c in enumerate(self.configs):
+            for k in iter(c):
+                yield f"{i}.{k}"
+
+    def __len__(self):
+        return sum([len(c) for c in self.configs])
+
+    def __eq__(self, other):
+        return all([c_a == c_b for c_a, c_b in zip(self.configs, other.configs)])
+
+    def to_dict(self):
+        return {"architecture": self.architecture, "configs": [c.to_dict() for c in self.configs]}
+
+    def replace(self, **changes):
+        return ConfigUnion(*[c.replace(**changes) for c in self.configs])
+
+    @classmethod
+    def from_dict(cls, config):
+        if isinstance(config, AdapterConfig):
+            return config
+
+        configs = []
+        for c in config["configs"]:
+            config_class = cls._get_config_class(c)
+            configs.append(config_class.from_dict(c))
+
+        return cls(*configs)
+
+
+class MAMConfig(ConfigUnion):
+    """
+    The Mix-And-Match adapter architecture proposed by He et al. (2021). See https://arxiv.org/pdf/2110.04366.pdf.
+    """
+
+    def __init__(self, prefix_tuning: Optional[PrefixTuningConfig] = None, adapter: Optional[BnConfig] = None):
+        prefix_tuning = prefix_tuning or PrefixTuningConfig(bottleneck_size=800)
+        adapter = adapter or ParBnConfig()
+
+        assert isinstance(prefix_tuning, PrefixTuningConfig)
+        assert isinstance(adapter, BnConfig)
+        super().__init__(prefix_tuning, adapter)
+
+    @property
+    def prefix_tuning(self):
+        return self[0]
+
+    @property
+    def adapter(self):
+        return self[1]
+
+
+class UniPELTConfig(ConfigUnion):
+    """
+    The UniPELT adapter architecture proposed by Mao et al. (2022). See https://arxiv.org/pdf/2110.07577.pdf.
+    """
+
+    def __init__(
+        self,
+        prefix_tuning: Optional[PrefixTuningConfig] = None,
+        adapter: Optional[BnConfig] = None,
+        lora: Optional[LoRAConfig] = None,
+    ):
+        components = [
+            prefix_tuning or PrefixTuningConfig(prefix_length=10),
+            adapter or SeqBnConfig(reduction_factor=16),
+            lora or LoRAConfig(r=8, alpha=2),
+        ]
+
+        super().__init__(*[c.replace(use_gating=True) for c in components])
+
+
+# IMPORTANT: When adding a new config here, also add it to docs/overview.md!
+ADAPTER_CONFIG_MAP = {
+    # DEPRECATED STRINGS
+    "pfeiffer": SeqBnConfig(),
+    "houlsby": DoubleSeqBnConfig(),
+    "parallel": ParBnConfig(),
+    "scaled_parallel": ParBnConfig(scaling="learned"),
+    "pfeiffer+inv": SeqBnInvConfig(),
+    "houlsby+inv": DoubleSeqBnInvConfig(),
+    # CURRENT STRINGS
+    "seq_bn": SeqBnConfig(),
+    "double_seq_bn": DoubleSeqBnConfig(),
+    "par_bn": ParBnConfig(),
+    "scaled_par_bn": ParBnConfig(scaling="learned"),
+    "seq_bn_inv": SeqBnInvConfig(),
+    "double_seq_bn_inv": DoubleSeqBnInvConfig(),
+    "compacter++": CompacterPlusPlusConfig(),
+    "compacter": CompacterConfig(),
+    "prefix_tuning": PrefixTuningConfig(),
+    "prefix_tuning_flat": PrefixTuningConfig(flat=True),
+    "prompt_tuning": PromptTuningConfig(),
+    "lora": LoRAConfig(),
+    "ia3": IA3Config(),
+    "loreft": LoReftConfig(),
+    "noreft": NoReftConfig(),
+    "direft": DiReftConfig(),
+    "mam": MAMConfig(),
+    "unipelt": UniPELTConfig(),
+}
+
+DEFAULT_ADAPTER_CONFIG = "seq_bn"
 
 @dataclass(eq=False)
 class IA3Config(LoRAConfig):

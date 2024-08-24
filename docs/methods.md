@@ -1,7 +1,7 @@
 # Adapter Methods
 
 On this page, we present all adapter methods currently integrated into the `adapters` library.
-A tabular overview of adapter methods is provided [here](overview.md#table-of-adapter-methods). 
+A tabular overview of adapter methods is provided [here](overview.md#table-of-adapter-methods).
 Additionally, options to combine multiple adapter methods in a single setup are presented [on the next page](method_combinations.md).
 
 ## Bottleneck Adapters
@@ -27,7 +27,6 @@ $$
 
 A visualization of further configuration options related to the adapter structure is given in the figure below. For more details, we refer to the documentation of `BnConfig`](adapters.BnConfig).
 
-
 ```{eval-rst}
 .. figure:: img/architecture.png
     :width: 350
@@ -44,6 +43,7 @@ A visualization of further configuration options related to the adapter structur
 - [`ParBnConfig`](adapters.ParBnConfig), as proposed by [He et al. (2021)](https://arxiv.org/pdf/2110.04366.pdf) places adapter layers in parallel to the original Transformer layers.
 
 _Example_:
+
 ```python
 from adapters import BnConfig
 
@@ -53,10 +53,10 @@ model.add_adapter("bottleneck_adapter", config=config)
 
 _Papers:_
 
-* [Parameter-Efficient Transfer Learning for NLP](https://arxiv.org/pdf/1902.00751.pdf) (Houlsby et al., 2019)
-* [Simple, Scalable Adaptation for Neural Machine Translation](https://arxiv.org/pdf/1909.08478.pdf) (Bapna and Firat, 2019)
-* [AdapterFusion: Non-Destructive Task Composition for Transfer Learning](https://aclanthology.org/2021.eacl-main.39.pdf) (Pfeiffer et al., 2021)
-* [AdapterHub: A Framework for Adapting Transformers](https://arxiv.org/pdf/2007.07779.pdf) (Pfeiffer et al., 2020)
+- [Parameter-Efficient Transfer Learning for NLP](https://arxiv.org/pdf/1902.00751.pdf) (Houlsby et al., 2019)
+- [Simple, Scalable Adaptation for Neural Machine Translation](https://arxiv.org/pdf/1909.08478.pdf) (Bapna and Firat, 2019)
+- [AdapterFusion: Non-Destructive Task Composition for Transfer Learning](https://aclanthology.org/2021.eacl-main.39.pdf) (Pfeiffer et al., 2021)
+- [AdapterHub: A Framework for Adapting Transformers](https://arxiv.org/pdf/2007.07779.pdf) (Pfeiffer et al., 2020)
 
 ## Language Adapters - Invertible Adapters
 
@@ -71,6 +71,7 @@ Embedding outputs are passed through this invertible adapter in the forward dire
 Invertible adapter architectures are further detailed in [Pfeiffer et al. (2020)](https://arxiv.org/pdf/2005.00052.pdf) and can be configured via the `inv_adapter` attribute of the `BnConfig` class.
 
 _Example_:
+
 ```python
 from adapters import SeqBnInvConfig
 
@@ -79,6 +80,7 @@ model.add_adapter("lang_adapter", config=config)
 ```
 
 _Papers:_
+
 - [MAD-X: An Adapter-based Framework for Multi-task Cross-lingual Transfer](https://arxiv.org/pdf/2005.00052.pdf) (Pfeiffer et al., 2020)
 
 ```{eval-rst}
@@ -112,6 +114,7 @@ This behavior is controlled via the `flat` attribute of the configuration.
 Using `PrefixTuningConfig(flat=True)` will create prefix tuning vectors that are optimized without reparameterization.
 
 _Example_:
+
 ```python
 from adapters import PrefixTuningConfig
 
@@ -120,12 +123,15 @@ model.add_adapter("prefix_tuning", config=config)
 ```
 
 As reparameterization using the bottleneck MLP is not necessary for performing inference on an already trained Prefix Tuning module, `adapters` includes a function to "eject" a reparameterized Prefix Tuning into a flat one:
+
 ```python
 model.eject_prefix_tuning("prefix_tuning")
 ```
+
 This will only retain the necessary parameters and reduces the size of the trained Prefix Tuning.
 
 _Papers:_
+
 - [Prefix-Tuning: Optimizing Continuous Prompts for Generation](https://arxiv.org/pdf/2101.00190.pdf) (Li and Liang, 2021)
 
 ## Compacter
@@ -142,24 +148,27 @@ _Configuration class_: [`CompacterConfig`](adapters.CompacterConfig), [`Compacte
 ```
 
 The Compacter architecture proposed by [Mahabadi et al., 2021](https://arxiv.org/pdf/2106.04647.pdf)
-is similar to the bottleneck adapter architecture. It only exchanges the linear down- and 
+is similar to the bottleneck adapter architecture. It only exchanges the linear down- and
 up-projection with a PHM layer. Unlike the linear layer, the PHM layer constructs its weight matrix from two smaller matrices, which reduces the number of parameters.
  These matrices can be factorized and shared between all adapter layers. You can exchange the down- and up-projection layers from any of the bottleneck adapters described in the previous section
 for a PHM layer by specifying `use_phm=True` in the config.
 
-The PHM layer has the following additional properties: `phm_dim`, `shared_phm_rule`, `factorized_phm_rule`, `learn_phm`, 
+The PHM layer has the following additional properties: `phm_dim`, `shared_phm_rule`, `factorized_phm_rule`, `learn_phm`,
 `factorized_phm_W`, `shared_W_phm`, `phm_c_init`, `phm_init_range`, `hypercomplex_nonlinearity`
 
 For more information, check out the [`BnConfig`](adapters.BnConfig) class.
 
 To add a Compacter to your model, you can use the predefined configs:
+
 ```python
 from adapters import CompacterConfig
 
 config = CompacterConfig()
 model.add_adapter("dummy", config=config)
 ```
+
 _Papers:_
+
 - [COMPACTER: Efficient Low-Rank Hypercomplex Adapter Layers](https://arxiv.org/pdf/2106.04647.pdf) (Mahabadi, Henderson and Ruder, 2021)
 
 ## LoRA
@@ -190,6 +199,7 @@ While, in principle, this reparameterization can be applied to any weight matrix
 You can configure the locations where LoRA weights should be injected using the attributes in the [`LoRAConfig`](adapters.LoRAConfig) class.
 
 _Example_:
+
 ```python
 from adapters import LoRAConfig
 
@@ -201,16 +211,19 @@ In the design of LoRA, Hu et al. (2021) also pay special attention to keeping th
 To accomplish this, the LoRA reparameterization can be merged with the original pre-trained weights of a model for inference.
 Thus, the adapted weights are directly used in every forward pass without passing activations through an additional module.
 In `adapters`, this can be realized using the built-in [`merge_adapter()`](adapters.ModelAdaptersMixin.merge_adapter)  method:
+
 ```python
 model.merge_adapter("lora_adapter")
 ```
 
 To continue training on this LoRA adapter or to deactivate it entirely, the merged weights first have to be reset again:
+
 ```python
 model.reset_adapter()
 ```
 
 _Papers:_
+
 - [LoRA: Low-Rank Adaptation of Large Language Models](https://arxiv.org/pdf/2106.09685.pdf) (Hu et al., 2021)
 
 ## (IA)^3
@@ -237,6 +250,7 @@ $$
 Here, $\odot$ denotes element-wise multiplication where the entries of $l_W$ are broadcasted to the shape of $W$.
 
 _Example_:
+
 ```python
 from adapters import IA3Config
 
@@ -257,6 +271,7 @@ By default, (IA)^3 injects weights into the key ('k') and value ('v') matrices b
 
 Finally, similar to LoRA, (IA)^3 also allows merging the injected parameters with the original weight matrices of the Transformer model.
 E.g.:
+
 ```python
 # Merge (IA)^3 adapter
 model.merge_adapter("ia3_adapter")
@@ -266,9 +281,11 @@ model.reset_adapter()
 ```
 
 _Papers:_
+
 - [Few-Shot Parameter-Efficient Fine-Tuning is Better and Cheaper than In-Context Learning](https://arxiv.org/pdf/2205.05638.pdf) (Liu et al., 2022)
 
 ## Prompt Tuning
+
 Prompt Tuning is an efficient fine-tuning technique proposed by Lester et al. (2021). Prompt tuning adds tunable tokens, called soft-prompts, that are prepended to the input text.
 First, the input sequence ${x_1, x_2, \dots, x_n }$ gets embedded, resulting in the matrix $X_e \in \mathbb{R}^{n \times e}$ where $e$ is the dimension of
 the embedding space. The soft-prompts with length $p$ are represented as $P_e \in \mathbb{R}^{p \times e}$.
@@ -279,12 +296,14 @@ $$
 $$
 
 The `PromptTuningConfig` has the properties:
-- `prompt_length`: to set the soft-prompts length $p$ 
+
+- `prompt_length`: to set the soft-prompts length $p$
 - `prompt_init`: to set the weight initialisation method, which is either "random_uniform" or "from_string" to initialize each prompt token with an embedding drawn from the model’s vocabulary.
-    - `prompt_init_text` as the text use for initialisation if `prompt_init="from_string"`
+- `prompt_init_text` as the text use for initialisation if `prompt_init="from_string"`
 - `combine`: To define if the prefix should be added before the embedded input sequence or after the BOS token
 
 To add Prompt Tuning to your model, you can use the predefined configs:
+
 ```python
 from adapters import PromptTuningConfig
 
@@ -293,5 +312,57 @@ model.add_adapter("dummy", config=config)
 ```
 
 _Papers:_
+
 - [The Power of Scale for Parameter-Efficient Prompt Tuning](https://aclanthology.org/2021.emnlp-main.243/) (Lester et al., 2021)
 
+## ReFT
+
+_Configuration class_: [`ReftConfig`](adapters.ReftConfig)
+
+Representation Fine-Tuning (ReFT), as first proposed by [Wu et al. (2024)](https://arxiv.org/pdf/2404.03592), leverages so-called interventions to adapt the pre-trained representations of a language model.
+Within the context of ReFT, these interventions can intuitively be thought of as adapter modules placed after each Transformer layer.
+In the general form, an intervention function $\Phi$ can thus be defined as follows:
+
+$$
+\Phi(h) = h + R^T (W h + b - R h)
+$$
+
+Here, $R \in \mathbb{R}^{r \times d}$ and $W \in \mathbb{R}^{r \times d}$ are low-rank matrices of rank $r$.
+$h$ is the layer output hidden state at a single sequence position, i.e. interventions can be applied independently at each position.
+
+Based on this general form, the ReFT paper proposes multiple instantiations of ReFT methods supported by _Adapters_:
+
+- **LoReFT** enforces orthogonality of rows in $R$. Defined via [`LoReftConfig`](adapters.LoReftConfig) or via the `orthogonality` attribute as in the following example:
+
+```python
+config = ReftConfig(
+    layers="all", prefix_positions=3, suffix_positions=0, r=1, orthogonality=True
+)  # equivalent to LoreftConfig()
+```
+
+- **NoReFT** does not enforce orthogonality in $R$. Defined via [`NoReftConfig`](adapters.NoReftConfig) or equivalently:
+
+```python
+config = ReftConfig(
+    layers="all", prefix_positions=3, suffix_positions=0, r=1, orthogonality=False
+)  # equivalent to NoreftConfig()
+```
+
+- **DiReFT** does not enforce orthogonality in $R$ and additionally removes subtraction of $R h$ in the intervention, Defined via [`DiReftConfig`](adapters.DiReftConfig) or equivalently:
+
+```python
+config = ReftConfig(
+    layers="all", prefix_positions=3, suffix_positions=0, r=1, orthogonality=False, subtract_projection=False
+)  # equivalent to DireftConfig()
+```
+
+In addition, _Adapters_ supports configuring multiple hyperparameters tuned in the ReFT paper in `ReftConfig`, including:
+
+- `prefix_positions`: number of prefix positions
+- `suffix_positions`: number of suffix positions
+- `layers`: The layers to intervene on. This can either be `"all"` or a list of layer ids
+- `tied_weights`: whether to tie parameters between prefixes and suffixes
+
+_Papers:_
+
+- [ReFT: Representation Finetuning for Language Models](https://arxiv.org/pdf/2404.03592) (Wu et al., 2024)

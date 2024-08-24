@@ -12,6 +12,7 @@ from .methods import (
     IA3TestMixin,
     LoRATestMixin,
     PrefixTuningTestMixin,
+    ReftTestMixin,
     UniPELTTestMixin,
 )
 from .test_adapter import AdapterTestBase
@@ -49,6 +50,7 @@ class EncoderDecoderAdapterTest(
     CompacterTestMixin,
     IA3TestMixin,
     LoRATestMixin,
+    ReftTestMixin,
     PrefixTuningTestMixin,
     UniPELTTestMixin,
     AdapterFusionModelTestMixin,

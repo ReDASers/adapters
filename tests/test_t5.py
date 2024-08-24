@@ -9,6 +9,7 @@ from .methods import (
     CompacterTestMixin,
     IA3TestMixin,
     LoRATestMixin,
+    ReftTestMixin,
     PrefixTuningTestMixin,
     UniPELTTestMixin,
 )
@@ -44,6 +45,7 @@ class T5AdapterTest(
     IA3TestMixin,
     LoRATestMixin,
     PrefixTuningTestMixin,
+    ReftTestMixin,
     UniPELTTestMixin,
     EmbeddingTestMixin,
     CompabilityTestMixin,
