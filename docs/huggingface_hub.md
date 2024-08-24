@@ -11,20 +11,20 @@ This document describes how to interact with the Model Hub when working with ada
 
 ## Downloading from the Hub
 
-The Hugging Face Model Hub already provides a few pre-trained adapters available for download.
-To search for available adapters, use the _Adapter Transformers_ library filter on the Model Hub website or use this link: [https://huggingface.co/models?filter=adapters](https://huggingface.co/models?filter=adapters).
+The Hugging Face Model Hub already provides hundreds of pre-trained adapters available for download.
+To search for available adapters, use the _Adapters_ library filter on the Model Hub website or use this link: [https://huggingface.co/models?library=adapter-transformers](https://huggingface.co/models?library=adapter-transformers).
 Alternatively, all adapters on the Hugging Face Model Hub are also listed on [https://adapterhub.ml/explore](https://adapterhub.ml/explore) together with all adapters directly uploaded to AdapterHub.
 
-After you have found an adapter you would like to use, loading it into a Transformer model is very similar to [loading adapters from AdapterHub](loading.md).
+After you have found an adapter you would like to use, loading it into a Transformer model is easy.
 For example, for loading and activating the adapter [`AdapterHub/roberta-base-pf-sick`](https://huggingface.co/AdapterHub/roberta-base-pf-sick), write:
+
 ```python
 from adapters import AutoAdapterModel
 
 model = AutoAdapterModel.from_pretrained("roberta-base")
-adapter_name = model.load_adapter("AdapterHub/roberta-base-pf-sick", source="hf")
+adapter_name = model.load_adapter("AdapterHub/roberta-base-pf-sick")
 model.active_adapters = adapter_name
 ```
-Note that `source="hf"` is the only change from loading an adapter from AdapterHub.
 
 ## Uploading to the Hub
 
@@ -34,14 +34,16 @@ In the following, we'll go through the fastest way of uploading an adapter direc
 For more options and information, e.g. for managing models via the CLI and Git, refer to [HugginFace's documentation](https://huggingface.co/transformers/model_sharing.html).
 
 1. **Prepare access credentials**: Before being able to push to the Hugging Face Model Hub for the first time, we have to store our access token in the cache.
-    This can be done via the `transformers-cli` by running:
-    ```
-    transformers-cli login
+    This can be done via the `huggingface-cli` by running:
+
+    ```sh
+    huggingface-cli login
     ```
 
 2. **Push an adapter**: Next, we can proceed to upload our first adapter.
     Let's say we have a standard pre-trained Transformers model with an existing adapter named `awesome_adapter` (e.g. added via `model.add_adapter("awesome_adapter")` and [trained](training.md) afterwards).
     We can now push this adapter to the Model Hub using `model.push_adapter_to_hub()` like this:
+
     ```python
     model.push_adapter_to_hub(
         "my-awesome-adapter",
@@ -50,6 +52,7 @@ For more options and information, e.g. for managing models via the CLI and Git, 
         datasets_tag="imdb"
     )
     ```
+
     This will create a repository `my-awesome-adapter` under your username, generate a default adapter card as `README.md` and upload the adapter named `awesome_adapter` together with the adapter card to the new repository.
     `adapterhub_tag` and `datasets_tag` provide additional information for categorization.
 
@@ -63,7 +66,8 @@ For more options and information, e.g. for managing models via the CLI and Git, 
 
 Voilà! Your first adapter is on the Hugging Face Model Hub.
 Anyone can now run:
-```
+
+```python
 model.load_adapter("<your_username>/my-awesome-adapter", source="hf")
 ```
 
