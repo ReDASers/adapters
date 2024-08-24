@@ -137,15 +137,11 @@ class LoRA(nn.Module):
         match location_key:
             case "selfattn_lora" if config.selfattn_lora:
                 if self.connections_in != self.connections_out:
-                    logging.warning("Self-attention requires connections_in == connections_out!")
+                    logging.warning("Self-attention usually has connections_in == connections_out!")
                 return "selfattn"
             case "intermediate_lora" if config.intermediate_lora:
-                if self.connections_in >= self.connections_out:
-                    logging.warning("Intermediate requires connections_in < connections_out!")
                 return "intermediate"
-            case "output_lora" if config.output_lora:
-                if self.connections_in <= self.connections_out:
-                    logging.warning("Output requires connections_in > connections_out!")
+            case "output_lora" if config.output_lora:            
                 return "output"
             case _:
                 raise ValueError(f"Invalid location key: {location_key}")
@@ -522,7 +518,7 @@ class LoRA(nn.Module):
             scaling = self.scaling
 
         if self.log and self._epoch_end():
-            self.record_var(added, "delta_W")
+            self.record_var(added, "delta_w")
             self.record_var(w, "W")
             self.record_weights_var_maybe()
 
