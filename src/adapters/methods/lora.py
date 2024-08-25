@@ -81,7 +81,7 @@ class LoRA(nn.Module):
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         self.noise_std = config.noise_std
         self.weight_dropout_prob = config.weight_dropout_prob
-        self.skip_prob = torch.tensor(config.skip_prob, dtype=torch.float32, device=self.device)
+        self.skip_prob = torch.tensor(config.skip_prob, device=self.device)
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
         
@@ -219,7 +219,7 @@ class LoRA(nn.Module):
         """
         Sets up the basic calculation mode by initializing scaling parameters.
         """
-        self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32, device=self.device))
+        self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, device=self.device))
         self.scalar_scaler = nn.Parameter(self.eps)
         nn.init.normal_(self.lora_C, mean=1.0, std=self._estimate_scaling_sigma())
         self.variances[self.location+"_lora_C"] = [self.lora_C.var().item()]
@@ -552,7 +552,7 @@ class LoRA(nn.Module):
 
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = dw.std().item() 
-                self.sigma_h = torch.mean(self.batch_sigmas, dtype=torch.float32).item()
+                self.sigma_h = torch.mean(self.batch_sigmas).item()
 
             dw = self.rescale(weights=dw, 
                               sigma=self.sigma_h,
