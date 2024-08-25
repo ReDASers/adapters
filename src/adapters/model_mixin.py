@@ -9,7 +9,9 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 import torch
 from torch import nn
 
+from transformers import GenerationConfig
 from transformers.modeling_outputs import ModelOutput
+from transformers.utils import is_accelerate_available
 
 from .composition import AdapterCompositionBlock, Fuse, Stack, parse_composition
 from .configuration import ADAPTER_CONFIG_MAP, AdapterConfig, AdapterFusionConfig, BnConfig
@@ -29,6 +31,8 @@ from .wrappers.configuration import SUBMODEL_NAMES, init_adapters_config
 
 logger = logging.getLogger(__name__)
 
+if is_accelerate_available():
+    from accelerate.hooks import AlignDevicesHook, add_hook_to_module
 
 class InvertibleAdaptersMixin:
     """Mixin for Transformer models adding invertible adapters."""
@@ -1263,10 +1267,21 @@ class ModelAdaptersMixin(PushAdapterToHubMixin, ABC):
 
     # HACK Copied from transformers/generation/utils.py
     def _prepare_encoder_decoder_kwargs_for_generation(
-        self, inputs_tensor: torch.Tensor, model_kwargs, model_input_name: Optional[str] = None
+        self,
+        inputs_tensor: torch.Tensor,
+        model_kwargs,
+        model_input_name: Optional[str],
+        generation_config: GenerationConfig,
     ) -> Dict[str, Any]:
         # 1. get encoder
         encoder = self.get_encoder()
+        # Compatibility with Accelerate big model inference: we need the encoder to outputs stuff on the same device
+        # as the inputs.
+        if hasattr(self, "hf_device_map"):
+            if hasattr(encoder, "_hf_hook"):
+                encoder._hf_hook.io_same_device = True
+            else:
+                add_hook_to_module(encoder, AlignDevicesHook(io_same_device=True))
 
         # 2. prepare encoder args and encoder kwargs from model kwargs
         irrelevant_prefix = ["decoder_", "cross_attn", "use_cache"]
@@ -1285,6 +1300,9 @@ class ModelAdaptersMixin(PushAdapterToHubMixin, ABC):
                 if argument in encoder_signature or argument == "adapter_input_parallelized"
             }
 
+        encoder_kwargs["output_attentions"] = generation_config.output_attentions
+        encoder_kwargs["output_hidden_states"] = generation_config.output_hidden_states
+        
         # 3. make sure that encoder returns `ModelOutput`
         model_input_name = model_input_name if model_input_name is not None else self.main_input_name
         encoder_kwargs["return_dict"] = True
