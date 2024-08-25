@@ -73,7 +73,7 @@ class LoRA(nn.Module):
         self.sigma_h = 0.0
         self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
         self.tiny =  torch.tensor(1e-12, dtype=torch.float32)
-        self.eps = torch.tensor(1e-9, dtype=torch.float32)
+        self.eps = torch.tensor(1e-9, device="cuda", dtype=torch.float32)
         self.n_batches = 0 # have not trained yet   
         self.epoch = 1
         # List to store variance for each LoRA instance
