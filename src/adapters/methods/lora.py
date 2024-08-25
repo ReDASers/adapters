@@ -110,7 +110,7 @@ class LoRA(nn.Module):
             pepoch = 1/self.batches_per_epoch - self.eps
             var = pepoch * math.sqrt(math.sqrt(6/(self.connections_out))) # out is just number of neurons for scaling vector
             mu =  1 - pepoch
-            limit = var
+            limit = var/2 * math.sqrt(3)
 
             nn.init.uniform_(self.p, a=max(0, mu-limit), b=min(1.0, mu+limit))
             self.lbound = max(0, mu - limit)
