@@ -105,7 +105,7 @@ class LoRA(nn.Module):
             self.ubound = 1.0
         else:
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
-            pepoch = 1/self.batches_per_epoch
+            pepoch = 1/self.batches_per_epoch - torch.finfo(torch.float32).eps
             std = math.sqrt((6*(1 - pepoch))/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
             mu =  1 - pepoch
             limit = min(pepoch*0.99, std)
@@ -176,13 +176,10 @@ class LoRA(nn.Module):
         
     def _layer_specific_setup(self, lora_A_shape, lora_B_shape):
          # Determine calculation mode and setup accordingly
-        match self.location:
-            case "selfattn":
-                self._setup_in_attn(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
-            case "output" | "intermediate":
-                self._setup_scaling()
-            case _:
-                pass
+        if self.location == "selfattn":
+            self._setup_in_attn(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
+        else:
+            self._setup_scaling()
 
     def _get_neg_slope(self, non_linearity: str = "leakyrelu") -> float:
         """
