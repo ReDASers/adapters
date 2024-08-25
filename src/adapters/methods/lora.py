@@ -68,12 +68,12 @@ class LoRA(nn.Module):
         self._delta_w = None  # Placeholder for delta weights
 
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        
         self.sigma_w = 0.0
         self.sigma_h = 0.0
-        self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32, device=self.device)
-        self.tiny =  torch.tensor(1e-12, dtype=torch.float32, device=self.device)
-        self.eps = torch.tensor(1e-9, dtype=torch.float32, device=self.device)
+        self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
+        self.tiny =  torch.tensor(1e-12, dtype=torch.float32)
+        self.eps = torch.tensor(1e-9, dtype=torch.float32)
         self.n_batches = 0 # have not trained yet   
         self.epoch = 1
         # List to store variance for each LoRA instance
@@ -81,7 +81,7 @@ class LoRA(nn.Module):
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         self.noise_std = config.noise_std
         self.weight_dropout_prob = config.weight_dropout_prob
-        self.skip_prob = torch.tensor(config.skip_prob, device=self.device)
+        self.skip_prob = torch.tensor(config.skip_prob)
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
         
@@ -104,16 +104,14 @@ class LoRA(nn.Module):
             self.lbound = 0.0
             self.ubound = 1.0
         else:
-            self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, 
-                                               dtype=torch.float32, 
-                                               device=self.device))
+            self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
             pepoch = 1/self.batches_per_epoch - self.eps
             var = pepoch * math.sqrt(math.sqrt(6/(self.connections_out))) # out is just number of neurons for scaling vector
             mu =  1 - pepoch
-            limit = var
+            limit = (var / 2) * math.sqrt(3)
 
             nn.init.uniform_(self.p, a=max(0, mu-limit), b=min(1.0, mu+limit))
-            self.lbound = max(0, mu - limit * math.sqrt(5))
+            self.lbound = max(0, mu - limit*math.sqrt(5)) 
             self.ubound = min(1.0, mu + limit)
         
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
@@ -161,12 +159,12 @@ class LoRA(nn.Module):
         """
         architectures = {
             "NLbLN": [
-                nn.Linear(self.connections_in, self.r, device=self.device),
+                nn.Linear(self.connections_in, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.bottleneck_size, device=self.device),
-                nn.Linear(self.bottleneck_size, self.r, device=self.device),
+                nn.Linear(self.r, self.bottleneck_size),
+                nn.Linear(self.bottleneck_size, self.r),
                 Activation_Function_Class(self.non_linearity.lower()),
-                nn.Linear(self.r, self.connections_in, device=self.device),
+                nn.Linear(self.r, self.connections_in),
             ],
         }
 
@@ -212,14 +210,14 @@ class LoRA(nn.Module):
             gating_heads (int): Number of gating heads.
         """
         if self.use_gating:
-            self.gate = nn.Linear(self.connections_in, gating_heads, device=self.device)
+            self.gate = nn.Linear(self.connections_in, gating_heads)
             nn.init.normal_(self.gate.weight, std=0.02)
 
     def _setup_scaling(self):
         """
         Sets up the basic calculation mode by initializing scaling parameters.
         """
-        self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, device=self.device))
+        self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
         self.scalar_scaler = nn.Parameter(self.eps)
         nn.init.normal_(self.lora_C, mean=1.0, std=self._estimate_scaling_sigma())
         self.variances[self.location+"_lora_C"] = [self.lora_C.var().item()]
@@ -247,8 +245,8 @@ class LoRA(nn.Module):
             lora_A_shape (tuple): Shape of the A matrix in LoRA.
             lora_B_shape (tuple): Shape of the B matrix in LoRA.
         """
-        self.lora_A = nn.Parameter(torch.randn(lora_A_shape, device=self.device))
-        self.lora_B = nn.Parameter(torch.zeros(lora_B_shape, device=self.device))
+        self.lora_A = nn.Parameter(torch.randn(lora_A_shape))
+        self.lora_B = nn.Parameter(torch.zeros(lora_B_shape))
         self._initialize_lora_matrices()
         
     def _initialize_lora_matrices(self):
@@ -267,6 +265,7 @@ class LoRA(nn.Module):
         Args:
             layers (nn.Sequential): Sequential model containing the layers.
         """
+        self.autoencoder_sigmas = torch.zeros(len(layers), dtype=torch.float32)
         # fan in for encoder, fan out for decoder
         for i, layer in enumerate(layers):
             if isinstance(layer, nn.Linear):
