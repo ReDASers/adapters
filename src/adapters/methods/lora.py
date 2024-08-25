@@ -86,7 +86,6 @@ class LoRA(nn.Module):
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
         
         self.a = config.a
-        self.b = config.b
         self.slacka = config.slacka
         self.slackb = config.slackb
 
