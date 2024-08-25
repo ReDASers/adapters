@@ -112,7 +112,7 @@ class LoRA(nn.Module):
 
             nn.init.uniform_(self.p, a=max(0, mu-limit), b=min(1.0, mu+limit))
             self.lbound = max(0, mu - limit*math.sqrt(5)) 
-            self.ubound = min(1.0, mu + limit)
+            self.ubound = min(1.0-self.eps, mu + limit)
         
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
