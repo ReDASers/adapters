@@ -110,14 +110,14 @@ class LoRA(nn.Module):
         else:
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
             pepoch = 1/self.batches_per_epoch - torch.finfo(torch.float32).eps
-            std = pepoch*math.sqrt(6/self.connections_out) # out is just number of neurons for scaling vector
+            var = math.sqrt(math.sqrt(6/self.connections_out)) # out is just number of neurons for scaling vector
             mu =  1 - pepoch
-            limit = pepoch*self.a
+            limit = pepoch*var*self.a
 
             nn.init.uniform_(self.p, a=max(0, mu-limit), b=min(1.0,mu+limit))
             #nn.init.normal_(self.p, mean=self.mu, std=self.std) #nn.init.uniform_(self.p, a=max(1 - p, self.mu-self.limit), b=min(1.0,self.mu+self.limit)) #nn.init.trunc_normal_(self.p, mean=self.mu, std=self.std, a=self.mu-2*self.std, b=self.mu+2*self.std)
-            self.lbound = max(0, mu - pepoch*self.slacka - std)
-            self.ubound = min(1.0 - std, mu + pepoch*self.slackb - std)
+            self.lbound = max(0, mu - limit*self.slacka)
+            self.ubound = min(1.0, mu + limit*self.slackb)
         
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """
@@ -276,7 +276,10 @@ class LoRA(nn.Module):
                 else:
                     mode = "fan_out"
                 
-                nn.init.kaiming_normal_(layer.weight, mode=mode, a=math.sqrt(5))
+                if self.non_linearity == "selu":
+                    nn.init.kaiming_normal_(layer.weight, mode=mode, nonlinearity='linear')
+                else:
+                    nn.init.kaiming_normal_(layer.weight, mode=mode, a=math.sqrt(5))
                 self.variances[f"{self.location}_autoencoder_{i}"] = [layer.weight.var().item()]
                 if layer.bias is not None:
                     nn.init.zeros_(layer.bias)
