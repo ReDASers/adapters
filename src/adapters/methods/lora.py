@@ -68,12 +68,12 @@ class LoRA(nn.Module):
         self._delta_w = None  # Placeholder for delta weights
 
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
-        
+        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
         self.sigma_w = 0.0
         self.sigma_h = 0.0
-        self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
-        self.tiny =  torch.tensor(1e-12, dtype=torch.float32)
-        self.eps = torch.tensor(1e-9, dtype=torch.float32)
+        self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32, device=self.device)
+        self.tiny =  torch.tensor(1e-12, dtype=torch.float32, device=self.device)
+        self.eps = torch.tensor(1e-9, dtype=torch.float32, device=self.device)
         self.n_batches = 0 # have not trained yet   
         self.epoch = 1
         # List to store variance for each LoRA instance
@@ -104,7 +104,9 @@ class LoRA(nn.Module):
             self.lbound = 0.0
             self.ubound = 1.0
         else:
-            self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
+            self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, 
+                                               dtype=torch.float32, 
+                                               device=self.device))
             pepoch = 1/self.batches_per_epoch - self.eps
             var = pepoch * math.sqrt(math.sqrt(6/(self.connections_out))) # out is just number of neurons for scaling vector
             mu =  1 - pepoch
