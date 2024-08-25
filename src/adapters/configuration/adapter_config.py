@@ -560,7 +560,11 @@ class LoRAConfig(AdapterConfig):
 
     log: bool = False
 
+    a: float = 0.9
 
+    slacka: float = 0.1
+
+    slackb: float = 0.1
 
 @dataclass(eq=False)
 class IA3Config(LoRAConfig):
