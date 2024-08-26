@@ -184,25 +184,6 @@ class LoRA(nn.Module):
             self._setup_in_attn(lora_A_shape=lora_A_shape, lora_B_shape=lora_B_shape)
         else:
             self._setup_scaling()
-
-    def _get_neg_slope(self, non_linearity: str = "leakyrelu") -> float:
-        """
-        Retruns the negative slope for various activation functions.
-
-        Returns:
-            float: Negative slope value.
-        """
-        match non_linearity:
-            case "leakyrelu" | "leaky_relu" | "prelu":
-                return 1e-2
-            case "mish":
-                return 3e-4
-            case "gelu":
-                return 5.1e-4
-            case "linear":
-                return 1.0
-            case _:
-                return 0.0
  
     def _setup_gating_maybe(self, gating_heads: int):
         """
@@ -225,7 +206,7 @@ class LoRA(nn.Module):
         self.variances[self.location+"_lora_C"] = [self.lora_C.var().item()]
 
     def _estimate_scaling_sigma(self) -> float:
-        return math.sqrt(2 / ((1 + (self._get_neg_slope(self.non_linearity)) ** 2) * self.connections_out))
+        return math.sqrt(2 / ((1 + 0.01**2) * self.connections_out))
             
     def _setup_in_attn(self, lora_A_shape, lora_B_shape):
         """
