@@ -201,7 +201,7 @@ class LoRA(nn.Module):
         Sets up the basic calculation mode by initializing scaling parameters.
         """
         self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
-        self.scalar_scaler = nn.Parameter(1e-9)
+        self.scalar_scaler = nn.Parameter(torch.tensor(1e-9))
         nn.init.normal_(self.lora_C, mean=1.0, std=self._estimate_scaling_sigma())
         self.variances[self.location+"_lora_C"] = [self.lora_C.var().item()]
 
