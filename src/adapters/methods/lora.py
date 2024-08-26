@@ -84,7 +84,7 @@ class LoRA(nn.Module):
         self.skip_prob = torch.tensor(config.skip_prob)
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
-        
+        self.learning_multiplier = config.learning_multiplier
         self.a = config.a
         self.slacka = config.slacka
         self.slackb = config.slackb
@@ -116,8 +116,8 @@ class LoRA(nn.Module):
 
             nn.init.uniform_(self.p, a=max(0, mu-limit*self.slacka), b=min(1.0,mu+limit*self.slackb))
             #nn.init.normal_(self.p, mean=self.mu, std=self.std) #nn.init.uniform_(self.p, a=max(1 - p, self.mu-self.limit), b=min(1.0,self.mu+self.limit)) #nn.init.trunc_normal_(self.p, mean=self.mu, std=self.std, a=self.mu-2*self.std, b=self.mu+2*self.std)
-            self.lbound = max(0, mu - limit*self.slacka)
-            self.ubound = min(1.0, mu + limit*self.slackb)
+            self.lbound = max(0, mu - limit*self.slacka*self.learning_multiplier)
+            self.ubound = min(1.0, mu + limit*self.slackb*self.learning_multiplier)
         
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
         """

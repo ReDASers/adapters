@@ -566,6 +566,8 @@ class LoRAConfig(AdapterConfig):
 
     slackb: float = 0.1
 
+    learning_multiplier: float = 1.0
+
 @dataclass(eq=False)
 class IA3Config(LoRAConfig):
     """
