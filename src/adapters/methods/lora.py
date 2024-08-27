@@ -461,7 +461,7 @@ class LoRA(nn.Module):
             
     def _rescale(self, weights: torch.Tensor, sigma: float):
         u = torch.mean(weights, dtype=weights.dtype)
-        z = (weights - u) / (torch.std(weights) + 1e-12)
+        z = (weights - u) / (torch.std(weights) + self.tiny)
         return z * sigma + u
     
     def rescale(self, 
@@ -598,7 +598,7 @@ class LoRA(nn.Module):
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A)
             dw = dw @ torch.t(self.lora_B)
-            dw = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
+            dw = dw / (dw.norm(p=2, dim=1, keepdim=True) + self.eps)
 
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = dw.std().item() 
