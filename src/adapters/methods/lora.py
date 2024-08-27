@@ -113,7 +113,11 @@ class LoRA(nn.Module):
             std = math.sqrt((6*(1 - pepoch))/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
             mu =  1 - pepoch
             limit = min(pepoch*0.99, std)
+
             nn.init.uniform_(self.p, a=max(0, mu-limit), b=min(1.0,mu+limit))
+            #nn.init.normal_(self.p, mean=self.mu, std=self.std) #nn.init.uniform_(self.p, a=max(1 - p, self.mu-self.limit), b=min(1.0,self.mu+self.limit)) #nn.init.trunc_normal_(self.p, mean=self.mu, std=self.std, a=self.mu-2*self.std, b=self.mu+2*self.std)
+            self.lbound = max(0, mu - limit)
+            self.ubound = min(1.0, mu + limit)
             #nn.init.normal_(self.p, mean=self.mu, std=self.std) #nn.init.uniform_(self.p, a=max(1 - p, self.mu-self.limit), b=min(1.0,self.mu+self.limit)) #nn.init.trunc_normal_(self.p, mean=self.mu, std=self.std, a=self.mu-2*self.std, b=self.mu+2*self.std)
             self.lbound = max(0, mu - limit)
             self.ubound = min(1.0, mu + limit)
