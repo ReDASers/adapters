@@ -110,8 +110,8 @@ class LoRA(nn.Module):
         else:
 
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
-            pepoch = 1 - 1/self.batches_per_epoch
-            self.std = math.sqrt((3*pepoch)/(self.connections_out + self.batches_per_epoch))*self.a # out is just number of neurons for scaling vector
+            pepoch = 1 - self.a/self.batches_per_epoch
+            self.std = math.sqrt((3*pepoch)/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
             # self.mu = pepoch+1/(2*self.batches_per_epoch) - self.std
             
             self.mu = pepoch+(1/(2*self.batches_per_epoch))*self.learning_multiplier - self.std
