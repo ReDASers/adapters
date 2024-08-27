@@ -554,11 +554,15 @@ class LoRA(nn.Module):
 
                 w = weights
             else:
+                if self.location != "selfattn" and self._epoch_start():
+                    p = torch.tensor(0.0)
+                else:
+                    p = torch.clamp(self.p, min=self.lbound, max=self.ubound)
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
-                                skip_prob= torch.clamp(self.p, min=self.lbound, max=self.ubound),
+                                skip_prob=p,
                                 weight_dropout_prob=self.weight_dropout_prob)
-                
+
             w = self.regularize(weights=w, 
                                 noise_std=self.noise_std,
                                 weight_dropout_prob=self.weight_dropout_prob,
