@@ -110,6 +110,16 @@ class LoRA(nn.Module):
         else:
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
             pepoch = 1 - 1/self.batches_per_epoch
+            self.std = math.sqrt((6*pepoch)/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
+            self.mu = pepoch+1/(2*self.batches_per_epoch) - self.std
+
+            nn.init.uniform_(self.p, a=max(0, self.mu-self.std), b=min(1.0,self.mu+self.std))
+            #nn.init.normal_(self.p, mean=self.mu, std=self.std) #nn.init.uniform_(self.p, a=max(1 - p, self.mu-self.limit), b=min(1.0,self.mu+self.limit)) #nn.init.trunc_normal_(self.p, mean=self.mu, std=self.std, a=self.mu-2*self.std, b=self.mu+2*self.std)
+            self.lbound = max(0, self.mu - self.std)
+            self.ubound = min(1.0,self.mu + self.std)
+            '''
+            self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
+            pepoch = 1 - 1/self.batches_per_epoch
             self.std = math.sqrt((6*pepoch)/(max(self.connections_out, self.batches_per_epoch))) # out is just number of neurons for scaling vector
             self.mu = pepoch+1/(2*self.batches_per_epoch) - self.std
 
@@ -117,7 +127,8 @@ class LoRA(nn.Module):
             ##nn.init.normal_(self.p, mean=self.mu, std=self.std) #nn.init.uniform_(self.p, a=max(1 - p, self.mu-self.limit), b=min(1.0,self.mu+self.limit)) #nn.init.trunc_normal_(self.p, mean=self.mu, std=self.std, a=self.mu-2*self.std, b=self.mu+2*self.std)
             self.lbound = max(0, self.mu - self.std)
             self.ubound = min(1.0,self.mu+self.std+1/(math.sqrt(3)*self.batches_per_epoch))
-            '''
+            
+
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch,requires_grad=True, dtype=torch.float32))
             pepoch = 1/self.batches_per_epoch - torch.finfo(torch.float32).eps
             var = math.sqrt(math.sqrt(6/self.connections_out)) # out is just number of neurons for scaling vector
