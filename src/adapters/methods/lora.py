@@ -555,7 +555,7 @@ class LoRA(nn.Module):
                 w = weights
             else:
                 if self.location != "selfattn" and self._epoch_start():
-                    p = torch.tensor(self.a)
+                    p = torch.tensor(1 - self.a)
                 else:
                     p = torch.clamp(self.p, min=self.lbound, max=self.ubound)
                 w = self.rescale(weights=weights, 
@@ -568,7 +568,13 @@ class LoRA(nn.Module):
                                 weight_dropout_prob=self.weight_dropout_prob,
                                 skip_prob=self.skip_prob)
         else: 
-            w = weights
+            w = weights 
+            '''
+            self.rescale(weights=weights, 
+                sigma=self.sigma_w, 
+                skip_prob=0.0,
+                weight_dropout_prob=self.weight_dropout_prob)
+            '''
                             
         if scaling is None:
             scaling = self.scaling
