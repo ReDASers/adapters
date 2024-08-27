@@ -108,6 +108,18 @@ class LoRA(nn.Module):
             self.lbound = 0.0
             self.ubound = 1.0
         else:
+
+            self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
+            pepoch = 1 - 1/self.batches_per_epoch
+            self.std = math.sqrt((3*pepoch)/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
+            self.mu = pepoch+1/(2*self.batches_per_epoch) - self.std
+
+            ##nn.init.uniform_(self.p, a=max(0, self.mu-self.std), b=min(1.0,self.mu+self.std))
+            nn.init.normal_(self.p, mean=self.mu, std=self.std) #nn.init.uniform_(self.p, a=max(1 - p, self.mu-self.limit), b=min(1.0,self.mu+self.limit)) #nn.init.trunc_normal_(self.p, mean=self.mu, std=self.std, a=self.mu-2*self.std, b=self.mu+2*self.std)
+            self.lbound = max(0, self.mu - self.std)
+            self.ubound = min(1.0,self.mu + self.std)
+
+            '''
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
             pepoch = 1/self.batches_per_epoch
             std = math.sqrt((6*(1 - pepoch))/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
@@ -123,7 +135,7 @@ class LoRA(nn.Module):
             self.ubound = min(1.0, mu + limit)
 
 
-            '''
+             
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
             pepoch = 1/self.batches_per_epoch
             var = math.sqrt(math.sqrt(6/(self.connections_out + self.batches_per_epoch))) # out is just number of neurons for scaling vector
@@ -251,7 +263,7 @@ class LoRA(nn.Module):
         Sets up the basic calculation mode by initializing scaling parameters.
         """
         self.lora_C = nn.Parameter(torch.ones(self.connections_out, 1, dtype=torch.float32))
-        self.scalar_scaler = nn.Parameter(self.eps)
+        self.scalar_scaler = nn.Parameter(torch.tensor(1e-9, dtype=torch.float32))
         nn.init.normal_(self.lora_C, mean=1.0, std=self._estimate_scaling_sigma())
         self.variances[self.location+"_lora_C"] = [self.lora_C.var().item()]
 
@@ -446,7 +458,7 @@ class LoRA(nn.Module):
             
     def _rescale(self, weights: torch.Tensor, sigma: float):
         u = torch.mean(weights, dtype=weights.dtype)
-        z = (weights - u) / (torch.std(weights) + self.tiny)
+        z = (weights - u) / (torch.std(weights) + 1e-12)
         return z * sigma + u
     
     def rescale(self, 
@@ -583,7 +595,7 @@ class LoRA(nn.Module):
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A)
             dw = dw @ torch.t(self.lora_B)
-            dw = dw / (dw.norm(p=2, dim=1, keepdim=True) + self.eps)
+            dw = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
 
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = dw.std().item() 
