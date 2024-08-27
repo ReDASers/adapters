@@ -572,6 +572,7 @@ class LoRA(nn.Module):
         if self.log and self._epoch_end():
             self.record_var(added, "delta_w")
             self.record_var(w, "W")
+            self.record_var(torch.clamp(self.p, min=self.lbound, max=self.ubound).item(), "p")
             self.record_weights_var_maybe()
 
         if self.location == "selfattn":
