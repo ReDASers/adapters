@@ -110,11 +110,11 @@ class LoRA(nn.Module):
         else:
 
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
-            pepoch = 1 - self.a/self.batches_per_epoch
+            pepoch = 1 - 1/self.batches_per_epoch
             self.std = math.sqrt((3*pepoch)/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
             # self.mu = pepoch+1/(2*self.batches_per_epoch) - self.std
             
-            self.mu = pepoch+(1/(2*self.batches_per_epoch))*self.learning_multiplier - self.std
+            self.mu = (pepoch+(1/(2*self.batches_per_epoch)) - self.std)*self.a
             
             
             ##nn.init.uniform_(self.p, a=max(0, self.mu-self.std), b=min(1.0,self.mu+self.std))
@@ -554,16 +554,9 @@ class LoRA(nn.Module):
 
                 w = weights
             else:
-                if self.location != "selfattn":
-                    if self._epoch_start():
-                        p = torch.tensor(0.0)
-                    else:
-                        p = torch.tensor(1.0)
-                else:
-                    p = torch.clamp(self.p, min=self.lbound, max=self.ubound)
                 w = self.rescale(weights=weights, 
                                 sigma=self.sigma_w, 
-                                skip_prob=p,
+                                skip_prob=torch.clamp(self.p, min=self.lbound, max=self.ubound),
                                 weight_dropout_prob=self.weight_dropout_prob)
 
             w = self.regularize(weights=w, 
