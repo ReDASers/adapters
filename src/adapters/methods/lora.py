@@ -111,12 +111,12 @@ class LoRA(nn.Module):
 
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
             pepoch = 1 - 1/self.batches_per_epoch
-            self.std = math.sqrt((6*pepoch)/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
+            self.std = math.sqrt((3*pepoch)/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
             self.mu = pepoch-1e-6
-            nn.init.uniform_(self.p, a=max(0, self.mu-self.std), b=min(1.0,self.mu+self.std))
-            # nn.init.normal_(self.p, mean=self.mu, std=self.std) #nn.init.uniform_(self.p, a=max(1 - p, self.mu-self.limit), b=min(1.0,self.mu+self.limit)) #nn.init.trunc_normal_(self.p, mean=self.mu, std=self.std, a=self.mu-2*self.std, b=self.mu+2*self.std)
-            self.lbound = max(0, self.mu - self.std)
-            self.ubound = min(1.0,self.mu + self.std)
+            ##nn.init.uniform_(self.p, a=max(0, self.mu-self.std), b=min(1.0,self.mu+self.std))
+            nn.init.normal_(self.p, mean=self.mu, std=self.std) #nn.init.uniform_(self.p, a=max(1 - p, self.mu-self.limit), b=min(1.0,self.mu+self.limit)) #nn.init.trunc_normal_(self.p, mean=self.mu, std=self.std, a=self.mu-2*self.std, b=self.mu+2*self.std)
+            self.lbound = max(0, self.mu - self.std*self.slacka)
+            self.ubound = min(1.0,self.mu + self.std*self.slackb)
         
             
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
@@ -396,7 +396,7 @@ class LoRA(nn.Module):
             
     def _rescale(self, weights: torch.Tensor, sigma: float):
         u = torch.mean(weights, dtype=weights.dtype)
-        z = (weights - u) / (torch.std(weights) + 1e-12)
+        z = (weights - u) / (torch.std(weights) + self.tiny)
         return z * sigma + u
     
     def rescale(self, 
@@ -540,7 +540,7 @@ class LoRA(nn.Module):
             fx = self.f(self.dropout(x))
             dw = fx @ torch.t(self.lora_A)
             dw = dw @ torch.t(self.lora_B)
-            dw = dw / (dw.norm(p=2, dim=1, keepdim=True) + 1e-9)
+            dw = dw / (dw.norm(p=2, dim=1, keepdim=True) + self.eps)
 
             if self.training and self.epoch == 1:
                 self.batch_sigmas[self.n_batches - 1] = dw.std().item() 
