@@ -109,7 +109,7 @@ class LoRA(nn.Module):
             mu = pepoch-1e-6
             self.lbound = max(0, mu - std)
             m = (1 - mu)/ 2
-            self.ubound = min(1.0, mu + m, mu + std)
+            self.ubound = min(1.0, mu + m*1.5, mu + std)
 
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
             nn.init.normal_(self.p, mean=mu, std=std)
