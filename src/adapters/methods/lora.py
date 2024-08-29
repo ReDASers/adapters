@@ -84,10 +84,7 @@ class LoRA(nn.Module):
         self.skip_prob = torch.tensor(config.skip_prob)
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
-        self.learning_multiplier = config.learning_multiplier
         self.a = config.a
-        self.slacka = config.slacka
-        self.slackb = config.slackb
 
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
         # Setup gating mechanism if required
@@ -111,12 +108,13 @@ class LoRA(nn.Module):
 
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
             pepoch = 1 - 1/self.batches_per_epoch if self.batches_per_epoch > 1 else 1.0
-            self.std = math.sqrt((3*pepoch)/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
-            self.mu = pepoch-1e-6
-            ##nn.init.uniform_(self.p, a=max(0, self.mu-self.std), b=min(1.0,self.mu+self.std))
-            nn.init.normal_(self.p, mean=self.mu, std=self.std) #nn.init.uniform_(self.p, a=max(1 - p, self.mu-self.limit), b=min(1.0,self.mu+self.limit)) #nn.init.trunc_normal_(self.p, mean=self.mu, std=self.std, a=self.mu-2*self.std, b=self.mu+2*self.std)
-            self.lbound = max(0, self.mu - self.std*self.slacka)
-            self.ubound = min(1.0,self.mu + self.std*self.slackb)
+            std = math.sqrt((3*pepoch)/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
+            mu = pepoch-1e-6
+            
+            nn.init.normal_(self.p, mean=mu, std=std) 
+            self.lbound = max(0, mu - std)
+            m = (1 - mu) / 2
+            self.ubound = min(1.0, mu + m * self.a, mu + std)
         
             
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
