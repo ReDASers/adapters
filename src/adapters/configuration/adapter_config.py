@@ -549,7 +549,7 @@ class LoRAConfig(AdapterConfig):
 
     noise_std: float = 0.03
 
-    p: Optional[float] = 0.1
+    p: float = 0.1
     
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu" 
