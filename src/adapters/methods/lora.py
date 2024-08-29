@@ -105,9 +105,6 @@ class LoRA(nn.Module):
             self.lbound = 0.0
             self.ubound = 1.0
         else:
-            p = 
-                
-            
             pepoch = 1 - 1/self.batches_per_epoch if self.batches_per_epoch > 1 else 1.0
             std = math.sqrt((3-pepoch)/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
             mu = pepoch-1e-6
@@ -116,7 +113,6 @@ class LoRA(nn.Module):
             self.lbound = max(0, mu - std)
             m = ((1 - mu) * 1.5)/ 2
             self.ubound = min(1.0, mu + m, mu + std)
-            tmp = 
             if self.location == "selfattn":
                 self.p = torch.clamp(torch.normal(mu, std, size=(1,), dtype=torch.float32), min=self.lbound, max=self.ubound)
                 self.h = torch.tensor(1 - self.p.item())
