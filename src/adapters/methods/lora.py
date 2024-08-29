@@ -113,11 +113,12 @@ class LoRA(nn.Module):
             self.lbound = max(0, mu - std)
             m = ((1 - mu) * 1.5)/ 2
             self.ubound = min(1.0, mu + m, mu + std)
+            self.p = nn.Parameter(torch.zeros(1, dtype=torch.float32))
+            torch.nn.init.constant_(self.p, torch.clamp(torch.normal(mu, std, size=(1,), dtype=torch.float32), min=self.lbound, max=self.ubound).item())
             if self.location == "selfattn":
-                self.p = torch.clamp(torch.normal(mu, std, size=(1,), dtype=torch.float32), min=self.lbound, max=self.ubound)
                 self.h = torch.tensor(1 - self.p.item())
-            else:
-                self.p = nn.Parameter(torch.clamp(torch.normal(mu, std, size=(1,), dtype=torch.float32), min=self.lbound, max=self.ubound))
+            
+                
                 
         
             
