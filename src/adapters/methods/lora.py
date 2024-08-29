@@ -88,11 +88,7 @@ class LoRA(nn.Module):
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
-        self.set_p(config.p)
-        assert self.p >= 0 and self.p <= 1.0, "p must be between in R[0, 1]"
-
-        
-        
+        self.set_p(config.p) 
         self.log = config.log
         assert self.epoch, "Epoch must be greater than 0."
         assert self.epoch == 1, "Epoch must be 1." 
@@ -100,6 +96,7 @@ class LoRA(nn.Module):
 
     def set_p(self, p:float | None):
         if p is not None and self.location == "selfattn":
+            assert p >= 0 and p <= 1.0, "p must be between in R[0, 1]"
             self.p = torch.tensor(1 - p)
             self.h = torch.tensor(p)
             self.lbound = 0.0
