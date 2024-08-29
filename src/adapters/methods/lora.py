@@ -84,7 +84,6 @@ class LoRA(nn.Module):
         self.skip_prob = torch.tensor(config.skip_prob)
         self.location = self._get_valid_location_key(config, location_key)
         self.variances = {self.location+"_W":[], self.location+"_delta_w": []}
-        self.a = config.a
 
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
         # Setup gating mechanism if required
