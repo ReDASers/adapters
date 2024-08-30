@@ -88,7 +88,7 @@ class LoRA(nn.Module):
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
-        
+        assert config.p >= 0 and config.p <= 1.0, "p must be between in R[0, 1]"
 
         self.set_p(float(config.p))
         
@@ -98,26 +98,21 @@ class LoRA(nn.Module):
         
 
     def set_p(self, p:float):
-        '''
         if self.location == "selfattn":
-            # assert config.p >= 0 and config.p <= 1.0, "p must be between in R[0, 1]"
             self.p = torch.tensor(1 - p)
             self.h = torch.tensor(p)
             self.lbound = 0.0
             self.ubound = 1.0
-        '''
-        #else:
-        pepoch = 1 - 1/self.batches_per_epoch if self.batches_per_epoch > 1 else 1.0
-        std = math.sqrt((3*pepoch)/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
-        mu = pepoch-1e-6
-        self.lbound = max(0, mu - std)
-        
-        self.ubound = min(1.0, mu + std)
+        else:
+            pepoch = 1 - 1/self.batches_per_epoch if self.batches_per_epoch > 1 else 1.0
+            std = math.sqrt((3*pepoch)/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
+            mu = pepoch-1e-6
+            self.lbound = 0.0 #max(0, mu - std)
+            
+            self.ubound = 1.0 # min(1.0, mu + std)
 
-        self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
-        nn.init.normal_(self.p, mean=mu, std=std)
-        if self.location == "selfattn":
-            self.h = torch.tensor(1 - self.p.clone().clamp(min=self.lbound, max=self.ubound))
+            self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
+            nn.init.normal_(self.p, mean=mu, std=std)
         
             
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
