@@ -55,11 +55,13 @@ adapter_name = model.load_adapter('sst-2')
 
 In the minimal case, that's everything we need to specify to load a pre-trained task adapter for sentiment analysis, trained on the `sst-2` dataset using BERT base and a suitable adapter configuration.
 The name of the adapter is returned by [`load_adapter()`](adapters.ModelWithHeadsAdaptersMixin.load_adapter), so we can [activate it](adapter_composition.md) in the next step:
+
 ```python
 model.set_active_adapters(adapter_name)
 ```
 
 As the second example, let's have a look at how to load an adapter based on the [`AdapterInfo`](adapters.utils.AdapterInfo) returned by the [`list_adapters()`](adapters.utils.list_adapters) method from [above](#finding-pre-trained-adapters):
+
 ```python
 from adapters import AutoAdapterModel, list_adapters
 
