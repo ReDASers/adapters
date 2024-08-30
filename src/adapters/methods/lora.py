@@ -44,13 +44,10 @@ class LoRA(nn.Module):
         super().__init__() 
         # Ensure the composition mode is 'add'
         assert config.composition_mode == "add", "LoRA module only supports composition_mode='add'."
-       
         # Initialize configuration parameters
-        
         self.connections_in = lora_A_shape[-1]
         self.connections_out = lora_B_shape[0]
         self.r = int(config.r)
-        
         assert self.r == lora_A_shape[0] == lora_B_shape[1], "r must match the first dimension of A and the second dimension of B."
         # The following is for flexibility; normally, alpha is normally 1 for loria
         self.lora_alpha = float(config.alpha) if config.alpha > 0 else math.sqrt(self.r)
@@ -59,8 +56,6 @@ class LoRA(nn.Module):
         beta = config.beta if config.beta is not None else int(self.r * 1.5)
         self.bottleneck_size = int(beta * self.r)  
         
-        self.A_sigma = None
-        self.B_sigma = 0.0
         self.composition_mode = config.composition_mode
         self.attn_matrices = config.attn_matrices
         self.use_gating = config.use_gating
@@ -68,16 +63,15 @@ class LoRA(nn.Module):
         self._delta_w = None  # Placeholder for delta weights
 
         self.batches_per_epoch = self._calculate_batches_per_epoch(config.batch_size, config.training_set_size)
-        
+        self.n_batches = 0 # have not trained yet   
+        self.epoch = 1
+
         self.sigma_w = 0.0
         self.sigma_h = 0.0
         self.batch_sigmas = torch.zeros(self.batches_per_epoch, dtype=torch.float32)
         self.tiny =  torch.tensor(1e-12, dtype=torch.float32)
         self.eps = torch.tensor(1e-9, dtype=torch.float32)
-        self.n_batches = 0 # have not trained yet   
-        self.epoch = 1
-        # List to store variance for each LoRA instance
-        
+
         self.dropout = nn.Dropout(p=config.dropout) if config.dropout > 0.0 else lambda x: x
         self.noise_std = config.noise_std
         self.weight_dropout_prob = config.weight_dropout_prob
@@ -88,17 +82,13 @@ class LoRA(nn.Module):
         self._layer_specific_setup(lora_A_shape, lora_B_shape)
         # Setup gating mechanism if required
         self._setup_gating_maybe(gating_heads)
-        assert config.p >= 0 and config.p <= 1.0, "p must be between in R[0, 1]"
-
         self.set_p(float(config.p))
-        
         self.log = config.log
-        assert self.epoch, "Epoch must be greater than 0."
-        assert self.epoch == 1, "Epoch must be 1." 
         
 
     def set_p(self, p:float):
         if self.location == "selfattn":
+            assert p >= 0 and p <= 1.0, "p must be between in R[0, 1]"
             self.p = torch.tensor(1 - p)
             self.h = torch.tensor(p)
             self.lbound = 0.0
@@ -498,12 +488,6 @@ class LoRA(nn.Module):
                                 skip_prob=self.skip_prob)
         else: 
             w = weights 
-            '''
-            self.rescale(weights=weights, 
-                sigma=self.sigma_w, 
-                skip_prob=0.0,
-                weight_dropout_prob=self.weight_dropout_prob)
-            '''
                             
         if scaling is None:
             scaling = self.scaling
