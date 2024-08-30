@@ -81,6 +81,7 @@ Currently, we support the PyTorch versions of all models as listed on the `Model
    classes/models/gptj
    classes/models/llama
    classes/models/mbart
+   classes/models/mistral
    classes/models/mt5
    classes/models/plbart
    classes/models/roberta
