@@ -81,7 +81,7 @@ class MT5AdapterModel(EmbeddingAdaptersWrapperMixin, ModelWithFlexibleHeadsAdapt
         head=None,
         output_adapter_gating_scores=False,
         output_adapter_fusion_attentions=False,
-        **kwargs
+        **kwargs,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if decoder_input_ids is None and decoder_inputs_embeds is None:
