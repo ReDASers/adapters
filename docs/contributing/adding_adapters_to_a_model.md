@@ -1,4 +1,5 @@
 # Adding Adapters to a Model
+
 This document gives an overview of how new model architectures of Hugging Face Transformers can be supported by `adapters`.
 Before delving into implementation details, you should familiarize yourself with the main design philosophies of `adapters`:
 
@@ -6,18 +7,19 @@ Before delving into implementation details, you should familiarize yourself with
 - _Copied code should be minimal_: `adapters` extensively uses Python mixins to add adapter support to HF models. Functions that cannot be sufficiently modified by mixins are copied and then modified. Try to avoid copying functions as much as possible.
 
 ## Relevant Classes
+
 Adding adapter support to an existing model architecture requires modifying some parts of the model forward pass logic. These modifications are realized by the four files in the `src/adapters/models/<model_type>/` directory. Let's examine the purpose of these files in the example of BERT. It's important to note that we are adapting the original Hugging Face model, implemented in [transformers/models/bert/modeling_bert.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/bert/modeling_bert.py). The files in `src/adapters/models/bert/` are:
 
 1. `src/adapters/models/bert/mixin_bert.py`:
 This file contains mixins for each class we want to change. For example, in the `BertSelfAttention` class, we need to make changes for LoRA and Prefix Tuning. For this, we create a `BertSelfAttentionAdaptersMixin` to implement these changes. We will discuss how this works in detail below.
 2. `src/adapters/models/bert/modeling_bert.py`:
 For some classes of the BERT implementation (e.g. `BertModel` or `BertLayer`) the code can be sufficiently customized via mixins. For other classes (like `BertSelfAttention`), we need to edit the original code directly. These classes are copied into `src/adapters/models/bert/modeling_bert.py` and modified.
-3. `src/adapters/models/bert/adapter_model.py`: 
+3. `src/adapters/models/bert/adapter_model.py`:
 In this file, the adapter model class is defined. This class allows flexible adding of and switching between multiple prediction heads of different types. This looks about the same for each model, except that each model has different heads and thus different `add_..._head()` functions.
 4. `src/adapters/models/bert/__init__.py`: Defines Python's import structure.
 
-
 ## Implementation Steps 📝
+
 Now that we have discussed the purpose of every file in `src/adapters/models/<model_type>/`, we go through the integration of adapters into an existing model architecture step by step. **The following steps might not be applicable to every model architecture.**
 
 1. **Files:**
@@ -52,7 +54,6 @@ Now that we have discussed the purpose of every file in `src/adapters/models/<mo
     - There are some naming differences in the config attributes of different model architectures. The adapter implementation requires some additional attributes with a specific name to be available. These currently are `num_attention_heads`, `hidden_size`, `hidden_dropout_prob` and `attention_probs_dropout_prob` as in the `BertConfig` class.
     If your model config does not provide these, add corresponding mappings to `CONFIG_CLASS_KEYS_MAPPING`.
 
-
 ### Additional (optional) implementation steps 📝
 
 - Parallel adapter inference via `Parallel` composition block (cf. [documentation](https://docs.adapterhub.ml/adapter_composition.html#parallel), [PR#150](https://github.com/Adapter-Hub/adapters/pull/150)).
@@ -62,7 +63,8 @@ Now that we have discussed the purpose of every file in `src/adapters/models/<mo
 
 ❓ In addition to the general Hugging Face model tests, there are adapter-specific test cases. All tests are executed from the `tests` folder. You need to add two different test classes.
 
-**📝 Steps**
+### Testing Steps
+
 1. Add a new `test_<model_type>.py` module in `tests/`
     - This file is used to test that everything related to the usage of adapters (adding, removing, activating, ...) works.
     - This module typically holds 2 test classes and a test base class:
@@ -78,7 +80,7 @@ Now that we have discussed the purpose of every file in `src/adapters/models/<mo
 
 ❓ The documentation for `adapters` lives in the `docs` folder.
 
-**📝 Steps**
+### 📝 Steps
 
 - Add `docs/classes/models/<model_type>.rst` (oriented at the doc file in the HF docs). Make sure to include `<model_type>AdapterModel` autodoc. Finally, list the file in `index.rst`.
 - Add a new row for the model in the model table of the overview page at `docs/model_overview.md`, listing all the methods implemented by the new model.
