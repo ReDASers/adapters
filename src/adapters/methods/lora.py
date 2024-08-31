@@ -104,7 +104,7 @@ class LoRA(nn.Module):
                 std = 1 / math.sqrt(self.connections_out)
                 #std = math.sqrt((3*mu)/(self.connections_out+self.batches_per_epoch)) # out is just number of neurons for scaling vector
                 self.lbound =  max(0, mu - math.sqrt(5)*std)
-                self.ubound =  1.0 - 1e-3 
+                self.ubound =  1.0 - 3e-4 
                 a=max(0, mu - 2*std)
                 #a=max(0, mu - math.sqrt(3)*std)
                 b=min(1.0, mu+0.75*pepoch, mu+std)
