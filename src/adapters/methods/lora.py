@@ -95,8 +95,8 @@ class LoRA(nn.Module):
             self.ubound = 1.0
         else:
             pepoch = 1/self.batches_per_epoch if self.batches_per_epoch > 1 else 0.1
-            mu = 1 - pepoch * 1.5
-            std = pepoch * 0.5
+            mu = 1 - pepoch
+            std = pepoch * 0.25
             # std = math.sqrt(2/(self.connections_out + self.batches_per_epoch)) # out is just number of neurons for scaling vector
             self.lbound = max(0, mu - 3*std)
             self.ubound = min(1.0, mu + 3*std)
