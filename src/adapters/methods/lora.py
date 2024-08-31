@@ -110,7 +110,7 @@ class LoRA(nn.Module):
                 b=min(1.0, mu+0.75*pepoch, mu+std)
                 #b=min(1.0, mu+0.75*pepoch, mu+math.sqrt(3)*std)
                 self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
-                nn.init.trunc_normal_(self.p, mean=mu, std=std, a=max(0, mu - 2*std), b=min(1.0, mu+0.75*pepoch, mu+std))
+                nn.init.trunc_normal_(self.p, mean=mu, std=std, a=a, b=b)
                 #nn.init.uniform_(self.p, a=a, b=b)
             
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
