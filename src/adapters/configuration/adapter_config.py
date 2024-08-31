@@ -1,4 +1,5 @@
 import logging
+import torch
 from collections.abc import Mapping
 from dataclasses import FrozenInstanceError, asdict, dataclass, field, replace
 from typing import List, Literal, Optional, Union
@@ -543,22 +544,32 @@ class LoRAConfig(AdapterConfig):
 
     dropout: float = 0.1
 
+    training_set_size: int = 1000
+
+    batch_size: int = 16
+
+    # Track variances for plotting
+    log: bool = False
+
+    init_tensor: Optional[torch.Tensor] = None # remove later
+
+    # Editing the following hyperparameters is not recommended, 
+    # as they are set to the best performing values for most tasks.
+    # They are exposed for research purposes.
+    ##############################################
+
     weight_dropout_prob: float = 0.01
 
     skip_prob: float = 0.03
 
     noise_std: float = 0.03
-
+    
     p: float = 0.1
     
     # Type of non-linearity to use
     non_linearity: str = "leakyrelu" 
 
-    training_set_size: Optional[int] = None
-
-    batch_size: Optional[int] = None
-
-    log: bool = False
+    
 
 
 @dataclass(eq=False)
