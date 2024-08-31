@@ -98,12 +98,13 @@ class LoRA(nn.Module):
             mu = 1 - pepoch - torch.finfo(torch.float32).eps
             #nstd = pepoch/2
             
-            std = math.sqrt((3*mu)/(self.connections_out+self.batches_per_epoch)) # out is just number of neurons for scaling vector
-            self.lbound = max(0, mu - std)
-            self.ubound = min(1.0, mu+0.99*pepoch, mu+std)
+            std = 1 / math.sqrt(self.connections_out)
+            #std = math.sqrt((3*mu)/(self.connections_out+self.batches_per_epoch)) # out is just number of neurons for scaling vector
+            self.lbound = 0 # max(0, mu - 2*std)
+            self.ubound = 1 # min(1.0, mu+0.99*pepoch, mu+std)
             
             self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
-            nn.init.normal_(self.p, mean=mu, std=std)
+            nn.init.truncated_normal_(self.p, mean=mu, std=std, a=max(0, mu - 2*std), b=min(1.0, mu+0.99*pepoch, mu+std))
         
             
     def _calculate_batches_per_epoch(self, batch_size: Optional[int], training_set_size: Optional[int]) -> int:
