@@ -107,7 +107,7 @@ class LoRA(nn.Module):
                 self.ubound =  1.0 - 5e-3 
                 a=max(0, mu - 2*std)
                 #a=max(0, mu - math.sqrt(3)*std)
-                b=min(1.0, mu+0.75*pepoch, mu+std)
+                b=min(1.0, mu+0.8*pepoch, mu+std)
                 #b=min(1.0, mu+0.75*pepoch, mu+math.sqrt(3)*std)
                 self.p = nn.Parameter(torch.tensor(1 - 1/self.batches_per_epoch, dtype=torch.float32))
                 nn.init.trunc_normal_(self.p, mean=mu, std=std, a=a, b=b)
